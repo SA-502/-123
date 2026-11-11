@@ -153,7 +153,7 @@
       if (z.attackT <= 0) {
         if (P.alive && dp < z.r + P.r + 24) {
           A.play('zattack', { x: z.x, y: z.y });
-          P.hurt(z.damage, z.x, z.y);
+          P.hurt(z.damage, true);
         }
         z.state = 'chase';
         z.attackCd = C.ZOMBIE.attackCooldown;

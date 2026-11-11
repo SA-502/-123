@@ -50,7 +50,8 @@
    */
   Wp.tryFire = function (p, w, pressed) {
     if (!w || w.reloadT > 0 || w.cd > 0) return false;
-    if (!w.s.auto && !pressed) return false;
+    // semi-autos fire per click; holding the trigger still works, just at a slower cadence
+    if (!w.s.auto && !pressed && w.cd > -(60 / w.s.rpm) * 0.7) return false;
     if (w.clip <= 0) {
       if (w.reserve > 0) Wp.startReload(w, p);
       else if (pressed) A.play('empty');

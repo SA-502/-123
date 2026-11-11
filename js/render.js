@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const GW = window.GW, U = GW.U, C = GW.CFG, M = GW.Map, FX = GW.FX, Art = GW.Art, T = C.TILE;
-  const R = (GW.Render = { cam: { x: M.pxW / 2, y: M.pxH / 2, zoom: 1 }, vw: 0, vh: 0, dpr: 1, time: 0, ox: 0, oy: 0, lightsOut: 0 });
+  const R = (GW.Render = { cam: { x: M.pxW / 2, y: M.pxH / 2, zoom: 1 }, vw: 0, vh: 0, dpr: 1, quality: 1, time: 0, ox: 0, oy: 0, lightsOut: 0 });
   const WH = 16;
   const FONT = GW.FONT;
   const view = { x: 0, y: 0, w: 0, h: 0 };
@@ -35,6 +35,7 @@
     const w = Math.max(320, window.innerWidth), h = Math.max(240, window.innerHeight);
     let s = Math.min(window.devicePixelRatio || 1, 1.5);
     if (w * h * s * s > 2.8e6) s = Math.sqrt(2.8e6 / (w * h));
+    s *= R.quality; // lowered automatically if the frame rate struggles
     R.dpr = s;
     canvas.width = Math.round(w * s);
     canvas.height = Math.round(h * s);
@@ -790,10 +791,17 @@
       for (const side of [-1, 1]) {
         const lx = 7.2 * s, ly = side * 2.9 * s;
         const ex = z.x + ca * lx - sa * ly, ey = z.y + sa * lx + ca * ly;
-        Art.drawGlow(ctx, z.eye, ex, ey, 7 * s, 0.9 * a);
-        ctx.fillStyle = '#fff';
+        ctx.fillStyle = z.eye;
+        ctx.globalAlpha = 0.3 * a;
+        ctx.beginPath();
+        ctx.arc(ex, ey, 4.6 * s, 0, U.TAU);
+        ctx.fill();
         ctx.globalAlpha = a;
-        ctx.fillRect(ex - 0.8, ey - 0.8, 1.6, 1.6);
+        ctx.beginPath();
+        ctx.arc(ex, ey, 1.9 * s, 0, U.TAU);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(ex - 0.7, ey - 0.7, 1.4, 1.4);
       }
       ctx.globalAlpha = 1;
     }

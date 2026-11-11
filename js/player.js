@@ -32,6 +32,7 @@
     P.meleeT = 0;
     P.switchT = 0;
     P.invuln = 0;
+    P.hitGrace = 0;
     P.alive = true;
     P.recoil = 0;
     P.muzzleT = 0;
@@ -152,8 +153,13 @@
     }
   };
 
-  P.hurt = function (amount) {
+  /** Take damage. `melee` hits grant a brief grace window so a pile-up can't land every swing in one frame. */
+  P.hurt = function (amount, melee) {
     if (!P.alive || P.invuln > 0 || GW.debug.god) return;
+    if (melee) {
+      if (P.hitGrace > 0) return;
+      P.hitGrace = 0.4;
+    }
     P.hp -= amount;
     P.sinceHurt = 0;
     P.hurtFlash = 1;
@@ -259,7 +265,8 @@
     M.resolveCircle(P, P.r, M.solidForPlayer);
 
     // timers
-    for (const ww of P.weapons) if (ww.cd > 0) ww.cd -= dt;
+    for (const ww of P.weapons) if (ww.cd > -1) ww.cd -= dt; // runs slightly negative: time since ready
+    if (P.hitGrace > 0) P.hitGrace -= dt;
     if (P.switchT > 0) P.switchT -= dt;
     if (P.meleeCd > 0) P.meleeCd -= dt;
     if (P.meleeT > 0) P.meleeT -= dt;

@@ -5,7 +5,7 @@
   const G = (GW.Game = { state: 'menu', timers: { double: 0, instakill: 0 }, time: 0 });
   const $ = (id) => document.getElementById(id);
   const BEST_KEY = 'gravewave.best';
-  let lastTs = 0;
+  let lastTs = 0, slowFrames = 0;
 
   /** Console helpers for testing / cheating: GW.debug.give(5000), GW.debug.power(), GW.debug.god = true */
   GW.debug = {
@@ -121,6 +121,7 @@
     FX.flash = 0.5;
     $('game').classList.remove('playing');
     GW.HUD.setPrompt('');
+    $('announce').classList.remove('show');
 
     let best = 0;
     try {
@@ -197,6 +198,16 @@
       In.endFrame();
     }
     GW.Render.draw(dt);
+
+    // adaptive resolution: if frames stay slow for a couple of seconds, render fewer pixels
+    if (G.state === 'playing') {
+      slowFrames = dt > 0.03 ? slowFrames + 1 : Math.max(0, slowFrames - 2);
+      if (slowFrames > 90 && GW.Render.quality > 0.55) {
+        GW.Render.quality *= 0.8;
+        GW.Render.resize();
+        slowFrames = 0;
+      }
+    }
   }
 
   /* ------------------------------------------------------------------ */
