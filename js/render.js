@@ -1,0 +1,1036 @@
+/* GRAVEWAVE — world renderer: camera, entities, dynamic lighting with a shadow-casting flashlight, additive neon pass */
+(function () {
+  'use strict';
+  const GW = window.GW, U = GW.U, C = GW.CFG, M = GW.Map, FX = GW.FX, Art = GW.Art, T = C.TILE;
+  const R = (GW.Render = { cam: { x: M.pxW / 2, y: M.pxH / 2, zoom: 1 }, vw: 0, vh: 0, dpr: 1, time: 0, ox: 0, oy: 0, lightsOut: 0 });
+  const WH = 16;
+  const FONT = GW.FONT;
+  const view = { x: 0, y: 0, w: 0, h: 0 };
+  let canvas, ctx, lcan, lctx, lightSprite;
+
+  /* ------------------------------------------------------------------ */
+  /* setup                                                              */
+  /* ------------------------------------------------------------------ */
+  R.init = function (cv) {
+    canvas = cv;
+    ctx = canvas.getContext('2d', { alpha: false });
+    lcan = document.createElement('canvas');
+    lctx = lcan.getContext('2d');
+    // broad, flat-topped falloff used to carve light out of the darkness layer
+    lightSprite = document.createElement('canvas');
+    lightSprite.width = lightSprite.height = 128;
+    const g = lightSprite.getContext('2d');
+    const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gr.addColorStop(0, 'rgba(255,255,255,1)');
+    gr.addColorStop(0.45, 'rgba(255,255,255,0.8)');
+    gr.addColorStop(0.8, 'rgba(255,255,255,0.25)');
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, 128, 128);
+    R.resize();
+    window.addEventListener('resize', R.resize);
+  };
+
+  R.resize = function () {
+    const w = Math.max(320, window.innerWidth), h = Math.max(240, window.innerHeight);
+    let s = Math.min(window.devicePixelRatio || 1, 1.5);
+    if (w * h * s * s > 2.8e6) s = Math.sqrt(2.8e6 / (w * h));
+    R.dpr = s;
+    canvas.width = Math.round(w * s);
+    canvas.height = Math.round(h * s);
+    R.vw = canvas.width;
+    R.vh = canvas.height;
+    R.cam.zoom = Math.max(R.vw / 1300, R.vh / 745);
+    lcan.width = Math.ceil(R.vw / 2);
+    lcan.height = Math.ceil(R.vh / 2);
+  };
+
+  /** CSS-pixel screen position -> world position. */
+  R.screenToWorld = function (sx, sy) {
+    const z = R.cam.zoom;
+    return { x: R.cam.x + (sx * R.dpr - R.vw / 2) / z, y: R.cam.y + (sy * R.dpr - R.vh / 2) / z };
+  };
+
+  R.snap = function () {
+    R.cam.x = GW.Player.x;
+    R.cam.y = GW.Player.y;
+  };
+
+  function updateCamera(dt, inGame) {
+    const cam = R.cam;
+    let tx, ty, k;
+    if (inGame) {
+      const P = GW.Player;
+      tx = P.x + (P.aimX - P.x) * 0.16;
+      ty = P.y + (P.aimY - P.y) * 0.16;
+      k = 1 - Math.exp(-dt * 9);
+    } else {
+      // attract mode: drift around the plaza
+      const t = R.time * 0.07;
+      tx = 32 * T + Math.cos(t) * T * 7;
+      ty = 24 * T + Math.sin(t * 1.3) * T * 4.5;
+      k = 1 - Math.exp(-dt * 2);
+    }
+    cam.x += (tx - cam.x) * k;
+    cam.y += (ty - cam.y) * k;
+    const hw = R.vw / 2 / cam.zoom, hh = R.vh / 2 / cam.zoom;
+    cam.x = hw * 2 >= M.pxW ? M.pxW / 2 : U.clamp(cam.x, hw, M.pxW - hw);
+    cam.y = hh * 2 >= M.pxH ? M.pxH / 2 : U.clamp(cam.y, hh, M.pxH - hh);
+  }
+
+  const inView = (x, y, r) => x + r > view.x && x - r < view.x + view.w && y + r > view.y && y - r < view.y + view.h;
+
+  function blit(img, s) {
+    const x0 = Math.max(0, Math.floor(view.x)), y0 = Math.max(0, Math.floor(view.y));
+    const x1 = Math.min(M.pxW, Math.ceil(view.x + view.w)), y1 = Math.min(M.pxH, Math.ceil(view.y + view.h));
+    if (x1 <= x0 || y1 <= y0) return;
+    ctx.drawImage(img, x0 * s, y0 * s, (x1 - x0) * s, (y1 - y0) * s, x0, y0, x1 - x0, y1 - y0);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* entities                                                           */
+  /* ------------------------------------------------------------------ */
+  function drawZombie(z) {
+    const s = (z.r / 13) * 1.15;
+    let scale = 1, alpha = 1;
+    if (z.state === 'rise') {
+      const k = U.clamp(1 - z.riseT / 0.9, 0, 1);
+      scale = 0.4 + 0.6 * k;
+      alpha = 0.3 + 0.7 * k;
+    }
+    const brute = z.type === 'brute';
+    ctx.save();
+    ctx.translate(z.x, z.y);
+    ctx.globalAlpha = alpha * 0.38;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(2, 4, z.r * 1.05 * scale, z.r * 0.9 * scale, 0, 0, U.TAU);
+    ctx.fill();
+    ctx.globalAlpha = alpha;
+    ctx.rotate(z.angle);
+    ctx.scale(s * scale, s * scale);
+    const sw = Math.sin(z.t * z.animRate);
+    let reach = 0;
+    if (z.state === 'attack') reach = Math.sin(U.clamp(1 - z.attackT / C.ZOMBIE.attackWindup, 0, 1) * Math.PI) * 7;
+    else if (z.state === 'breach') reach = Math.abs(Math.sin(z.t * 6)) * 5;
+    // arms
+    ctx.strokeStyle = z.skin;
+    ctx.lineWidth = brute ? 5.5 : 4.2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(2, -9);
+    ctx.lineTo(15 + reach + sw * 1.5, -6 + sw);
+    ctx.moveTo(2, 9);
+    ctx.lineTo(15 + reach - sw * 1.5, 6 - sw);
+    ctx.stroke();
+    // torso
+    ctx.fillStyle = z.shirt;
+    ctx.beginPath();
+    ctx.ellipse(-1, 0, 7.5, 12, 0, 0, U.TAU);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.fillRect(-6, -3 + sw, 5, 6);
+    if (brute) {
+      ctx.fillStyle = '#20141c';
+      ctx.beginPath();
+      ctx.arc(-1, -11, 5.5, 0, U.TAU);
+      ctx.arc(-1, 11, 5.5, 0, U.TAU);
+      ctx.fill();
+    }
+    // head
+    ctx.fillStyle = z.skin;
+    ctx.beginPath();
+    ctx.arc(3, sw * 0.6, 6.6, 0, U.TAU);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(25,12,12,0.6)';
+    ctx.beginPath();
+    ctx.arc(1.5, sw * 0.6, 6.6, Math.PI * 0.55, Math.PI * 1.45);
+    ctx.fill();
+    if (z.flash > 0) {
+      ctx.globalAlpha = alpha * Math.min(1, z.flash * 8);
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 10, 13, 0, 0, U.TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawCorpse(c) {
+    const a = U.clamp(c.life / 1.2, 0, 1);
+    const s = c.r / 13;
+    ctx.save();
+    ctx.translate(c.x, c.y);
+    ctx.rotate(c.angle);
+    ctx.scale(s, s);
+    ctx.globalAlpha = a * 0.85;
+    ctx.fillStyle = '#4a0912';
+    ctx.beginPath();
+    ctx.ellipse(-2, 0, 15, 12, 0, 0, U.TAU);
+    ctx.fill();
+    ctx.strokeStyle = c.skin;
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, -9);
+    ctx.lineTo(13, -13);
+    ctx.moveTo(0, 9);
+    ctx.lineTo(10, 15);
+    ctx.stroke();
+    ctx.fillStyle = c.shirt;
+    ctx.beginPath();
+    ctx.ellipse(-3, 0, 9, 11, 0, 0, U.TAU);
+    ctx.fill();
+    ctx.fillStyle = c.skin;
+    ctx.beginPath();
+    ctx.arc(6, 1, 6, 0, U.TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawPlayer(P) {
+    const w = P.weapon();
+    ctx.save();
+    ctx.translate(P.x, P.y);
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(2, 4, 14, 12, 0, 0, U.TAU);
+    ctx.fill();
+    ctx.globalAlpha = P.invuln > 0 && Math.sin(R.time * 30) > 0 ? 0.45 : 1;
+    ctx.rotate(P.angle);
+    ctx.scale(1.15, 1.15);
+    const rec = P.recoil * 3;
+    const bob = P.moving ? Math.sin(P.walkT) * 1.2 : 0;
+    ctx.lineCap = 'round';
+    if (w && P.meleeT <= 0) {
+      const s = w.s, len = s.len;
+      const thick = s.cls === 'lmg' || s.cls === 'shotgun' || s.cls === 'energy' ? 6.5 : s.cls === 'pistol' ? 4.5 : 5.2;
+      const gx = (s.cls === 'pistol' ? 12 : 7) - rec;
+      // arms reaching to the weapon
+      ctx.strokeStyle = '#1d8f9e';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(1, -9);
+      ctx.lineTo(gx + (s.cls === 'pistol' ? 1 : len * 0.55), -1.5);
+      ctx.moveTo(1, 9);
+      ctx.lineTo(gx + 2, 2);
+      ctx.stroke();
+      // weapon body
+      ctx.fillStyle = '#15131b';
+      ctx.fillRect(gx, -thick / 2, len + 4, thick);
+      ctx.fillStyle = '#2b2836';
+      ctx.fillRect(gx, -thick / 2, (len + 4) * 0.45, thick);
+      if (s.cls === 'sniper') ctx.fillRect(gx + 6, -thick / 2 - 2.5, 10, 2.5);
+      if (w.up || s.cls === 'energy') {
+        ctx.fillStyle = s.color;
+        ctx.fillRect(gx + 2, -0.9, len + 1, 1.8);
+      }
+      // hands
+      ctx.fillStyle = '#e0b890';
+      ctx.beginPath();
+      ctx.arc(gx + 2, 2, 2.6, 0, U.TAU);
+      ctx.arc(gx + (s.cls === 'pistol' ? 1 : len * 0.55), -1.5, 2.6, 0, U.TAU);
+      ctx.fill();
+    } else {
+      // knife swing / empty hands
+      const k = P.meleeT > 0 ? 1 - P.meleeT / 0.2 : 0.5;
+      const a = -1.0 + k * 2.0;
+      ctx.strokeStyle = '#1d8f9e';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(1, 9);
+      ctx.lineTo(Math.cos(a) * 15, Math.sin(a) * 15);
+      ctx.moveTo(1, -9);
+      ctx.lineTo(9, -7);
+      ctx.stroke();
+      ctx.strokeStyle = '#dfe9f2';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * 15, Math.sin(a) * 15);
+      ctx.lineTo(Math.cos(a) * 27, Math.sin(a) * 27);
+      ctx.stroke();
+      if (P.meleeT > 0) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, 26, -1.0, a);
+        ctx.stroke();
+      }
+    }
+    // torso (jacket)
+    ctx.fillStyle = '#23aebf';
+    ctx.beginPath();
+    ctx.ellipse(-1, bob * 0.4, 8, 12.5, 0, 0, U.TAU);
+    ctx.fill();
+    ctx.fillStyle = '#ff4fd8';
+    ctx.fillRect(-5, -12 + bob * 0.4, 3, 24); // racing stripe
+    // head with cap
+    ctx.fillStyle = '#e0b890';
+    ctx.beginPath();
+    ctx.arc(1.5, 0, 6.4, 0, U.TAU);
+    ctx.fill();
+    ctx.fillStyle = '#231b33';
+    ctx.beginPath();
+    ctx.arc(0.5, 0, 6.6, Math.PI * 0.42, Math.PI * 1.58);
+    ctx.fill();
+    ctx.fillRect(1, -5.5, 5.5, 11);
+    ctx.fillStyle = '#ffe14d';
+    ctx.fillRect(5.5, -4.5, 1.6, 9);
+    ctx.restore();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* ground-level dynamic objects                                       */
+  /* ------------------------------------------------------------------ */
+  function drawGround(power) {
+    const I = GW.Interact;
+    // dance floor on the Overclock Stage pulses to the beat once powered
+    if (power > 0.3 && inView(32 * T, 36 * T, 7 * T)) {
+      const beat = Math.floor(R.time * (104 / 60));
+      const pal = ['#ff4fd8', '#19f0ff', '#ffe14d', '#a855ff', '#3dff8b'];
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (let ty = 33; ty <= 38; ty++)
+        for (let tx = 26; tx <= 37; tx++) {
+          if (M.tile(tx, ty) !== M.TT.FLOOR) continue;
+          for (let j = 0; j < 2; j++)
+            for (let i = 0; i < 2; i++) {
+              const h = U.hash(tx * 2 + i, ty * 2 + j, beat);
+              if (h > 0.34) continue;
+              ctx.globalAlpha = power * (0.2 + h);
+              ctx.fillStyle = pal[Math.floor(h * 14.7) % 5];
+              ctx.fillRect(tx * T + i * 24 + 1, ty * T + j * 24 + 1, 22, 22);
+            }
+        }
+      ctx.restore();
+    }
+
+    for (const c of FX.corpses) if (inView(c.x, c.y, 30)) drawCorpse(c);
+
+    // power-up ground halo
+    for (const pu of I.powerups) {
+      if (!inView(pu.x, pu.y, 60)) continue;
+      ctx.globalAlpha = 0.5;
+      ctx.strokeStyle = GW.POWERUPS[pu.type].color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(pu.x, pu.y, 18 + Math.sin(pu.t * 4) * 3, 0, U.TAU);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // grenades
+    for (const g of GW.Weapons.grenades) {
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.beginPath();
+      ctx.arc(g.x + 2, g.y + 3, 5, 0, U.TAU);
+      ctx.fill();
+      ctx.save();
+      ctx.translate(g.x, g.y);
+      ctx.rotate(g.spin);
+      ctx.fillStyle = '#3a5a32';
+      ctx.fillRect(-4.5, -5.5, 9, 11);
+      ctx.fillStyle = '#1e2e1a';
+      ctx.fillRect(-2, -8, 4, 3);
+      ctx.restore();
+    }
+
+    // opaque particles (blood, casings, smoke)
+    for (const p of FX.parts) {
+      if (p.glow || !inView(p.x, p.y, 20)) continue;
+      const a = U.clamp(p.life / p.max, 0, 1);
+      if (p.smoke) {
+        ctx.globalAlpha = a * 0.35;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * (1.6 - a * 0.6), 0, U.TAU);
+        ctx.fill();
+      } else {
+        ctx.globalAlpha = Math.min(1, a * 2);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* dynamic objects that sit at wall height                            */
+  /* ------------------------------------------------------------------ */
+  function drawDoors() {
+    for (const d of M.doors) {
+      if (d.open && d.openT >= 1) continue;
+      if (!inView(d.x, d.y, 160)) continue;
+      const k = d.open ? d.openT : 0;
+      const col = M.zones[d.b].color;
+      if (d.power) {
+        // laser gate emitters (the beams are drawn in the glow pass)
+        ctx.fillStyle = '#1b1528';
+        ctx.fillRect(d.rx - 6, d.ry - WH + 8, 12, T - 8);
+        ctx.fillRect(d.rx + d.rw - 6, d.ry - WH + 8, 12, T - 8);
+        continue;
+      }
+      ctx.save();
+      ctx.globalAlpha = 1 - k;
+      for (const [tx, ty] of d.tiles) {
+        const x = tx * T, y = ty * T - WH + k * 14;
+        ctx.fillStyle = '#0a0812';
+        ctx.fillRect(x, y + T, T, WH - k * 14);
+        ctx.fillStyle = '#17132a';
+        ctx.fillRect(x, y, T, T);
+        // hazard chevrons in the destination zone's colour
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x + 3, y + 3, T - 6, T - 6);
+        ctx.clip();
+        ctx.strokeStyle = U.rgba(col, 0.55);
+        ctx.lineWidth = 6;
+        for (let i = -2; i < 5; i++) {
+          ctx.beginPath();
+          ctx.moveTo(x + i * 16, y + T);
+          ctx.lineTo(x + i * 16 + T, y);
+          ctx.stroke();
+        }
+        ctx.restore();
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x + 1, y + 1, T - 2, T - 2);
+      }
+      ctx.restore();
+    }
+  }
+
+  function drawPlanks() {
+    for (const w of M.windows) {
+      if (w.planks <= 0 || !inView(w.x, w.y, 60)) continue;
+      ctx.save();
+      ctx.translate(w.x, w.y);
+      if (w.dx !== 0) ctx.rotate(Math.PI / 2);
+      for (let i = 0; i < w.planks; i++) {
+        const off = (i - 2.5) * 7.2;
+        const jig = (U.hash(w.id, i, 3) - 0.5) * 0.16;
+        ctx.save();
+        ctx.translate(0, off);
+        ctx.rotate(jig);
+        ctx.fillStyle = i % 2 ? '#6b4a2b' : '#7a5632';
+        ctx.fillRect(-T / 2 - 3, -2.8, T + 6, 5.6);
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(-T / 2 - 3, 1.8, T + 6, 1);
+        ctx.fillStyle = '#2a1c10';
+        ctx.fillRect(-T / 2, -1, 2, 2);
+        ctx.fillRect(T / 2 - 2, -1, 2, 2);
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+  }
+
+  function drawBoxes(power) {
+    const b = GW.Interact.box;
+    M.boxSpots.forEach((s, idx) => {
+      if (!inView(s.x, s.y, 120)) return;
+      const x = s.tx * T, y = s.ty * T, w = s.w * T, h = s.h * T;
+      const active = idx === b.spot;
+      // plinth
+      ctx.fillStyle = '#0c0914';
+      ctx.fillRect(x + 2, y + h - 8, w - 4, 8);
+      ctx.fillStyle = '#181226';
+      ctx.fillRect(x + 2, y - 6, w - 4, h - 2);
+      if (!active) {
+        ctx.strokeStyle = 'rgba(255,225,77,0.18)';
+        ctx.setLineDash([5, 5]);
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(x + 7, y - 2, w - 14, h - 12);
+        ctx.setLineDash([]);
+        return;
+      }
+      let lift = 0, alpha = 1;
+      if (b.state === 'moving') {
+        const k = 1 - b.t / 1.4;
+        lift = k * 40;
+        alpha = 1 - k;
+      } else if (b.state === 'jester') lift = Math.sin(R.time * 40) * 1.5;
+      const open = b.state === 'rolling' || b.state === 'ready' || b.state === 'jester';
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(0, -8 - lift);
+      // crate body
+      ctx.fillStyle = '#3d2616';
+      ctx.fillRect(x + 5, y, w - 10, h - 10);
+      ctx.fillStyle = open ? '#120a05' : '#5a3a20';
+      ctx.fillRect(x + 8, y + 3, w - 16, h - 16);
+      if (open) {
+        ctx.fillStyle = U.rgba(b.state === 'jester' ? '#ff3b4e' : '#ffe14d', 0.35 + 0.2 * Math.sin(R.time * 12));
+        ctx.fillRect(x + 8, y + 3, w - 16, h - 16);
+      }
+      ctx.strokeStyle = '#ffd426';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 5, y, w - 10, h - 10);
+      if (!open) {
+        ctx.fillStyle = '#ffd426';
+        ctx.font = '900 20px ' + FONT;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        if (s.w > s.h) {
+          ctx.fillText('?', x + w * 0.27, y + h / 2 - 5);
+          ctx.fillText('?', x + w * 0.73, y + h / 2 - 5);
+        } else {
+          ctx.fillText('?', x + w / 2, y + h * 0.25);
+          ctx.fillText('?', x + w / 2, y + h * 0.68);
+        }
+      }
+      ctx.restore();
+    });
+  }
+
+  function drawPap(power) {
+    const pm = M.pap, k = GW.Interact.pap;
+    if (!inView(pm.x, pm.y, 160)) return;
+    const x = pm.tx * T, y = pm.ty * T - WH, w = pm.w * T, h = pm.h * T;
+    const shake = k.state === 'working' ? U.rand(-1.2, 1.2) : 0;
+    ctx.save();
+    ctx.translate(shake, 0);
+    ctx.fillStyle = '#12081a';
+    ctx.fillRect(x, y + h, w, WH);
+    ctx.fillStyle = '#2a0f33';
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = '#16081c';
+    ctx.fillRect(x + 6, y + 6, w - 12, h - 12);
+    // twin rotors
+    for (const side of [-1, 1]) {
+      const cx = pm.x + side * 26, cy = y + h / 2;
+      const spin = k.anim * (k.state === 'working' ? 14 : 1.5) * side * (power > 0.3 ? 1 : 0);
+      ctx.strokeStyle = '#5a2a66';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 14, 0, U.TAU);
+      ctx.stroke();
+      ctx.strokeStyle = '#8b3fa0';
+      ctx.lineWidth = 3;
+      for (let i = 0; i < 3; i++) {
+        const a = spin + (i * U.TAU) / 3;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + Math.cos(a) * 12, cy + Math.sin(a) * 12);
+        ctx.stroke();
+      }
+    }
+    ctx.fillStyle = '#07040b';
+    ctx.fillRect(pm.x - 8, y + 10, 16, h - 20); // weapon slot
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.restore();
+  }
+
+  function drawWallPlates(power) {
+    for (const wb of M.wallbuys) {
+      if (!inView(wb.x, wb.y, 100)) continue;
+      ctx.fillStyle = 'rgba(8,5,16,0.85)';
+      ctx.fillRect(wb.x - 44, wb.y - WH - 19, 88, 38);
+    }
+    // power switch housing
+    const ps = M.powerSwitch;
+    if (inView(ps.x, ps.y, 80)) {
+      const on = GW.Interact.powerOn;
+      const x = ps.x, y = ps.y - WH;
+      ctx.fillStyle = '#2b3036';
+      ctx.fillRect(x - 15, y - 17, 30, 34);
+      ctx.fillStyle = '#0f1114';
+      ctx.fillRect(x - 3, y - 12, 6, 24);
+      ctx.strokeStyle = '#d0d4da';
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + (on ? 0 : 0), y + (on ? 11 : -11));
+      ctx.stroke();
+      ctx.fillStyle = on ? '#3dff8b' : '#ff3b4e';
+      ctx.beginPath();
+      ctx.arc(x, y + (on ? 11 : -11), 4, 0, U.TAU);
+      ctx.fill();
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* lighting                                                           */
+  /* ------------------------------------------------------------------ */
+  function castPath(g, px, py, a0, a1, n, range, fan) {
+    g.beginPath();
+    if (fan) g.moveTo(px, py);
+    for (let i = 0; i <= n; i++) {
+      const a = a0 + ((a1 - a0) * i) / n;
+      const dx = Math.cos(a), dy = Math.sin(a);
+      let d = M.raycast(px, py, dx, dy, range, M.blocksBullet);
+      if (d < range) d = Math.min(range, d + 24); // let light spill onto the wall it hits
+      const x = px + dx * d, y = py + dy * d;
+      if (i === 0 && !fan) g.moveTo(x, y);
+      else g.lineTo(x, y);
+    }
+    g.closePath();
+  }
+
+  function carve(x, y, r, a) {
+    if (a <= 0.01 || !inView(x, y, r)) return;
+    lctx.globalAlpha = Math.min(1, a);
+    lctx.drawImage(lightSprite, x - r, y - r, r * 2, r * 2);
+  }
+
+  function drawLighting(inGame, power) {
+    const P = GW.Player, I = GW.Interact;
+    const ls = R.cam.zoom * 0.5;
+    lctx.setTransform(1, 0, 0, 1, 0, 0);
+    lctx.globalCompositeOperation = 'source-over';
+    lctx.globalAlpha = 1;
+    lctx.clearRect(0, 0, lcan.width, lcan.height);
+    const amb = U.lerp(0.8, 0.48, power);
+    lctx.fillStyle = 'rgba(4,2,14,' + amb + ')';
+    lctx.fillRect(0, 0, lcan.width, lcan.height);
+    lctx.setTransform(ls, 0, 0, ls, R.ox * 0.5, R.oy * 0.5);
+    lctx.globalCompositeOperation = 'destination-out';
+
+    for (const L of M.lights) {
+      let a;
+      if (L.always) {
+        const fl = Math.sin(R.time * 1.7 + L.phase) > 0.92 ? 0.25 : 1; // occasional dip
+        a = Math.max(0.5 * fl, power * 0.85);
+      } else a = power * (0.82 + 0.05 * Math.sin(R.time * 3 + L.phase));
+      carve(L.x, L.y, L.r, a);
+    }
+    for (const f of FX.lights) carve(f.x, f.y, f.r, f.life / f.max);
+    for (const pu of I.powerups) carve(pu.x, pu.y, 100, 0.7);
+    for (const wb of M.wallbuys) carve(wb.x, wb.y + wb.fy * 20, 95, 0.5);
+    const bs = M.boxSpots[I.box.spot];
+    if (I.box.state !== 'moving') carve(bs.x, bs.y, 150, 0.7);
+    carve(M.powerSwitch.x, M.powerSwitch.y + 20, 90, 0.45);
+    if (power > 0.1) carve(M.pap.x, M.pap.y - 20, 190, power * 0.8);
+    for (const pr of GW.Weapons.projectiles) carve(pr.x, pr.y, 110, 0.8);
+
+    if (inGame && P.alive) {
+      lctx.globalAlpha = 1;
+      // personal glow: you can always see what is right next to you
+      let gr = lctx.createRadialGradient(P.x, P.y, 0, P.x, P.y, 200);
+      gr.addColorStop(0, 'rgba(0,0,0,1)');
+      gr.addColorStop(0.5, 'rgba(0,0,0,0.85)');
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      lctx.fillStyle = gr;
+      castPath(lctx, P.x, P.y, 0, U.TAU, 72, 200, false);
+      lctx.fill();
+      // flashlight: wide soft cone + tight bright cone, both stopped by walls
+      gr = lctx.createRadialGradient(P.x, P.y, 0, P.x, P.y, 660);
+      gr.addColorStop(0, 'rgba(0,0,0,0.5)');
+      gr.addColorStop(0.6, 'rgba(0,0,0,0.38)');
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      lctx.fillStyle = gr;
+      castPath(lctx, P.x, P.y, P.angle - 0.6, P.angle + 0.6, 36, 660, true);
+      lctx.fill();
+      gr = lctx.createRadialGradient(P.x, P.y, 0, P.x, P.y, 660);
+      gr.addColorStop(0, 'rgba(0,0,0,1)');
+      gr.addColorStop(0.55, 'rgba(0,0,0,0.8)');
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      lctx.fillStyle = gr;
+      castPath(lctx, P.x, P.y, P.angle - 0.4, P.angle + 0.4, 36, 660, true);
+      lctx.fill();
+    }
+    lctx.globalAlpha = 1;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.drawImage(lcan, 0, 0, R.vw, R.vh);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* emissive pass (drawn after the darkness, so it always glows)       */
+  /* ------------------------------------------------------------------ */
+  function label(text, x, y, size, color, alpha) {
+    ctx.font = '900 ' + size + 'px ' + FONT;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.globalAlpha = alpha === undefined ? 1 : alpha;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(4,2,12,0.85)';
+    ctx.strokeText(text, x, y);
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawEmissive(inGame, power) {
+    const P = GW.Player, I = GW.Interact, MA = GW.MapArt, Zs = GW.Zombies;
+    ctx.globalCompositeOperation = 'lighter';
+
+    // coloured light pools
+    // (powered lights are baked into the neon layer; only emergency lights are dynamic)
+    for (const L of M.lights) {
+      if (!L.always || !inView(L.x, L.y, L.r)) continue;
+      Art.drawGlow(ctx, L.color, L.x, L.y, L.r * 1.15, Math.max(0.1, power * 0.16));
+    }
+    for (const f of FX.lights) if (inView(f.x, f.y, f.r)) Art.drawGlow(ctx, f.color, f.x, f.y, f.r * 0.7, 0.55 * (f.life / f.max));
+
+    // neon tubes, signs and screens
+    const hum = 0.92 + 0.08 * Math.sin(R.time * 23) * Math.sin(R.time * 3.1);
+    ctx.globalAlpha = U.clamp(0.1 + 0.88 * power * hum, 0, 1);
+    blit(MA.neon, MA.NEON_SCALE);
+    ctx.globalAlpha = 1;
+
+    // laser gate across the Overclock Stage entrance
+    const gate = M.gate;
+    if ((!gate.open || gate.openT < 1) && inView(gate.x, gate.y, 140)) {
+      const k = gate.open ? gate.openT : 0;
+      const flick = gate.open ? (Math.random() < 1 - k ? 1 : 0) : 1;
+      if (flick) {
+        for (let i = 0; i < 4; i++) {
+          const y = gate.ry - WH + 13 + i * 9;
+          ctx.strokeStyle = '#ff3b4e';
+          ctx.globalAlpha = 0.9 * (1 - k);
+          ctx.lineWidth = 2 + Math.sin(R.time * 30 + i) * 0.6;
+          ctx.beginPath();
+          ctx.moveTo(gate.rx, y);
+          ctx.lineTo(gate.rx + gate.rw, y);
+          ctx.stroke();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        Art.drawGlow(ctx, '#ff3b4e', gate.x, gate.y - 4, 120, 0.3 * (1 - k));
+      }
+    }
+
+    // wall-buy neon outlines (they work without power)
+    for (const wb of M.wallbuys) {
+      if (!inView(wb.x, wb.y, 100)) continue;
+      const pulse = 0.85 + 0.15 * Math.sin(R.time * 2.4 + wb.tx);
+      Art.drawGlow(ctx, '#ffe14d', wb.x, wb.y - WH, 70, 0.22 * pulse);
+      ctx.globalAlpha = pulse;
+      Art.weapon(ctx, wb.def.cls, wb.x, wb.y - WH - 3, 70, '#fff3b0', 'neon');
+      ctx.globalAlpha = 1;
+    }
+    // power switch lamp
+    const ps = M.powerSwitch;
+    if (inView(ps.x, ps.y, 80)) Art.drawGlow(ctx, I.powerOn ? '#3dff8b' : '#ff3b4e', ps.x, ps.y - WH + (I.powerOn ? 11 : -11), 26, 0.7 + 0.3 * Math.sin(R.time * 6));
+
+    // Prize Crate beam + contents
+    const b = I.box, bs = M.boxSpots[b.spot];
+    if (inView(bs.x, bs.y, 260)) {
+      const fade = b.state === 'moving' ? b.t / 1.4 : 1;
+      const bcol = b.state === 'jester' ? '#ff3b4e' : '#ffe14d';
+      Art.drawGlow(ctx, bcol, bs.x, bs.y - 10, 110 + Math.sin(R.time * 3) * 10, 0.3 * fade);
+      // rotating sky-beam rays
+      ctx.save();
+      ctx.translate(bs.x, bs.y - 10);
+      ctx.rotate(R.time * 0.6);
+      ctx.globalAlpha = 0.06 * fade;
+      ctx.fillStyle = bcol;
+      for (let i = 0; i < 6; i++) {
+        ctx.rotate(U.TAU / 6);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(120, -12);
+        ctx.lineTo(120, 12);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+      ctx.globalAlpha = 1;
+      if ((b.state === 'rolling' || b.state === 'ready') && b.display) {
+        const def = GW.WEAPONS[b.display];
+        const bobY = bs.y - 34 + Math.sin(R.time * 5) * 3;
+        const blink = b.state === 'ready' && b.t < 3 ? (Math.sin(R.time * 18) > 0 ? 1 : 0.3) : 1;
+        Art.drawGlow(ctx, def.wonder ? '#7dff5a' : '#ffe14d', bs.x, bobY, 60, 0.45 * blink);
+        ctx.globalAlpha = blink;
+        Art.weapon(ctx, def.cls, bs.x, bobY, 64, def.wonder ? '#b6ff9c' : '#fff3b0', 'neon');
+        ctx.globalAlpha = 1;
+      } else if (b.state === 'jester') {
+        Art.drawGlow(ctx, '#ff3b4e', bs.x, bs.y - 34, 70, 0.6);
+        Art.powerupIcon(ctx, 'instakill', bs.x + U.rand(-1.5, 1.5), bs.y - 34 + U.rand(-1.5, 1.5), 38);
+      }
+    }
+
+    // Overclocker glow + weapon
+    const pm = M.pap, pk = I.pap;
+    if (power > 0.1 && inView(pm.x, pm.y, 200)) {
+      const hot = pk.state === 'working' ? 1 : pk.state === 'ready' ? 0.8 : 0.45;
+      Art.drawGlow(ctx, '#ff4fd8', pm.x, pm.y - WH, 120, power * hot * (0.4 + 0.12 * Math.sin(R.time * 5)));
+      ctx.strokeStyle = '#ff4fd8';
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = power * (0.6 + 0.4 * Math.sin(R.time * 4));
+      ctx.strokeRect(pm.tx * T + 3, pm.ty * T - WH + 3, pm.w * T - 6, pm.h * T - 6);
+      ctx.globalAlpha = 1;
+      if (pk.weapon) {
+        const wy = pk.state === 'ready' ? pm.y - 46 + Math.sin(R.time * 5) * 3 : pm.y - WH;
+        const blink = pk.state === 'ready' && pk.t < 4 ? (Math.sin(R.time * 18) > 0 ? 1 : 0.3) : 1;
+        const col = pk.state === 'ready' ? pk.weapon.s.color : '#ffffff';
+        Art.drawGlow(ctx, col, pm.x, wy, 60, 0.5 * blink);
+        ctx.globalAlpha = blink;
+        Art.weapon(ctx, pk.weapon.s.cls, pm.x + (pk.state === 'working' ? U.rand(-2, 2) : 0), wy, pk.state === 'ready' ? 66 : 44, col, 'neon');
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // power-ups
+    for (const pu of I.powerups) {
+      if (!inView(pu.x, pu.y, 80)) continue;
+      const def = GW.POWERUPS[pu.type];
+      const blink = pu.life < 6 ? (Math.sin(pu.t * (pu.life < 3 ? 22 : 11)) > 0 ? 1 : 0.2) : 1;
+      const by = pu.y - 6 + Math.sin(pu.t * 3.5) * 4;
+      Art.drawGlow(ctx, def.color, pu.x, by, 46, 0.6 * blink);
+      ctx.globalAlpha = blink;
+      Art.powerupIcon(ctx, pu.type, pu.x, by, 26);
+      ctx.globalAlpha = 1;
+    }
+
+    // zombie eyes burn through the dark
+    for (const z of Zs.list) {
+      if (!inView(z.x, z.y, 30)) continue;
+      const s = (z.r / 13) * 1.15, ca = Math.cos(z.angle), sa = Math.sin(z.angle);
+      const a = z.state === 'rise' ? U.clamp(1 - z.riseT / 0.9, 0, 1) : 1;
+      for (const side of [-1, 1]) {
+        const lx = 7.2 * s, ly = side * 2.9 * s;
+        const ex = z.x + ca * lx - sa * ly, ey = z.y + sa * lx + ca * ly;
+        Art.drawGlow(ctx, z.eye, ex, ey, 7 * s, 0.9 * a);
+        ctx.fillStyle = '#fff';
+        ctx.globalAlpha = a;
+        ctx.fillRect(ex - 0.8, ey - 0.8, 1.6, 1.6);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // plasma bolts
+    for (const pr of GW.Weapons.projectiles) {
+      Art.drawGlow(ctx, pr.color, pr.x, pr.y, 26, 1);
+      Art.drawGlow(ctx, '#ffffff', pr.x, pr.y, 9, 1);
+    }
+    // grenade fuse blink
+    for (const g of GW.Weapons.grenades) if (Math.sin(g.fuse * 26) > 0) Art.drawGlow(ctx, '#ff3b4e', g.x, g.y, 12, 0.9);
+
+    // tracers + overclocked laser beams
+    ctx.lineCap = 'round';
+    for (const t of FX.tracers) {
+      const a = t.life / t.max;
+      if (t.laser) {
+        ctx.strokeStyle = t.color;
+        ctx.globalAlpha = a * 0.35;
+        ctx.lineWidth = t.width * 3.2;
+        ctx.beginPath();
+        ctx.moveTo(t.x1, t.y1);
+        ctx.lineTo(t.x2, t.y2);
+        ctx.stroke();
+        ctx.globalAlpha = a;
+        ctx.lineWidth = t.width;
+        ctx.stroke();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = t.width * 0.35;
+        ctx.stroke();
+      } else {
+        ctx.strokeStyle = t.color;
+        ctx.globalAlpha = a * 0.75;
+        ctx.lineWidth = t.width;
+        ctx.beginPath();
+        ctx.moveTo(t.x1, t.y1);
+        ctx.lineTo(t.x2, t.y2);
+        ctx.stroke();
+      }
+    }
+    // lightning
+    ctx.lineJoin = 'round';
+    for (const bt of FX.bolts) {
+      const a = bt.life / bt.max;
+      ctx.beginPath();
+      ctx.moveTo(bt.pts[0], bt.pts[1]);
+      for (let i = 2; i < bt.pts.length; i += 2) ctx.lineTo(bt.pts[i] + U.rand(-2, 2), bt.pts[i + 1] + U.rand(-2, 2));
+      ctx.strokeStyle = bt.color;
+      ctx.globalAlpha = a * 0.4;
+      ctx.lineWidth = bt.width * 3;
+      ctx.stroke();
+      ctx.globalAlpha = a;
+      ctx.lineWidth = bt.width;
+      ctx.stroke();
+    }
+    // shock rings
+    for (const rg of FX.rings) {
+      const k = 1 - rg.life / rg.max;
+      ctx.strokeStyle = rg.color;
+      ctx.globalAlpha = (1 - k) * 0.9;
+      ctx.lineWidth = rg.width * (1 - k * 0.6);
+      ctx.beginPath();
+      ctx.arc(rg.x, rg.y, rg.r * (0.15 + 0.85 * k), 0, U.TAU);
+      ctx.stroke();
+    }
+    // glowing particles
+    for (const p of FX.parts) {
+      if (!p.glow || !inView(p.x, p.y, 10)) continue;
+      const a = U.clamp(p.life / p.max, 0, 1);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+
+    // muzzle flash + laser sight
+    if (inGame && P.alive) {
+      const w = P.weapon();
+      if (w && P.meleeT <= 0) {
+        const ca = Math.cos(P.angle), sa = Math.sin(P.angle);
+        const ml = P.r + w.s.len;
+        const mx = P.x + ca * ml, my = P.y + sa * ml;
+        if (P.muzzleT > 0) {
+          const col = w.up || w.s.cls === 'energy' ? w.s.color : '#ffd68a';
+          Art.drawGlow(ctx, col, mx + ca * 4, my + sa * 4, w.s.pellets > 1 ? 34 : 24, 1);
+          Art.drawGlow(ctx, '#ffffff', mx, my, 10, 1);
+        }
+        const d = M.raycast(P.x, P.y, ca, sa, Math.min(w.s.range, 620), M.blocksBullet);
+        if (d > ml) {
+          ctx.strokeStyle = w.up ? w.s.color : '#ff5a5a';
+          ctx.globalAlpha = w.up ? 0.3 : 0.14;
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 7]);
+          ctx.beginPath();
+          ctx.moveTo(mx, my);
+          ctx.lineTo(P.x + ca * d, P.y + sa * d);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+
+    ctx.globalCompositeOperation = 'source-over';
+
+    // price tags on locked doors
+    for (const d of M.doors) {
+      if (d.open || d.power || !inView(d.x, d.y, 120)) continue;
+      const bob = Math.sin(R.time * 2.5 + d.id) * 2;
+      label(String(d.cost), d.x, d.y - WH - 2 + bob, 20, '#ffe14d');
+      label('LOCKED', d.x, d.y - WH + 16 + bob, 9, M.zones[d.b].color, 0.9);
+    }
+    for (const wb of M.wallbuys) {
+      if (!inView(wb.x, wb.y, 100)) continue;
+      label(String(wb.def.cost), wb.x, wb.y - WH + 15, 11, '#ffe14d', 0.95);
+    }
+    const pm2 = M.pap;
+    if (power > 0.5 && inView(pm2.x, pm2.y, 200) && I.pap.state === 'idle') label('OVERCLOCKER', pm2.x, pm2.y + 22, 10, '#ff8fe6', 0.9);
+    // brute health bars
+    for (const z of Zs.list) {
+      if (z.type !== 'brute' || z.hp >= z.maxHp || !inView(z.x, z.y, 40)) continue;
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(z.x - 22, z.y - z.r - 14, 44, 5);
+      ctx.fillStyle = '#ff3b4e';
+      ctx.fillRect(z.x - 21, z.y - z.r - 13, 42 * U.clamp(z.hp / z.maxHp, 0, 1), 3);
+    }
+    // floating score / damage text
+    for (const p of FX.popups) {
+      if (!inView(p.x, p.y, 60)) continue;
+      label(p.text, p.x, p.y, p.size, p.color, U.clamp(p.life / (p.max * 0.5), 0, 1));
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* screen-space overlay: crosshair + hit marker                       */
+  /* ------------------------------------------------------------------ */
+  function drawCrosshair() {
+    const P = GW.Player, In = GW.Input;
+    const x = In.mouse.x * R.dpr, y = In.mouse.y * R.dpr, s = R.dpr;
+    const w = P.weapon();
+    const gap = (6 + (w ? w.s.spread * 90 : 4) + P.recoil * 5 + (P.moving ? 2 : 0)) * s;
+    const len = 7 * s;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.lineCap = 'butt';
+    for (const pass of [0, 1]) {
+      ctx.strokeStyle = pass ? '#19f0ff' : 'rgba(0,0,0,0.7)';
+      ctx.lineWidth = (pass ? 2 : 4) * s;
+      ctx.beginPath();
+      ctx.moveTo(x - gap - len, y); ctx.lineTo(x - gap, y);
+      ctx.moveTo(x + gap, y); ctx.lineTo(x + gap + len, y);
+      ctx.moveTo(x, y - gap - len); ctx.lineTo(x, y - gap);
+      ctx.moveTo(x, y + gap); ctx.lineTo(x, y + gap + len);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x - s, y - s, 2 * s, 2 * s);
+    // reload ring
+    if (w && w.reloadT > 0) {
+      ctx.strokeStyle = '#ffe14d';
+      ctx.lineWidth = 3 * s;
+      ctx.beginPath();
+      ctx.arc(x, y, 20 * s, -Math.PI / 2, -Math.PI / 2 + U.TAU * (1 - w.reloadT / w.reloadDur));
+      ctx.stroke();
+    }
+    // hit marker
+    const hm = FX.hitmark;
+    if (hm.t > 0) {
+      const a = U.clamp(hm.t / 0.1, 0, 1);
+      const r1 = (hm.kill ? 9 : 7) * s, r2 = (hm.kill ? 17 : 13) * s;
+      ctx.globalAlpha = a;
+      ctx.strokeStyle = hm.kill ? '#ff3b4e' : hm.crit ? '#ffe14d' : '#ffffff';
+      ctx.lineWidth = (hm.kill ? 3 : 2) * s;
+      ctx.beginPath();
+      for (const [dx, dy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        ctx.moveTo(x + dx * r1, y + dy * r1);
+        ctx.lineTo(x + dx * r2, y + dy * r2);
+      }
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* frame                                                              */
+  /* ------------------------------------------------------------------ */
+  R.draw = function (dt) {
+    R.time += dt;
+    const G = GW.Game, P = GW.Player, I = GW.Interact, MA = GW.MapArt, Zs = GW.Zombies, D = GW.Director;
+    if (!MA.floor) return;
+    const inGame = G.state !== 'menu';
+    updateCamera(dt, inGame);
+    const cam = R.cam, z = cam.zoom;
+    const shake = G.state === 'playing' ? FX.shakeAmt : 0;
+    const sx = shake ? U.rand(-1, 1) * shake : 0, sy = shake ? U.rand(-1, 1) * shake : 0;
+    R.ox = R.vw / 2 - (cam.x + sx) * z;
+    R.oy = R.vh / 2 - (cam.y + sy) * z;
+    view.w = R.vw / z;
+    view.h = R.vh / z;
+    view.x = cam.x + sx - view.w / 2;
+    view.y = cam.y + sy - view.h / 2;
+
+    // special rounds kill the lights; the attract screen always shows the park lit up
+    const wantOut = inGame && D.special && D.state === 'active' ? 1 : 0;
+    R.lightsOut += (wantOut - R.lightsOut) * Math.min(1, dt * 2.5);
+    let power = inGame ? I.powerLevel : 1;
+    power *= 1 - 0.8 * R.lightsOut * (0.85 + 0.15 * Math.sin(R.time * 31));
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#04030b';
+    ctx.fillRect(0, 0, R.vw, R.vh);
+    ctx.setTransform(z, 0, 0, z, R.ox, R.oy);
+
+    blit(MA.floor, 1);
+    drawGround(power);
+    for (const zb of Zs.list) if (inView(zb.x, zb.y, 40)) drawZombie(zb);
+    if (inGame && P.alive) drawPlayer(P);
+    blit(MA.top, 1);
+    drawDoors();
+    drawPlanks();
+    drawBoxes(power);
+    drawPap(power);
+    drawWallPlates(power);
+
+    drawLighting(inGame, power);
+
+    ctx.setTransform(z, 0, 0, z, R.ox, R.oy);
+    drawEmissive(inGame, power);
+
+    // cold tint during special rounds
+    if (R.lightsOut > 0.02) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = 'rgba(40,200,230,' + 0.06 * R.lightsOut + ')';
+      ctx.fillRect(0, 0, R.vw, R.vh);
+    }
+    if (G.state === 'playing' && P.alive) drawCrosshair();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  };
+})();

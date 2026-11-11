@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GRAVEWAVE — Last Night at Lumina Pier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Monoton&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="game">
+  <canvas id="view"></canvas>
+  <div id="vignette"></div>
+  <div id="flash"></div>
+
+  <!-- ===================== IN-GAME HUD ===================== -->
+  <div id="hud" class="hidden">
+    <div id="hud-tl">
+      <div id="zone-name"></div>
+      <div id="objective"></div>
+    </div>
+
+    <div id="hud-tr">
+      <canvas id="minimap" width="192" height="150"></canvas>
+      <div id="minimap-legend">MAP</div>
+    </div>
+
+    <div id="powerups"></div>
+
+    <div id="announce">
+      <div id="announce-main"></div>
+      <div id="announce-sub"></div>
+    </div>
+
+    <div id="prompt"></div>
+
+    <div id="hud-bl">
+      <div id="perks"></div>
+      <div id="vitals">
+        <div id="health">
+          <span class="vital-label">HP</span>
+          <div id="health-bar"><div id="health-fill"></div></div>
+          <span id="health-num">100</span>
+          <span id="regen-tag">REGEN</span>
+        </div>
+        <div id="stamina">
+          <span class="vital-label">RUN</span>
+          <div id="stamina-bar"><div id="stamina-fill"></div></div>
+        </div>
+      </div>
+      <canvas id="round" width="260" height="120"></canvas>
+    </div>
+
+    <div id="hud-br">
+      <div id="score-pops"></div>
+      <div id="points">500</div>
+      <div id="weapon-name"></div>
+      <canvas id="weapon-icon" width="220" height="64"></canvas>
+      <div id="ammo"><span id="clip">8</span><span id="ammo-sep">/</span><span id="reserve">80</span></div>
+      <div id="ammo-hint"></div>
+      <div id="sub-row">
+        <div id="grenades"></div>
+        <div id="slots"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== TITLE SCREEN ===================== -->
+  <div id="menu" class="screen">
+    <div class="title-wrap">
+      <div class="title-sun"></div>
+      <h1 class="title">GRAVEWAVE</h1>
+      <div class="subtitle">LAST NIGHT AT LUMINA PIER</div>
+    </div>
+    <button id="btn-start" class="neon-btn">START SHIFT</button>
+    <div id="best"></div>
+    <div class="controls">
+      <div><b>W A S D</b> move</div>
+      <div><b>MOUSE</b> aim &middot; <b>LMB</b> fire</div>
+      <div><b>SHIFT</b> sprint</div>
+      <div><b>R</b> reload</div>
+      <div><b>F</b> buy / interact</div>
+      <div><b>Q</b> / <b>WHEEL</b> swap weapon</div>
+      <div><b>V</b> / <b>RMB</b> knife</div>
+      <div><b>G</b> grenade</div>
+      <div><b>ESC</b> pause</div>
+      <div><b>M</b> music on/off</div>
+    </div>
+    <div class="tip">Earn points. Open the park. Restore the power. Overclock everything. Don't die.</div>
+  </div>
+
+  <!-- ===================== PAUSE ===================== -->
+  <div id="pause" class="screen hidden">
+    <h2 class="screen-head">PAUSED</h2>
+    <div class="sliders">
+      <label>MUSIC <input id="vol-music" type="range" min="0" max="100" value="55"></label>
+      <label>SFX <input id="vol-sfx" type="range" min="0" max="100" value="85"></label>
+    </div>
+    <button id="btn-resume" class="neon-btn">RESUME</button>
+    <button id="btn-restart" class="neon-btn alt">RESTART</button>
+    <div class="controls small">
+      <div><b>F</b> buy / interact</div><div><b>R</b> reload</div><div><b>Q</b> swap</div>
+      <div><b>V</b> knife</div><div><b>G</b> grenade</div><div><b>SHIFT</b> sprint</div>
+    </div>
+  </div>
+
+  <!-- ===================== GAME OVER ===================== -->
+  <div id="gameover" class="screen hidden">
+    <h2 class="screen-head red">GAME OVER</h2>
+    <div id="go-round"></div>
+    <div id="go-stats"></div>
+    <button id="btn-again" class="neon-btn">PLAY AGAIN</button>
+  </div>
+</div>
+
+<script src="js/utils.js"></script>
+<script src="js/config.js"></script>
+<script src="js/art.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/input.js"></script>
+<script src="js/map.js"></script>
+<script src="js/mapart.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/weapons.js"></script>
+<script src="js/zombies.js"></script>
+<script src="js/director.js"></script>
+<script src="js/player.js"></script>
+<script src="js/interact.js"></script>
+<script src="js/render.js"></script>
+<script src="js/hud.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
