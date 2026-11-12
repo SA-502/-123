@@ -33,7 +33,8 @@
     if (g.kind === 'cryo') cryoBlast(g.x, g.y);
     else if (g.kind === 'lure') {
       if (G.lure) detonateLure(G.lure); // only one lure at a time
-      G.lure = { x: g.x, y: g.y, t: C.LURE.life, max: C.LURE.life, beepT: 0, ver: -1, live: true };
+      const goal = walkableNear(g.x, g.y);
+      G.lure = { x: g.x, y: g.y, gx: goal.x, gy: goal.y, t: C.LURE.life, max: C.LURE.life, beepT: 0, ver: -1, live: true };
       A.play('lure', { x: g.x, y: g.y });
       FX.ring(g.x, g.y, 80, '#ff4fd8', 0.5, 3);
     } else if (g.kind === 'bubble') {
@@ -43,6 +44,30 @@
       FX.ring(g.x, g.y, C.BUBBLE.radius, '#3dff8b', 0.4, 5);
       FX.burst(g.x, g.y, 18, '#3dff8b', 260);
     }
+  };
+
+  /** Centre of the closest tile a zombie can stand on (lures can land on low props like the fountain). */
+  function walkableNear(x, y) {
+    const T = C.TILE, tx = Math.floor(x / T), ty = Math.floor(y / T);
+    if (!M.solidForZombie(tx, ty)) return { x, y };
+    let best = null, bd = Infinity;
+    for (let r = 1; r <= 3 && !best; r++)
+      for (let j = -r; j <= r; j++)
+        for (let i = -r; i <= r; i++) {
+          if (M.solidForZombie(tx + i, ty + j) || M.tile(tx + i, ty + j) === M.TT.WINDOW) continue;
+          const cx = (tx + i + 0.5) * T, cy = (ty + j + 0.5) * T, d = U.dist(x, y, cx, cy);
+          if (d < bd) {
+            bd = d;
+            best = { x: cx, y: cy };
+          }
+        }
+    return best || { x, y };
+  }
+
+  /** True when (x,y) lies within `pad` px of any bubble's edge. */
+  G.insideBubble = function (x, y, pad) {
+    for (const b of G.bubbles) if (U.dist(x, y, b.x, b.y) < b.r + (pad || 0)) return true;
+    return false;
   };
 
   function cryoBlast(x, y) {
@@ -121,7 +146,7 @@
     if (l && l.live) {
       // the lure's own flow field, rebuilt whenever doors or shutters change
       if (l.ver !== M.version) {
-        M.computeFlow(l.x, l.y, M.flowLure);
+        M.computeFlow(l.gx, l.gy, M.flowLure);
         l.ver = M.version;
       }
       l.t -= dt;

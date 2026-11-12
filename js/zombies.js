@@ -175,8 +175,8 @@
     let gx = P.x, gy = P.y, field = M.flow, toPlayer = true;
     const lure = Gd.activeLure();
     if (lure && (U.dist(z.x, z.y, lure.x, lure.y) < C.LURE.pull || M.flowAt(z.x, z.y, M.flowLure) < C.LURE.pullFlow)) {
-      gx = lure.x;
-      gy = lure.y;
+      gx = lure.gx;
+      gy = lure.gy;
       field = M.flowLure;
       toPlayer = false;
     }
@@ -266,6 +266,11 @@
       if (z.state === 'breach') continue;
       if (z.state !== 'rise') GW.Gadgets.pushOut(z);
       M.resolveCircle(z, z.r, M.solidForZombie);
+      // wedged between a bubble and a wall: the dome spits it back out to a spawn point
+      if (z.state !== 'rise' && GW.Gadgets.insideBubble(z.x, z.y, z.r - 1)) {
+        FX.burst(z.x, z.y, 10, '#3dff8b', 220);
+        relocate(z);
+      }
     }
   };
 

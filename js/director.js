@@ -72,13 +72,13 @@
     const P = GW.Player;
     const cands = [];
     for (const w of M.windows) {
-      if (!M.zones[w.zone].open || w.busy) continue;
+      if (!M.zones[w.zone].open || w.busy || GW.Gadgets.insideBubble(w.x, w.y, 40)) continue;
       cands.push({ kind: 'window', ref: w, x: w.x, y: w.y, zone: w.zone, d: U.dist(P.x, P.y, w.x, w.y) });
     }
     for (const r of M.risers) {
       if (!M.zones[r.zone].open || r.cool > 0) continue;
       const d = U.dist(P.x, P.y, r.x, r.y);
-      if (d < 260) continue;
+      if (d < 260 || GW.Gadgets.insideBubble(r.x, r.y, 40)) continue;
       cands.push({ kind: 'riser', ref: r, x: r.x, y: r.y, zone: r.zone, d });
     }
     if (!cands.length) return null;
@@ -90,7 +90,8 @@
     const P = GW.Player;
     if (D.special) {
       // shriekers crash down anywhere near the player
-      const pt = M.randomFloorNear(P.x, P.y, 280, 640);
+      let pt = M.randomFloorNear(P.x, P.y, 280, 640);
+      if (pt && GW.Gadgets.insideBubble(pt.x, pt.y, 40)) pt = null;
       const spot = pt ? { kind: 'point', x: pt.x, y: pt.y } : D.pickSpawn();
       if (!spot) return false;
       if (pt) {

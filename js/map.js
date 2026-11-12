@@ -226,8 +226,8 @@
     // ---- teleporter pairs (pads are plain floor tiles) ----
     M.pads = [
       { color: '#19f0ff', a: { tx: 24, ty: 23 }, b: { tx: 37, ty: 46 } },
-      { color: '#ffe14d', a: { tx: 11, ty: 13 }, b: { tx: 59, ty: 32 } },
-      { color: '#ff4fd8', a: { tx: 21, ty: 4 }, b: { tx: 27, ty: 37 } },
+      { color: '#ffe14d', a: { tx: 11, ty: 14 }, b: { tx: 59, ty: 32 } },
+      { color: '#ff4fd8', a: { tx: 23, ty: 10 }, b: { tx: 27, ty: 37 } },
     ];
     for (const pr of M.pads) {
       pr.cd = 0;
@@ -243,7 +243,7 @@
     M.vendors = [
       { kind: 'armor', tx: 21, ty: 28, fx: 1, fy: 0 },
       { kind: 'tactical', item: 'cryo', tx: 19, ty: 3, fx: 1, fy: 0 },
-      { kind: 'tactical', item: 'lure', tx: 61, ty: 20, fx: -1, fy: 0 },
+      { kind: 'tactical', item: 'lure', tx: 61, ty: 19, fx: -1, fy: 0 },
       { kind: 'tactical', item: 'bubble', tx: 26, ty: 48, fx: 0, fy: -1 },
       { kind: 'pal', tx: 12, ty: 34, fx: 0, fy: -1 },
       { kind: 'sentry', tx: 36, ty: 39, fx: 0, fy: 1 },
