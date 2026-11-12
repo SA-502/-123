@@ -147,6 +147,14 @@
     ctx.beginPath();
     ctx.arc(1.5, sw * 0.6, 6.6, Math.PI * 0.55, Math.PI * 1.45);
     ctx.fill();
+    if (z.freezeT > 0 || z.slowT > 0) {
+      ctx.globalAlpha = alpha * (z.freezeT > 0 ? 0.7 : 0.32);
+      ctx.fillStyle = '#a8efff';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 10, 13, 0, 0, U.TAU);
+      ctx.fill();
+      ctx.globalAlpha = alpha;
+    }
     if (z.flash > 0) {
       ctx.globalAlpha = alpha * Math.min(1, z.flash * 8);
       ctx.fillStyle = '#fff';
@@ -330,7 +338,7 @@
       ctx.save();
       ctx.translate(g.x, g.y);
       ctx.rotate(g.spin);
-      ctx.fillStyle = '#3a5a32';
+      ctx.fillStyle = g.kind === 'cryo' ? '#4a8fa8' : g.kind === 'lure' ? '#a8327f' : g.kind === 'bubble' ? '#2f8a54' : '#3a5a32';
       ctx.fillRect(-4.5, -5.5, 9, 11);
       ctx.fillStyle = '#1e2e1a';
       ctx.fillRect(-2, -8, 4, 3);
@@ -557,6 +565,322 @@
   /* ------------------------------------------------------------------ */
   /* lighting                                                           */
   /* ------------------------------------------------------------------ */
+  /* ------------------------------------------------------------------ */
+  /* expansion: allies, gadgets, facilities                             */
+  /* ------------------------------------------------------------------ */
+  function drawLure() {
+    const l = GW.Gadgets.activeLure();
+    if (!l || !inView(l.x, l.y, 40)) return;
+    ctx.save();
+    ctx.translate(l.x, l.y);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath(); ctx.ellipse(2, 5, 10, 7, 0, 0, U.TAU); ctx.fill();
+    ctx.fillStyle = '#c9c4dc';
+    ctx.beginPath(); ctx.arc(0, -2, 8, 0, U.TAU); ctx.fill();
+    ctx.strokeStyle = '#6a6290';
+    ctx.lineWidth = 1;
+    for (let i = -6; i <= 6; i += 3) {
+      ctx.beginPath(); ctx.moveTo(-8, -2 + i); ctx.lineTo(8, -2 + i); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(i, -10); ctx.lineTo(i, 6); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawAllies() {
+    const AL = GW.Allies;
+    const p = AL.pal;
+    if (p && inView(p.x, p.y, 40)) {
+      const bob = Math.sin(p.anim * 5) * 2;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.ellipse(2, 9, 11, 7, 0, 0, U.TAU); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.translate(0, -5 + bob);
+      ctx.rotate(p.angle);
+      ctx.fillStyle = '#1d1530';
+      ctx.fillRect(4, -2.5, 17, 5);
+      ctx.fillStyle = '#6b44a8';
+      ctx.beginPath(); ctx.arc(0, 0, 11.5, 0, U.TAU); ctx.fill();
+      ctx.fillStyle = '#3a2563';
+      ctx.beginPath(); ctx.arc(-2.5, 0, 8, 0, U.TAU); ctx.fill();
+      ctx.fillStyle = '#100820';
+      Art.roundRect(ctx, 2.5, -6.5, 7, 13, 2.5);
+      ctx.fill();
+      ctx.strokeStyle = '#9b7fd0';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-7, -4); ctx.lineTo(-14, -9); ctx.stroke();
+      ctx.restore();
+    }
+    const st = AL.sentry;
+    if (st && inView(st.x, st.y, 40)) {
+      const hover = -4 - st.rise * 4 + Math.sin(st.anim * 4) * 1.5;
+      ctx.save();
+      ctx.translate(st.x, st.y);
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.ellipse(1, 6, 13, 8, 0, 0, U.TAU); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.translate(0, hover);
+      ctx.fillStyle = '#1b2a33';
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * U.TAU;
+        if (i === 0) ctx.moveTo(Math.cos(a) * 13, Math.sin(a) * 13);
+        else ctx.lineTo(Math.cos(a) * 13, Math.sin(a) * 13);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.rotate(st.angle);
+      ctx.fillStyle = '#0c1418';
+      ctx.fillRect(2, -3.5, 20, 3);
+      ctx.fillRect(2, 0.5, 20, 3);
+      ctx.fillStyle = '#2f4a57';
+      ctx.beginPath(); ctx.arc(0, 0, 7.5, 0, U.TAU); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function drawShutter() {
+    const S = M.safeRoom;
+    if (!inView(S.dx, S.dy, 150)) return;
+    const x = S.dx, y = S.dy - WH;
+    if (S.state === 'sealed') {
+      ctx.fillStyle = '#0d1410';
+      ctx.fillRect(x, y + S.dh, S.dw, WH);
+      ctx.fillStyle = '#3b4a44';
+      ctx.fillRect(x, y, S.dw, S.dh);
+      ctx.fillStyle = '#26302c';
+      for (let i = 0; i < 12; i++) ctx.fillRect(x + 4, y + 4 + i * 8, S.dw - 8, 3);
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 1, y + 1, S.dw - 2, S.dh - 2);
+    } else {
+      // open shutter: the rolled-up drum and side rails
+      ctx.fillStyle = '#26302c';
+      ctx.fillRect(x + 2, y - 2, S.dw - 4, 8);
+      ctx.fillRect(x + 2, y + S.dh - 6, S.dw - 4, 6);
+    }
+  }
+
+  function wallItems() {
+    const items = [];
+    for (const v of M.vendors) {
+      const icon = v.kind === 'tactical' ? v.item : v.kind;
+      const price = v.kind === 'armor' ? C.ARMOR.cost : v.kind === 'tactical' ? GW.TACTICALS[v.item].cost : v.kind === 'pal' ? C.PAL.cost : C.SENTRY.cost;
+      items.push({ spot: v, icon, price, needsPower: v.kind === 'pal' || v.kind === 'sentry' });
+    }
+    for (const tr of M.traps) items.push({ spot: tr.sw, icon: tr.kind, price: C.TRAP.cost, needsPower: true, trap: tr });
+    items.push({ spot: M.safeRoom.console, icon: 'safe', price: C.SAFEROOM.cost, needsPower: false, safe: true });
+    return items;
+  }
+
+  function drawFacilityPlates() {
+    for (const it of wallItems()) {
+      const v = it.spot;
+      if (!inView(v.x, v.y, 80)) continue;
+      ctx.fillStyle = 'rgba(8,5,16,0.88)';
+      ctx.fillRect(v.x - 19, v.y - WH - 19, 38, 38);
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(v.x - 18.5, v.y - WH - 18.5, 37, 37);
+    }
+  }
+
+  function drawFacilityGlow(power) {
+    const I = GW.Interact, AL = GW.Allies, Gd = GW.Gadgets;
+    // active traps
+    for (const tr of M.traps) {
+      if (tr.state !== 'active' || !inView(tr.rx + tr.rw / 2, tr.ry + tr.rh / 2, 200)) continue;
+      const col = GW.TRAPS[tr.kind].color;
+      const cx = tr.rx + tr.rw / 2, cy = tr.ry + tr.rh / 2;
+      const fade = Math.min(1, tr.t / 1.5);
+      if (tr.kind === 'zap') {
+        ctx.globalAlpha = fade * (0.12 + Math.random() * 0.12);
+        ctx.fillStyle = col;
+        ctx.fillRect(tr.rx, tr.ry, tr.rw, tr.rh);
+        ctx.globalAlpha = 1;
+        Art.drawGlow(ctx, col, cx, cy, Math.max(tr.rw, tr.rh) * 0.8, 0.35 * fade);
+      } else if (tr.kind === 'fire') {
+        for (let j = 0; j < tr.h; j++)
+          for (let i = 0; i < tr.w; i++) {
+            const fx = tr.rx + (i + 0.5) * T, fy = tr.ry + (j + 0.5) * T;
+            const fl = 0.6 + 0.4 * Math.sin(R.time * 23 + i * 3.1 + j * 5.3);
+            Art.drawGlow(ctx, '#ff7a1a', fx, fy, 34 + fl * 14, 0.55 * fade);
+            Art.drawGlow(ctx, '#ffd426', fx, fy - 6, 16 + fl * 8, 0.6 * fade);
+          }
+      } else {
+        ctx.lineCap = 'round';
+        for (let i = 0; i < 3; i++) {
+          const y = tr.ry + 8 + (0.5 + 0.5 * Math.sin(R.time * (2.2 + i * 0.7) + i * 2.1)) * (tr.rh - 16);
+          ctx.strokeStyle = col;
+          ctx.globalAlpha = 0.35 * fade;
+          ctx.lineWidth = 8;
+          ctx.beginPath(); ctx.moveTo(tr.rx, y); ctx.lineTo(tr.rx + tr.rw, y); ctx.stroke();
+          ctx.globalAlpha = fade;
+          ctx.lineWidth = 2.2;
+          ctx.stroke();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // wall machines: icon + status light
+    for (const it of wallItems()) {
+      const v = it.spot;
+      if (!inView(v.x, v.y, 80)) continue;
+      const live = !it.needsPower || I.powerOn;
+      let col = Art.GADGET_COLORS[it.icon] || '#ffffff';
+      let lamp = live ? '#3dff8b' : '#ff3b4e';
+      if (it.trap && it.trap.state === 'active') lamp = '#ff3b4e';
+      else if (it.trap && it.trap.state === 'cooldown') lamp = '#ffb14d';
+      if (it.safe) {
+        const S = M.safeRoom;
+        lamp = S.state === 'sealed' ? '#ff3b4e' : S.cd > 0 ? '#ffb14d' : '#3dff8b';
+      }
+      const a = live ? 0.85 + 0.15 * Math.sin(R.time * 2.6 + v.tx) : 0.3;
+      Art.drawGlow(ctx, col, v.x, v.y - WH, 46, 0.22 * a);
+      ctx.globalAlpha = a;
+      Art.gadgetIcon(ctx, it.icon, v.x, v.y - WH - 2, 22, col);
+      ctx.globalAlpha = 1;
+      Art.drawGlow(ctx, lamp, v.x + 13, v.y - WH - 13, 9, 0.9);
+    }
+
+    // teleporter pads
+    for (const pr of M.pads) {
+      for (const [e, other] of [[pr.a, pr.b], [pr.b, pr.a]]) {
+        if (!inView(e.x, e.y, 80)) continue;
+        const ready = I.powerOn && M.zones[other.zone].open && M.zones[e.zone].open;
+        if (!ready) continue;
+        const cd = pr.cd > 0 ? pr.cd / C.TELEPORT.cooldown : 0;
+        const a = (cd > 0 ? 0.35 : 0.85) * power;
+        Art.drawGlow(ctx, pr.color, e.x, e.y, 48, a * 0.6);
+        ctx.strokeStyle = pr.color;
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = a;
+        ctx.setLineDash([6, 6]);
+        ctx.lineDashOffset = -R.time * 30;
+        ctx.beginPath(); ctx.arc(e.x, e.y, 24, 0, U.TAU); ctx.stroke();
+        ctx.setLineDash([]);
+        if (cd > 0) {
+          ctx.globalAlpha = 0.9;
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(e.x, e.y, 29, -Math.PI / 2, -Math.PI / 2 + U.TAU * (1 - cd)); ctx.stroke();
+        } else {
+          ctx.globalAlpha = a * 0.5;
+          Art.gadgetIcon(ctx, 'teleport', e.x, e.y, 18 + Math.sin(R.time * 3) * 2, pr.color);
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // panic room status lamp
+    const S = M.safeRoom;
+    if (inView(S.dx, S.dy, 150)) {
+      const lamp = S.state === 'sealed' ? '#ff3b4e' : S.cd > 0 ? '#ffb14d' : '#3dff8b';
+      Art.drawGlow(ctx, lamp, S.dx + S.dw / 2, S.dy - WH - 4, 20, 0.6 + 0.4 * Math.sin(R.time * (S.state === 'sealed' ? 9 : 2)));
+      if (S.state === 'sealed') Art.drawGlow(ctx, '#3dff8b', S.rx + S.rw / 2, S.ry + S.rh / 2, 120, 0.12);
+    }
+
+    // lure
+    const l = Gd.activeLure();
+    if (l && inView(l.x, l.y, 200)) {
+      const k = 1 - l.t / l.max;
+      const pulse = (R.time * (1.5 + k * 4)) % 1;
+      Art.drawGlow(ctx, '#ff4fd8', l.x, l.y - 2, 50 + 20 * Math.sin(R.time * 10), 0.7);
+      ctx.strokeStyle = '#ff4fd8';
+      ctx.globalAlpha = (1 - pulse) * 0.8;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(l.x, l.y, 20 + pulse * 120, 0, U.TAU); ctx.stroke();
+      ctx.save();
+      ctx.translate(l.x, l.y - 2);
+      ctx.rotate(R.time * 2);
+      ctx.fillStyle = ['#ff4fd8', '#19f0ff', '#ffe14d'][Math.floor(R.time * 6) % 3];
+      ctx.globalAlpha = 0.18;
+      for (let i = 0; i < 5; i++) {
+        ctx.rotate(U.TAU / 5);
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(110, -7); ctx.lineTo(110, 7); ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+
+    // safety bubbles
+    for (const b of Gd.bubbles) {
+      if (!inView(b.x, b.y, b.r + 20)) continue;
+      const r = b.r * (0.3 + 0.7 * b.grow);
+      const blink = b.t < 2 ? (Math.sin(R.time * 20) > 0 ? 1 : 0.4) : 1;
+      Art.drawGlow(ctx, '#3dff8b', b.x, b.y, r * 1.1, 0.22 * blink);
+      ctx.strokeStyle = '#3dff8b';
+      ctx.globalAlpha = 0.85 * blink;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, U.TAU); ctx.stroke();
+      ctx.globalAlpha = 0.25 * blink;
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 6; i++) {
+        const a = R.time * 0.5 + (i / 6) * Math.PI;
+        ctx.beginPath(); ctx.ellipse(b.x, b.y, r, r * Math.abs(Math.cos(a)), 0, 0, U.TAU); ctx.stroke();
+      }
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(b.x, b.y, r + 6, -Math.PI / 2, -Math.PI / 2 + U.TAU * (b.t / b.max)); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // allies: visors, muzzles and remaining-time rings
+    const p = AL.pal;
+    if (p && inView(p.x, p.y, 60)) {
+      const bob = Math.sin(p.anim * 5) * 2;
+      const vx = p.x + Math.cos(p.angle) * 6, vy = p.y - 5 + bob + Math.sin(p.angle) * 6;
+      Art.drawGlow(ctx, '#b77dff', vx, vy, 22, 0.9);
+      Art.drawGlow(ctx, '#ffffff', vx, vy, 6, 0.8);
+      const ax = p.x + Math.cos(p.angle) * -14 - Math.sin(p.angle) * -9, ay = p.y - 5 + bob + Math.sin(p.angle) * -14 + Math.cos(p.angle) * -9;
+      if (Math.sin(R.time * 6) > 0) Art.drawGlow(ctx, '#ff4fd8', ax, ay, 8, 0.9);
+      if (p.muzzleT > 0) Art.drawGlow(ctx, '#c99bff', p.x + Math.cos(p.angle) * 22, p.y - 5 + Math.sin(p.angle) * 22, 20, 1);
+      ringTimer(p.x, p.y + 2, 19, p.t / p.max, '#b77dff');
+    }
+    const st = AL.sentry;
+    if (st && inView(st.x, st.y, 60)) {
+      const hover = -4 - st.rise * 4 + Math.sin(st.anim * 4) * 1.5;
+      Art.drawGlow(ctx, '#19f0ff', st.x, st.y + hover, 26, 0.5);
+      if (st.muzzleT > 0) Art.drawGlow(ctx, '#7dfcff', st.x + Math.cos(st.angle) * 24, st.y + hover + Math.sin(st.angle) * 24, 20, 1);
+      ringTimer(st.x, st.y + 2, 20, st.t / st.max, '#19f0ff');
+    }
+  }
+
+  function ringTimer(x, y, r, frac, col) {
+    ctx.strokeStyle = col;
+    ctx.globalAlpha = 0.25;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, U.TAU); ctx.stroke();
+    ctx.globalAlpha = frac < 0.2 && Math.sin(R.time * 16) < 0 ? 0.3 : 0.9;
+    ctx.beginPath(); ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + U.TAU * U.clamp(frac, 0, 1)); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  function facilityLabels() {
+    const I = GW.Interact;
+    for (const it of wallItems()) {
+      const v = it.spot;
+      if (!inView(v.x, v.y, 80)) continue;
+      let text = String(it.price), col = '#ffe14d';
+      if (it.trap && it.trap.state !== 'idle') {
+        text = Math.ceil(it.trap.t) + 's';
+        col = it.trap.state === 'active' ? '#ff3b4e' : '#ffb14d';
+      } else if (it.safe && (M.safeRoom.state === 'sealed' || M.safeRoom.cd > 0)) {
+        text = Math.ceil(M.safeRoom.state === 'sealed' ? M.safeRoom.t : M.safeRoom.cd) + 's';
+        col = M.safeRoom.state === 'sealed' ? '#3dff8b' : '#ffb14d';
+      } else if (it.needsPower && !I.powerOn) col = '#8a7fa6';
+      label(text, v.x, v.y - WH + 14, 10, col, 0.95);
+    }
+    const S = M.safeRoom;
+    if (S.state === 'sealed' && inView(S.dx, S.dy, 150)) label(Math.ceil(S.t) + '', S.dx + S.dw / 2, S.dy - WH - 16, 16, S.t <= C.SAFEROOM.warn ? '#ff3b4e' : '#3dff8b');
+  }
+
   function castPath(g, px, py, a0, a1, n, range, fan) {
     g.beginPath();
     if (fan) g.moveTo(px, py);
@@ -607,6 +931,15 @@
     carve(M.powerSwitch.x, M.powerSwitch.y + 20, 90, 0.45);
     if (power > 0.1) carve(M.pap.x, M.pap.y - 20, 190, power * 0.8);
     for (const pr of GW.Weapons.projectiles) carve(pr.x, pr.y, 110, 0.8);
+    const AL = GW.Allies, Gd = GW.Gadgets;
+    if (AL.pal) carve(AL.pal.x, AL.pal.y, 150, 0.75);
+    if (AL.sentry) carve(AL.sentry.x, AL.sentry.y, 120, 0.6);
+    const lure = Gd.activeLure();
+    if (lure) carve(lure.x, lure.y, 170 + Math.sin(R.time * 10) * 20, 0.8);
+    for (const b of Gd.bubbles) carve(b.x, b.y, b.r * 1.25, 0.65);
+    for (const tr of M.traps) if (tr.state === 'active') carve(tr.rx + tr.rw / 2, tr.ry + tr.rh / 2, Math.max(tr.rw, tr.rh) * 1.1, 0.7 + Math.random() * 0.2);
+    for (const v of M.vendors) carve(v.x, v.y + v.fy * 20, 75, 0.4);
+    if (power > 0.1) for (const pr of M.pads) for (const e of [pr.a, pr.b]) carve(e.x, e.y, 80, 0.5 * power);
 
     if (inGame && P.alive) {
       lctx.globalAlpha = 1;
@@ -783,6 +1116,8 @@
       ctx.globalAlpha = 1;
     }
 
+    drawFacilityGlow(power);
+
     // zombie eyes burn through the dark
     for (const z of Zs.list) {
       if (!inView(z.x, z.y, 30)) continue;
@@ -906,6 +1241,7 @@
     }
 
     ctx.globalCompositeOperation = 'source-over';
+    facilityLabels();
 
     // price tags on locked doors
     for (const d of M.doors) {
@@ -1018,14 +1354,18 @@
 
     blit(MA.floor, 1);
     drawGround(power);
+    drawLure();
     for (const zb of Zs.list) if (inView(zb.x, zb.y, 40)) drawZombie(zb);
+    if (inGame) drawAllies();
     if (inGame && P.alive) drawPlayer(P);
     blit(MA.top, 1);
     drawDoors();
+    drawShutter();
     drawPlanks();
     drawBoxes(power);
     drawPap(power);
     drawWallPlates(power);
+    drawFacilityPlates();
 
     drawLighting(inGame, power);
 

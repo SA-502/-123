@@ -282,11 +282,115 @@
       ctx.beginPath();
       ctx.arc(0, 0, 1.1 * u, 0, U.TAU);
       ctx.fill();
+    } else if (id === 'pal') {
+      ctx.restore();
+      Art.gadgetIcon(ctx, 'pal', x, y, s, col);
+      return;
     } else if (id === 'carpenter') {
       // hammer
       ctx.rotate(-0.7);
       ctx.fillRect(-0.6 * u, -1.6 * u, 1.2 * u, 5.8 * u);
       ctx.fillRect(-2.8 * u, -3.8 * u, 5.6 * u, 2.4 * u);
+    }
+    ctx.restore();
+  };
+
+  /* ---------------- gadget / facility glyphs ---------------- */
+  Art.GADGET_COLORS = {
+    cryo: '#8fe9ff', lure: '#ff4fd8', bubble: '#3dff8b', armor: '#4f8bff', sentry: '#19f0ff', pal: '#b77dff',
+    safe: '#3dff8b', zap: '#8fd8ff', fire: '#ff7a1a', laser: '#ff3b6b', teleport: '#19f0ff',
+  };
+
+  /** Line-art glyph for the new systems, centred at (x,y), size s. */
+  Art.gadgetIcon = function (ctx, id, x, y, s, color) {
+    const col = color || Art.GADGET_COLORS[id] || '#ffffff';
+    const u = s / 10;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.strokeStyle = ctx.fillStyle = col;
+    ctx.lineWidth = Math.max(1, u * 0.85);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (id === 'cryo') {
+      for (let i = 0; i < 3; i++) {
+        ctx.rotate(Math.PI / 3);
+        ctx.beginPath();
+        ctx.moveTo(-4.2 * u, 0); ctx.lineTo(4.2 * u, 0);
+        for (const sx of [-1, 1]) {
+          ctx.moveTo(sx * 2.6 * u, 0); ctx.lineTo(sx * 3.6 * u, -1.1 * u);
+          ctx.moveTo(sx * 2.6 * u, 0); ctx.lineTo(sx * 3.6 * u, 1.1 * u);
+        }
+        ctx.stroke();
+      }
+    } else if (id === 'lure') {
+      // mirror ball on a string
+      ctx.beginPath(); ctx.moveTo(0, -4.6 * u); ctx.lineTo(0, -2.6 * u); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0.6 * u, 3.3 * u, 0, U.TAU); ctx.stroke();
+      ctx.lineWidth = u * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(-3.3 * u, 0.6 * u); ctx.lineTo(3.3 * u, 0.6 * u);
+      ctx.ellipse(0, 0.6 * u, 1.6 * u, 3.3 * u, 0, 0, U.TAU);
+      ctx.stroke();
+    } else if (id === 'bubble') {
+      ctx.beginPath(); ctx.arc(0, 2.6 * u, 4.4 * u, Math.PI, 0); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-5 * u, 2.6 * u); ctx.lineTo(5 * u, 2.6 * u); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 1.2 * u, 1.3 * u, 0, U.TAU); ctx.fill();
+    } else if (id === 'armor') {
+      ctx.beginPath();
+      ctx.moveTo(-3.6 * u, -3.6 * u); ctx.lineTo(-1.4 * u, -3.6 * u); ctx.lineTo(0, -2.4 * u); ctx.lineTo(1.4 * u, -3.6 * u);
+      ctx.lineTo(3.6 * u, -3.6 * u); ctx.lineTo(3.6 * u, 3.8 * u); ctx.lineTo(-3.6 * u, 3.8 * u); ctx.closePath();
+      ctx.stroke();
+      ctx.fillRect(-2.4 * u, -0.6 * u, 4.8 * u, 1.2 * u);
+      ctx.fillRect(-2.4 * u, 1.6 * u, 4.8 * u, 1.2 * u);
+    } else if (id === 'sentry') {
+      ctx.beginPath(); ctx.arc(0, 0.5 * u, 2.6 * u, 0, U.TAU); ctx.stroke();
+      ctx.fillRect(0, -0.5 * u, 4.6 * u, 2 * u);
+      ctx.beginPath();
+      ctx.moveTo(-2 * u, 2.8 * u); ctx.lineTo(-3.8 * u, 4.4 * u);
+      ctx.moveTo(2 * u, 2.8 * u); ctx.lineTo(3.8 * u, 4.4 * u);
+      ctx.moveTo(-4 * u, -3.6 * u); ctx.quadraticCurveTo(0, -5.4 * u, 4 * u, -3.6 * u);
+      ctx.stroke();
+    } else if (id === 'pal') {
+      // robot head
+      roundRect(ctx, -3.8 * u, -2.8 * u, 7.6 * u, 6.2 * u, 1.6 * u);
+      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, -2.8 * u); ctx.lineTo(0, -4.4 * u); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, -4.7 * u, 0.8 * u, 0, U.TAU); ctx.fill();
+      ctx.fillRect(-2.4 * u, -0.8 * u, 1.4 * u, 1.4 * u);
+      ctx.fillRect(1 * u, -0.8 * u, 1.4 * u, 1.4 * u);
+      ctx.fillRect(-1.6 * u, 1.6 * u, 3.2 * u, 0.6 * u);
+    } else if (id === 'safe') {
+      roundRect(ctx, -3.4 * u, -0.6 * u, 6.8 * u, 4.8 * u, 0.8 * u);
+      ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, -0.8 * u, 2.4 * u, Math.PI, 0); ctx.stroke();
+      ctx.fillRect(-0.5 * u, 0.9 * u, 1 * u, 1.8 * u);
+    } else if (id === 'zap') {
+      ctx.beginPath();
+      ctx.moveTo(1.2 * u, -4.6 * u); ctx.lineTo(-2.4 * u, 0.6 * u); ctx.lineTo(0.2 * u, 0.6 * u);
+      ctx.lineTo(-1.2 * u, 4.6 * u); ctx.lineTo(2.6 * u, -0.8 * u); ctx.lineTo(0 * u, -0.8 * u);
+      ctx.closePath();
+      ctx.fill();
+    } else if (id === 'fire') {
+      ctx.beginPath();
+      ctx.moveTo(0, -4.6 * u);
+      ctx.bezierCurveTo(3.6 * u, -1.2 * u, 4 * u, 2 * u, 0, 4.4 * u);
+      ctx.bezierCurveTo(-4 * u, 2 * u, -3.4 * u, -0.6 * u, -1.2 * u, -1.6 * u);
+      ctx.bezierCurveTo(-1.2 * u, 0, 0, -1.6 * u, 0, -4.6 * u);
+      ctx.fill();
+    } else if (id === 'laser') {
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath(); ctx.moveTo(-4.4 * u, i * 2.6 * u); ctx.lineTo(4.4 * u, i * 2.6 * u - 1.2 * u); ctx.stroke();
+      }
+      ctx.fillRect(-5 * u, -4.4 * u, 1.4 * u, 8.8 * u);
+      ctx.fillRect(3.6 * u, -4.4 * u, 1.4 * u, 8.8 * u);
+    } else if (id === 'teleport') {
+      ctx.beginPath();
+      for (let i = 0; i <= 40; i++) {
+        const a = i * 0.42, r = 0.3 * u + i * 0.105 * u;
+        if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+        else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      ctx.stroke();
     }
     ctx.restore();
   };
@@ -298,6 +402,7 @@
     const g = c.getContext('2d');
     g.scale(2, 2);
     if (kind === 'perk') Art.perkIcon(g, id, size / 2, size / 2, size * 0.94);
+    else if (kind === 'gadget') Art.gadgetIcon(g, id, size / 2, size / 2, size * 0.9);
     else Art.powerupIcon(g, id, size / 2, size / 2, size * 0.9);
     return c;
   };

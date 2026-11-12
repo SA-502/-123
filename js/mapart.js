@@ -14,6 +14,7 @@
     { text: 'OVERCLOCK', tx: 28, ty: 32, zone: Z.VAULT, size: 17 },
     { text: 'SUBSTATION', tx: 12.5, ty: 41, zone: Z.SUB, size: 13 },
     { text: 'SUBSTATION', tx: 51.5, ty: 41, zone: Z.SUB, size: 13 },
+    { text: 'SAFE ROOM', tx: 14, ty: 35, zone: Z.ARCADE, size: 11, color: '#3dff8b' },
   ];
 
   function makeCanvas(w, h) {
@@ -236,6 +237,80 @@
     g.restore();
   }
 
+  /** Trap floor plates and teleporter rings. `glow` = the powered neon version. */
+  function facilityPaint(g, glow) {
+    g.save();
+    for (const tr of M.traps) {
+      const col = GW.TRAPS[tr.kind].color;
+      if (!glow) {
+        g.fillStyle = 'rgba(0,0,0,0.38)';
+        g.fillRect(tr.rx + 3, tr.ry + 3, tr.rw - 6, tr.rh - 6);
+        g.strokeStyle = 'rgba(160,170,190,0.18)';
+        g.lineWidth = 2;
+        const vertical = tr.kind !== 'laser';
+        for (let o = 10; o < (vertical ? tr.rh : tr.rw); o += 9) {
+          g.beginPath();
+          if (vertical) { g.moveTo(tr.rx + 6, tr.ry + o); g.lineTo(tr.rx + tr.rw - 6, tr.ry + o); }
+          else { g.moveTo(tr.rx + o, tr.ry + 6); g.lineTo(tr.rx + o, tr.ry + tr.rh - 6); }
+          g.stroke();
+        }
+        // hazard border
+        g.save();
+        g.beginPath();
+        g.rect(tr.rx, tr.ry, tr.rw, tr.rh);
+        g.rect(tr.rx + 5, tr.ry + 5, tr.rw - 10, tr.rh - 10);
+        g.clip('evenodd');
+        for (let i = -tr.rh; i < tr.rw + tr.rh; i += 14) {
+          g.fillStyle = (i / 14) % 2 ? '#c9b21f' : '#141018';
+          g.globalAlpha = 0.55;
+          g.beginPath();
+          g.moveTo(tr.rx + i, tr.ry); g.lineTo(tr.rx + i + 7, tr.ry); g.lineTo(tr.rx + i + 7 + tr.rh, tr.ry + tr.rh); g.lineTo(tr.rx + i + tr.rh, tr.ry + tr.rh);
+          g.closePath();
+          g.fill();
+        }
+        g.restore();
+      } else {
+        g.globalAlpha = 0.35;
+        g.strokeStyle = col;
+        g.lineWidth = 2;
+        g.setLineDash([8, 8]);
+        g.strokeRect(tr.rx + 3, tr.ry + 3, tr.rw - 6, tr.rh - 6);
+        g.setLineDash([]);
+      }
+    }
+    for (const pr of M.pads) {
+      for (const e of [pr.a, pr.b]) {
+        g.globalAlpha = glow ? 0.9 : 0.4;
+        g.strokeStyle = glow ? pr.color : '#6a6290';
+        g.lineWidth = glow ? 3 : 2;
+        g.beginPath(); g.arc(e.x, e.y, 20, 0, U.TAU); g.stroke();
+        g.lineWidth = glow ? 2 : 1.5;
+        g.beginPath(); g.arc(e.x, e.y, 13, 0, U.TAU); g.stroke();
+        if (!glow) {
+          g.fillStyle = '#16122a';
+          g.globalAlpha = 0.8;
+          g.beginPath(); g.arc(e.x, e.y, 11, 0, U.TAU); g.fill();
+        }
+        for (let i = 0; i < 4; i++) {
+          const a = (i / 4) * U.TAU + Math.PI / 4;
+          g.beginPath();
+          g.moveTo(e.x + Math.cos(a) * 21, e.y + Math.sin(a) * 21);
+          g.lineTo(e.x + Math.cos(a) * 25, e.y + Math.sin(a) * 25);
+          g.stroke();
+        }
+      }
+    }
+    // panic room floor: green safety stripe inside the shutter line
+    const S = M.safeRoom;
+    g.globalAlpha = glow ? 0.6 : 0.35;
+    g.strokeStyle = '#3dff8b';
+    g.lineWidth = 3;
+    g.setLineDash([10, 8]);
+    g.strokeRect(S.rx + 6, S.ry + 6, S.rw - 12, S.rh - 12);
+    g.setLineDash([]);
+    g.restore();
+  }
+
   function drawLowProp(g, p) {
     const x = p.tx * T, y = p.ty * T, w = p.w * T, h = p.h * T;
     g.save();
@@ -349,6 +424,7 @@
     speedwayPaint(g, false);
     aquaPaint(g, false);
     hazardPaint(g, false);
+    facilityPaint(g, false);
 
     // riser spawn cracks
     for (const r of M.risers) {
@@ -665,7 +741,7 @@
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     for (const s of SIGNS) {
-      const col = zoneColor(s.zone);
+      const col = s.color || zoneColor(s.zone);
       const x = s.tx * T, y = (s.ty + 0.5) * T - WH;
       g.font = '900 ' + s.size + 'px ' + GW.FONT;
       if (neon) {
@@ -727,6 +803,7 @@
     speedwayPaint(g, true);
     aquaPaint(g, true);
     hazardPaint(g, true);
+    facilityPaint(g, true);
     const trims = collectTrims();
     g.lineCap = 'round';
     for (const c in trims) {

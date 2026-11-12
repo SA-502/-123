@@ -25,7 +25,9 @@ then visit `http://localhost:8000`.
 | `F` | Buy / interact (hold to rebuild barricades) |
 | `Q`, wheel, `1` `2` | Swap weapon |
 | `V` / `RMB` | Knife |
-| `G` | Grenade |
+| `G` | Grenade (frag) |
+| `T` | Tactical grenade (Cryo / Lure / Bubble) |
+| `X` | Deploy a carried Hover Sentry |
 | `Esc` / `P` | Pause (volume sliders) |
 | `M` | Music on/off |
 
@@ -40,6 +42,22 @@ then visit `http://localhost:8000`.
 - **Perks** — Thick Skin (health), Quick Hands (reload), Afterburner (movement), Twin Trigger (fire rate), Second Wind (cheat death once, burns all perks).
 - **Power-ups** — Full Reload, Overkill, Double Score, Purge, Board Up.
 - **Special rounds** — every few rounds the lights go out and Shriekers attack; brutes join the horde from round 8.
+
+### Park facilities and gadgets
+
+| Feature | Where | Cost | What it does |
+| --- | --- | --- | --- |
+| Zapper Floor, Burnout Jets, Laser Grid | Arcade tunnel, Speedway tunnel, Aquarium corridor | 1000 (power) | 25 s trap that kills anything walking through (brutes take heavy damage), then 60 s recharge. Hurts you too. Trap kills pay 50 |
+| Panic Room | Off the arcade tunnel | 1500 | Seals a steel shutter for 20 s while the horde piles up outside. 120 s recharge |
+| Cryo Grenade | Aquarium vending machine | 750 for 3 | Freezes everything nearby, then slows it to 40% |
+| Neon Lure | Speedway vending machine | 1000 for 3 | Pulls nearby zombies to it for 7 s, then detonates |
+| Safety Bubble | Substation vending machine | 1500 for 3 | A 10 s dome zombies cannot enter or attack into |
+| Pixel Pal | Arcade terminal (power), or a rare drop | 2000 | Robot buddy that follows you and shoots for 45 s (25 s from the drop). Its kills pay 50 |
+| Hover Sentry | Substation terminal (power) | 1500 | Carry it, press `X` to deploy a 40 s auto-turret |
+| Plate Armor | Plaza west wall | 1250 | 150 armor that absorbs 70% of incoming damage |
+| Teleporters | Plaza ↔ Substation, Arcade ↔ Speedway, Aquarium ↔ Stage | 500 (power) | Instant trip with a shockwave on arrival, 25 s recharge per pair |
+
+Tactical grenades refill by one each round, and Full Reload restocks them.
 
 ## Code layout
 
@@ -56,10 +74,15 @@ then visit `http://localhost:8000`.
 | `js/weapons.js` | Hitscan, projectile and chain-lightning fire modes, explosions, grenades |
 | `js/zombies.js` | Zombie AI, damage and death |
 | `js/director.js` | Round pacing, spawn selection, drops |
+| `js/gadgets.js` | Tactical grenades: Cryo, Neon Lure, Safety Bubble |
+| `js/allies.js` | Pixel Pal companion and Hover Sentry |
+| `js/facilities.js` | Traps, panic room, teleporters, vending machines |
 | `js/player.js` | Movement, combat input, health, perks, loadout |
 | `js/interact.js` | Doors, wall-buys, crate, perks, power, Overclocker, barricades, power-ups |
 | `js/render.js` | Camera, entities, dynamic lighting, emissive pass |
 | `js/hud.js` | HUD |
 | `js/game.js` | State machine and main loop |
 
-`GW.debug` in the console exposes test helpers (`give(n)`, `power()`, `openAll()`, `weapon(id)`, `god`).
+`GW.debug` in the console exposes test helpers (`give(n)`, `power()`, `openAll()`, `weapon(id)`, `pal()`, `sentry()`, `tactical(type)`, `armor()`, `god`).
+
+`python3 tools/bundle.py out.html` inlines everything into a single page for hosting.

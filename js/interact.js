@@ -9,6 +9,14 @@
   const cost = (c) => '<span class="cost' + (GW.Player.points < c ? ' poor' : '') + '">[' + c + ']</span>';
   const ok = (html) => ({ html, ok: true });
   const info = (html) => ({ html: '<span class="dim">' + html + '</span>', ok: false });
+  /** Distance function for a wall-mounted item: you must stand in front of it. */
+  const wallDist = (spot) => {
+    const cx = (spot.tx + 0.5) * T, cy = (spot.ty + 0.5) * T;
+    const rx = spot.tx * T - (spot.fy ? T / 2 : 0), ry = spot.ty * T - (spot.fx ? T / 2 : 0);
+    const rw = T + (spot.fy ? T : 0), rh = T + (spot.fx ? T : 0);
+    return (p) => ((p.x - cx) * spot.fx + (p.y - cy) * spot.fy < T / 2 ? Infinity : U.rectDist(p.x, p.y, rx, ry, rw, rh));
+  };
+  I.ui = { key, cost, ok, info, wallDist };
 
   I.reset = function () {
     I.list = [];
@@ -23,6 +31,7 @@
     I.box = { spot: U.randInt(0, M.boxSpots.length - 1), state: 'idle', t: 0, uses: 0, final: null, display: null, cycleT: 0, jester: false, anim: 0 };
     I.pap = { state: 'idle', t: 0, weapon: null, anim: 0 };
     build();
+    GW.Facilities.buildInteractables(I.list, I.ui);
   };
 
   /* ------------------------------------------------------------------ */
@@ -271,6 +280,9 @@
     if (type === 'ammo') {
       for (const w of P.weapons) w.reserve = w.s.reserve;
       P.grenades = C.PLAYER.grenadesMax;
+      if (P.tactical.type) P.tactical.count = C.TACTICAL_MAX;
+    } else if (type === 'pal') {
+      GW.Allies.summonPal(C.PAL.dropDuration);
     } else if (type === 'instakill') {
       G.timers.instakill = C.POWERUP_DURATION;
     } else if (type === 'double') {

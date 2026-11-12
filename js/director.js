@@ -61,6 +61,7 @@
     D.timer = 9;
     const P = GW.Player;
     P.grenades = Math.min(C.PLAYER.grenadesMax, P.grenades + 2);
+    if (P.tactical.type) P.tactical.count = Math.min(C.TACTICAL_MAX, P.tactical.count + 1);
     P.stats.round = D.round;
     A.play('roundEnd');
     GW.HUD.roundOver();
@@ -138,7 +139,7 @@
     return D.state === 'active' ? D.toSpawn + GW.Zombies.list.length : 0;
   };
 
-  const DROP_TABLE = [['ammo', 1], ['instakill', 1], ['double', 1], ['nuke', 0.8], ['carpenter', 0.7]];
+  const DROP_TABLE = [['ammo', 1], ['instakill', 1], ['double', 1], ['nuke', 0.8], ['carpenter', 0.7], ['pal', 0.4]];
 
   D.onKill = function (z, info, pos) {
     D.sinceDrop++;

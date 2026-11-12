@@ -85,6 +85,8 @@
     M.tiles = new Uint8Array(W * H); // all WALL
     M.zone = new Int8Array(W * H).fill(-1);
     M.flow = new Uint16Array(W * H).fill(65535);
+    M.flowLure = new Uint16Array(W * H).fill(65535);
+    M.version = 1;
     M.props = [];
     M.doors = [];
     M.windows = [];
@@ -111,6 +113,7 @@
     carve(44, 5, 6, 3, Z.AQUA); carve(47, 8, 3, 3, Z.AQUA); carve(47, 11, 3, 1, Z.SPEED); // speedway <-> aquarium
     carve(8, 34, 3, 11, Z.ARCADE); carve(11, 42, 3, 3, Z.ARCADE); carve(14, 42, 2, 3, Z.SUB); // arcade <-> substation
     carve(53, 34, 3, 11, Z.SPEED); carve(50, 42, 3, 3, Z.SPEED); carve(48, 42, 2, 3, Z.SUB); // speedway <-> substation
+    carve(12, 36, 4, 3, Z.ARCADE); carve(11, 36, 1, 2, Z.ARCADE); // panic room off the arcade tunnel
 
     // ---- buyable doors ----
     addDoor('Pixel Palace', 750, [[19, 22], [19, 23], [19, 24], [19, 25]], Z.HUB, Z.ARCADE, 'v');
@@ -203,6 +206,52 @@
       { weapon: 'hornet', tx: 27, ty: 39, fx: 0, fy: 1 },
     ];
     M.powerSwitch = { tx: 32, ty: 39, fx: 0, fy: 1 };
+
+    // ---- traps: a floor rectangle (tiles) plus a wall switch ----
+    M.traps = [
+      { kind: 'zap', x: 8, y: 39, w: 3, h: 3, sw: { tx: 11, ty: 38, fx: -1, fy: 0 } },
+      { kind: 'fire', x: 53, y: 39, w: 3, h: 3, sw: { tx: 52, ty: 38, fx: 1, fy: 0 } },
+      { kind: 'laser', x: 30, y: 14, w: 4, h: 2, sw: { tx: 34, ty: 15, fx: 0, fy: 1 } },
+    ].map((t, i) => Object.assign(t, { id: i, rx: t.x * T, ry: t.y * T, rw: t.w * T, rh: t.h * T, state: 'idle', t: 0, playerT: 0, sfxT: 0 }));
+
+    // ---- panic room: steel shutter on (11,36..37), console inside on the east wall ----
+    M.safeRoom = {
+      rx: 12 * T, ry: 36 * T, rw: 4 * T, rh: 3 * T,
+      door: [[11, 36], [11, 37]], dx: 11 * T, dy: 36 * T, dw: T, dh: 2 * T,
+      outside: { x: 10.5 * T, y: 37 * T },
+      console: { tx: 16, ty: 37, fx: -1, fy: 0 },
+      state: 'open', t: 0, cd: 0, warned: false, bangT: 0,
+    };
+
+    // ---- teleporter pairs (pads are plain floor tiles) ----
+    M.pads = [
+      { color: '#19f0ff', a: { tx: 24, ty: 23 }, b: { tx: 37, ty: 46 } },
+      { color: '#ffe14d', a: { tx: 11, ty: 13 }, b: { tx: 59, ty: 32 } },
+      { color: '#ff4fd8', a: { tx: 21, ty: 4 }, b: { tx: 27, ty: 37 } },
+    ];
+    for (const pr of M.pads) {
+      pr.cd = 0;
+      for (const k of ['a', 'b']) {
+        const e = pr[k];
+        e.x = (e.tx + 0.5) * T;
+        e.y = (e.ty + 0.5) * T;
+        e.zone = M.zone[idx(e.tx, e.ty)];
+      }
+    }
+
+    // ---- wall-mounted vendors ----
+    M.vendors = [
+      { kind: 'armor', tx: 21, ty: 28, fx: 1, fy: 0 },
+      { kind: 'tactical', item: 'cryo', tx: 19, ty: 3, fx: 1, fy: 0 },
+      { kind: 'tactical', item: 'lure', tx: 61, ty: 20, fx: -1, fy: 0 },
+      { kind: 'tactical', item: 'bubble', tx: 26, ty: 48, fx: 0, fy: -1 },
+      { kind: 'pal', tx: 12, ty: 34, fx: 0, fy: -1 },
+      { kind: 'sentry', tx: 36, ty: 39, fx: 0, fy: 1 },
+    ];
+    for (const v of M.vendors.concat(M.traps.map((t) => t.sw), [M.safeRoom.console])) {
+      v.x = (v.tx + 0.5) * T;
+      v.y = (v.ty + 0.5) * T;
+    }
     M.spawn = { x: 32 * T, y: 28.5 * T };
 
     // ---- lights (powered unless flagged always-on) ----
@@ -220,6 +269,7 @@
     light(37, 42, 250, '#c8ff3a', Z.SUB); light(45, 45.5, 250, '#c8ff3a', Z.SUB);
     light(9.5, 39, 200, '#a855ff', Z.ARCADE); light(54.5, 39, 200, '#ff8a1f', Z.SPEED);
     light(28.5, 36, 230, '#ff3b6b', Z.VAULT); light(35.5, 36, 230, '#a855ff', Z.VAULT);
+    light(13.9, 37.5, 170, '#3dff8b', Z.ARCADE, true); // panic room
     // dim emergency lighting that works without power
     light(32, 44, 190, '#ff3b4e', Z.SUB, true);
     light(10.5, 23.5, 170, '#ff3b4e', Z.ARCADE, true);
@@ -362,7 +412,13 @@
     for (const [x, y] of d.tiles) M.tiles[idx(x, y)] = TT.FLOOR;
     M.zones[d.a].open = true;
     M.zones[d.b].open = true;
+    M.markDirty();
+  };
+
+  /** Walkability changed: every flow field must be rebuilt. */
+  M.markDirty = function () {
     M.flowDirty = true;
+    M.version++;
   };
 
   /* ------------------------------------------------------------------ */
@@ -400,13 +456,16 @@
   }
   const DIRS = [[1, 0, 10], [-1, 0, 10], [0, 1, 10], [0, -1, 10], [1, 1, 14], [1, -1, 14], [-1, 1, 14], [-1, -1, 14]];
 
-  M.computeFlow = function (px, py) {
-    const flow = M.flow;
+  /** Fill `arr` (default: the main field) with path cost to (px,py). */
+  M.computeFlow = function (px, py, arr) {
+    const flow = arr || M.flow;
     flow.fill(65535);
     const sx = Math.floor(px / T), sy = Math.floor(py / T);
-    M.flowTx = sx;
-    M.flowTy = sy;
-    M.flowDirty = false;
+    if (flow === M.flow) {
+      M.flowTx = sx;
+      M.flowTy = sy;
+      M.flowDirty = false;
+    }
     if (!inb(sx, sy) || M.solidForZombie(sx, sy)) return;
     heap.length = 0;
     flow[idx(sx, sy)] = 0;
@@ -431,21 +490,22 @@
   };
 
   /** Path distance (in tenths of a tile) from a world position to the player. */
-  M.flowAt = function (wx, wy) {
+  M.flowAt = function (wx, wy, arr) {
     const tx = Math.floor(wx / T), ty = Math.floor(wy / T);
-    return inb(tx, ty) ? M.flow[idx(tx, ty)] : 65535;
+    return inb(tx, ty) ? (arr || M.flow)[idx(tx, ty)] : 65535;
   };
 
   /** Fill `out` with the centre of the best neighbouring tile to walk toward. */
-  M.flowTarget = function (wx, wy, out) {
+  M.flowTarget = function (wx, wy, out, arr) {
+    const flow = arr || M.flow;
     const tx = Math.floor(wx / T), ty = Math.floor(wy / T);
     if (!inb(tx, ty)) return false;
-    let best = M.flow[idx(tx, ty)], bx = tx, by = ty;
+    let best = flow[idx(tx, ty)], bx = tx, by = ty;
     for (const d of DIRS) {
       const nx = tx + d[0], ny = ty + d[1];
       if (M.solidForZombie(nx, ny)) continue;
       if (d[2] === 14 && (M.solidForZombie(tx + d[0], ty) || M.solidForZombie(tx, ty + d[1]))) continue;
-      const f = M.flow[idx(nx, ny)];
+      const f = flow[idx(nx, ny)];
       if (f < best) {
         best = f;
         bx = nx;

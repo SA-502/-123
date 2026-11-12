@@ -509,6 +509,93 @@
     },
   };
 
+  /* ---------------- expansion sounds: traps, gadgets, allies, facilities ---------------- */
+  Object.assign(SFX, {
+    trapOn(t, s) {
+      tone({ t, type: 'square', f: 220, f2: 880, dur: 0.35, vol: 0.18 * s.vol, pan: s.pan, lp: 2400 });
+      tone({ t: t + 0.3, type: 'sawtooth', f: 55, dur: 0.6, vol: 0.2 * s.vol, pan: s.pan, lp: 500, sustain: true, a: 0.05 });
+      noise({ t, dur: 0.3, vol: 0.2 * s.vol, type: 'bandpass', f: 3000, q: 3, pan: s.pan });
+    },
+    trapOff(t, s) {
+      tone({ t, type: 'sawtooth', f: 400, f2: 60, dur: 0.6, vol: 0.14 * s.vol, pan: s.pan, lp: 1500 });
+    },
+    zap(t, s) {
+      for (let i = 0; i < 3; i++) noise({ t: t + i * 0.04, dur: 0.04, vol: 0.18 * s.vol, type: 'bandpass', f: U.rand(2500, 6000), q: 5, pan: s.pan });
+      tone({ t, type: 'square', f: 60, dur: 0.22, vol: 0.12 * s.vol, pan: s.pan, lp: 400 });
+    },
+    flame(t, s) {
+      noise({ t, dur: 0.34, vol: 0.28 * s.vol, type: 'lowpass', f: 900, f2: 500, pan: s.pan, a: 0.05, sustain: true });
+      noise({ t, dur: 0.2, vol: 0.08 * s.vol, type: 'highpass', f: 3500, pan: s.pan });
+    },
+    laser(t, s) {
+      tone({ t, type: 'sawtooth', f: 900, f2: 1300, dur: 0.48, vol: 0.06 * s.vol, pan: s.pan, lp: 3000, sustain: true, vib: 30, vibRate: 12 });
+      tone({ t, type: 'sine', f: 120, dur: 0.48, vol: 0.1 * s.vol, pan: s.pan, sustain: true });
+    },
+    shutter(t) {
+      noise({ t, dur: 0.7, vol: 0.45, type: 'lowpass', f: 600, f2: 150, a: 0.04, sustain: true, verb: 0.5 });
+      for (let i = 0; i < 8; i++) noise({ t: t + i * 0.08, dur: 0.04, vol: 0.2, type: 'bandpass', f: 1200 + i * 90, q: 4 });
+      tone({ t: t + 0.65, type: 'sine', f: 90, f2: 40, dur: 0.3, vol: 0.5 });
+      noise({ t: t + 0.65, dur: 0.12, vol: 0.4, type: 'lowpass', f: 1200 });
+    },
+    bang(t, s) {
+      noise({ t, dur: 0.14, vol: 0.4 * s.vol, type: 'lowpass', f: 700, f2: 200, pan: s.pan, verb: 0.4 });
+      tone({ t, type: 'sine', f: 85, f2: 50, dur: 0.14, vol: 0.35 * s.vol, pan: s.pan });
+    },
+    siren(t) {
+      for (let i = 0; i < 3; i++) tone({ t: t + i * 0.5, type: 'square', f: 660, f2: 440, dur: 0.45, vol: 0.12, lp: 2000, verb: 0.3 });
+    },
+    freeze(t, s) {
+      noise({ t, dur: 0.6, vol: 0.4 * s.vol, type: 'highpass', f: 2500, f2: 6000, pan: s.pan, verb: 0.6 });
+      tone({ t, type: 'sine', f: 2400, f2: 900, dur: 0.5, vol: 0.12 * s.vol, pan: s.pan });
+      for (let i = 0; i < 6; i++) tone({ t: t + 0.05 + i * 0.05, type: 'triangle', f: U.rand(2600, 4200), dur: 0.12, vol: 0.06 * s.vol, pan: s.pan });
+    },
+    lure(t, s) {
+      [76, 79, 83, 88].forEach((m, i) => tone({ t: t + i * 0.07, type: 'square', f: mtof(m), dur: 0.14, vol: 0.08 * s.vol, pan: s.pan, lp: 3000, echo: 0.3 }));
+    },
+    lureBeep(t, s, p) {
+      tone({ t, type: 'square', f: 880 * (p.pitch || 1), dur: 0.06, vol: 0.09 * s.vol, pan: s.pan, lp: 3500 });
+    },
+    bubble(t, s) {
+      tone({ t, type: 'sine', f: 180, f2: 520, dur: 0.5, vol: 0.25 * s.vol, pan: s.pan, verb: 0.5 });
+      tone({ t, type: 'triangle', f: 360, f2: 1040, dur: 0.5, vol: 0.1 * s.vol, pan: s.pan });
+    },
+    bubblePop(t, s) {
+      tone({ t, type: 'sine', f: 900, f2: 200, dur: 0.25, vol: 0.2 * s.vol, pan: s.pan });
+      noise({ t, dur: 0.1, vol: 0.15 * s.vol, type: 'bandpass', f: 2000, q: 2, pan: s.pan });
+    },
+    pal(t, s) {
+      [60, 67, 72, 79].forEach((m, i) => tone({ t: t + i * 0.06, type: 'square', f: mtof(m), dur: 0.12, vol: 0.1 * s.vol, pan: s.pan, lp: 2500 }));
+      tone({ t, type: 'sawtooth', f: 100, f2: 400, dur: 0.35, vol: 0.12 * s.vol, pan: s.pan, lp: 1200 });
+    },
+    palBye(t, s) {
+      [79, 72, 67, 60].forEach((m, i) => tone({ t: t + i * 0.06, type: 'square', f: mtof(m), dur: 0.1, vol: 0.08 * s.vol, pan: s.pan, lp: 2500 }));
+    },
+    allyShot(t, s, p) {
+      tone({ t, type: 'square', f: p.sentry ? 1400 : 1100, f2: 300, dur: 0.06, vol: 0.12 * s.vol, pan: s.pan, lp: 4000 });
+      noise({ t, dur: 0.04, vol: 0.12 * s.vol, type: 'bandpass', f: 3000, q: 1, pan: s.pan });
+    },
+    sentry(t, s) {
+      tone({ t, type: 'sawtooth', f: 80, f2: 320, dur: 0.4, vol: 0.18 * s.vol, pan: s.pan, lp: 1400 });
+      noise({ t: t + 0.35, dur: 0.06, vol: 0.2 * s.vol, type: 'bandpass', f: 2000, q: 2, pan: s.pan });
+      tone({ t: t + 0.4, type: 'triangle', f: 1320, dur: 0.15, vol: 0.1 * s.vol, pan: s.pan });
+    },
+    armor(t) {
+      noise({ t, dur: 0.12, vol: 0.3, type: 'bandpass', f: 1500, q: 2 });
+      tone({ t: t + 0.05, type: 'triangle', f: 660, f2: 990, dur: 0.25, vol: 0.14 });
+      noise({ t: t + 0.15, dur: 0.08, vol: 0.25, type: 'bandpass', f: 2600, q: 3 });
+    },
+    armorBreak(t) {
+      noise({ t, dur: 0.3, vol: 0.4, type: 'highpass', f: 3000, verb: 0.3 });
+      tone({ t, type: 'square', f: 500, f2: 120, dur: 0.25, vol: 0.12, lp: 1800 });
+    },
+    teleport(t) {
+      tone({ t, type: 'sawtooth', f: 120, f2: 1800, dur: 0.45, vol: 0.18, lp: 600, lp2: 6000, verb: 0.6 });
+      tone({ t: t + 0.35, type: 'sine', f: 1800, f2: 200, dur: 0.5, vol: 0.18, verb: 0.6 });
+      noise({ t, dur: 0.8, vol: 0.2, type: 'bandpass', f: 400, f2: 5000, q: 1.5, verb: 0.5 });
+    },
+  });
+  Object.assign(THROTTLE, { zap: 0.1, flame: 0.1, laser: 0.2, bang: 0.2, allyShot: 0.05, lureBeep: 0.08 });
+
   /** Play a named sound. p may carry {x,y} for positional audio plus sound-specific params. */
   A.play = function (name, p) {
     if (!A.ready || ctx.state !== 'running') return;

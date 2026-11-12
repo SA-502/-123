@@ -121,6 +121,12 @@ html, body {
 #regen-tag { font-size: 9px; font-weight: 700; color: #3dff8b; text-shadow: 0 0 8px #3dff8b; opacity: 0; width: 44px; }
 #health.regen #regen-tag { opacity: 1; animation: blink 0.5s steps(2) infinite; }
 #stamina { margin-top: 5px; }
+#armor { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+#armor.off { visibility: hidden; }
+#armor-bar { position: relative; flex: 1; height: 8px; border-radius: 3px; background: rgba(10, 5, 24, 0.8); overflow: hidden;
+  border: 1px solid rgba(79, 139, 255, 0.8); box-shadow: 0 0 8px rgba(79, 139, 255, 0.45); margin-right: 52px; }
+#armor-fill { height: 100%; width: 0; background: linear-gradient(90deg, #2c5bff, #4f8bff 60%, #a9c6ff); transition: width 0.12s linear; }
+#armor-num { font-size: 11px; font-weight: 700; color: #a9c6ff; width: 30px; text-align: right; margin-left: -52px; }
 #stamina-bar { height: 5px; border: 1px solid rgba(255, 225, 77, 0.55); margin-right: 90px; }
 #stamina-fill { height: 100%; width: 100%; background: var(--yellow); box-shadow: 0 0 8px var(--yellow); }
 #round { display: block; margin-top: 4px; width: 260px; height: 120px; }
@@ -161,6 +167,12 @@ html, body {
 .nade { width: 11px; height: 14px; border-radius: 5px 5px 6px 6px; background: #3dff8b; box-shadow: 0 0 8px #3dff8b; }
 .nade.off { background: transparent; border: 1px solid rgba(61, 255, 139, 0.4); box-shadow: none; }
 #slots { display: flex; gap: 5px; }
+#tactical { display: flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 900; }
+#tactical canvas { width: 22px; height: 22px; }
+#tactical.empty { opacity: 0.35; }
+#sentry-tag { display: none; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 3px; color: #19f0ff;
+  border: 1px solid #19f0ff; box-shadow: 0 0 8px rgba(25, 240, 255, 0.6); animation: blink 1s steps(2) infinite; }
+#sentry-tag.on { display: block; }
 .slot { font-size: 9px; padding: 2px 6px; border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 3px; opacity: 0.55; }
 .slot.on { border-color: var(--cyan); color: var(--cyan); opacity: 1; box-shadow: 0 0 8px rgba(25, 240, 255, 0.6); }
 
@@ -204,7 +216,7 @@ html, body {
 .neon-btn.alt:hover { background: rgba(25, 240, 255, 0.25); }
 #best { font-size: 12px; letter-spacing: 0.25em; color: var(--yellow); text-shadow: 0 0 8px var(--yellow); min-height: 14px; }
 .controls {
-  display: grid; grid-template-columns: repeat(5, auto); gap: 8px 26px; font-size: 11px; letter-spacing: 0.12em;
+  display: grid; grid-template-columns: repeat(6, auto); gap: 8px 26px; font-size: 11px; letter-spacing: 0.12em;
   text-transform: uppercase; color: #dccbf5;
 }
 .controls.small { grid-template-columns: repeat(3, auto); opacity: 0.8; }

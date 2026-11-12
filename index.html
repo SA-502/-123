@@ -39,6 +39,11 @@
     <div id="hud-bl">
       <div id="perks"></div>
       <div id="vitals">
+        <div id="armor" class="off">
+          <span class="vital-label">ARM</span>
+          <div id="armor-bar"><div id="armor-fill"></div></div>
+          <span id="armor-num">0</span>
+        </div>
         <div id="health">
           <span class="vital-label">HP</span>
           <div id="health-bar"><div id="health-fill"></div></div>
@@ -61,6 +66,8 @@
       <div id="ammo"><span id="clip">8</span><span id="ammo-sep">/</span><span id="reserve">80</span></div>
       <div id="ammo-hint"></div>
       <div id="sub-row">
+        <div id="sentry-tag">X SENTRY</div>
+        <div id="tactical"></div>
         <div id="grenades"></div>
         <div id="slots"></div>
       </div>
@@ -85,6 +92,8 @@
       <div><b>Q</b> / <b>WHEEL</b> swap weapon</div>
       <div><b>V</b> / <b>RMB</b> knife</div>
       <div><b>G</b> grenade</div>
+      <div><b>T</b> tactical</div>
+      <div><b>X</b> deploy sentry</div>
       <div><b>ESC</b> pause</div>
       <div><b>M</b> music on/off</div>
     </div>
@@ -103,6 +112,7 @@
     <div class="controls small">
       <div><b>F</b> buy / interact</div><div><b>R</b> reload</div><div><b>Q</b> swap</div>
       <div><b>V</b> knife</div><div><b>G</b> grenade</div><div><b>SHIFT</b> sprint</div>
+      <div><b>T</b> tactical</div><div><b>X</b> deploy sentry</div><div><b>M</b> music</div>
     </div>
   </div>
 
@@ -127,6 +137,9 @@
 <script src="js/zombies.js"></script>
 <script src="js/director.js"></script>
 <script src="js/player.js"></script>
+<script src="js/gadgets.js"></script>
+<script src="js/allies.js"></script>
+<script src="js/facilities.js"></script>
 <script src="js/interact.js"></script>
 <script src="js/render.js"></script>
 <script src="js/hud.js"></script>

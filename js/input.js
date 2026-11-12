@@ -12,7 +12,7 @@
 
   const GAME_KEYS = {
     KeyW: 1, KeyA: 1, KeyS: 1, KeyD: 1, ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1, Space: 1, Tab: 1,
-    KeyF: 1, KeyR: 1, KeyQ: 1, KeyG: 1, KeyV: 1, KeyE: 1, ShiftLeft: 1, ShiftRight: 1, Digit1: 1, Digit2: 1,
+    KeyF: 1, KeyR: 1, KeyQ: 1, KeyG: 1, KeyV: 1, KeyE: 1, KeyT: 1, KeyX: 1, ShiftLeft: 1, ShiftRight: 1, Digit1: 1, Digit2: 1,
   };
 
   In.init = function (canvas) {

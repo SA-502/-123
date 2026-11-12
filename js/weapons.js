@@ -86,7 +86,7 @@
     } else if (s.type === 'arc') {
       arcFire(p, s, mx, my, ca, sa, shot);
     } else {
-      for (let i = 0; i < s.pellets; i++) hitscan(p, a + U.rand(-spread, spread), s, shot, mx, my, w.up);
+      for (let i = 0; i < s.pellets; i++) Wp.traceShot(p.x, p.y, a + U.rand(-spread, spread), s, shot, mx, my, w.up ? 'laser' : 'plain', 'player');
     }
 
     const flashCol = w.up || s.cls === 'energy' ? s.color : '#ffd68a';
@@ -104,9 +104,13 @@
     }
   }
 
-  /** Instant bullet: walls stop it, zombies are hit in order with limited penetration. */
-  function hitscan(p, ang, s, shot, mx, my, upgraded) {
-    const ox = p.x, oy = p.y;
+  /**
+   * Instant bullet from (ox,oy): walls stop it, zombies are hit in order with limited penetration.
+   * look: 'plain' | 'laser' | a colour for ally tracers. owner: 'player' (earns hit points) | 'ally'.
+   */
+  Wp.traceShot = function (ox, oy, ang, s, shot, mx, my, look, owner) {
+    const upgraded = look === 'laser';
+    const ally = owner === 'ally';
     const dx = Math.cos(ang), dy = Math.sin(ang);
     const wallD = M.raycast(ox, oy, dx, dy, s.range, M.blocksBullet);
     const hits = [];
@@ -136,11 +140,11 @@
         const f = h.t / s.range;
         if (f > 0.55) d *= U.lerp(1, 0.35, (f - 0.55) / 0.45);
       }
-      const killed = GW.Zombies.damage(z, d, { crit, dir: ang });
+      const killed = GW.Zombies.damage(z, d, { crit: crit && !ally, dir: ang, ally });
       shot.hitAny = true;
       if (crit) shot.crit = true;
       if (killed) shot.killAny = true;
-      else if (!shot.hits.has(z.id)) {
+      else if (!ally && !shot.hits.has(z.id)) {
         shot.hits.add(z.id);
         GW.Game.addPoints(C.POINTS.hit, z.x, z.y - z.r, { small: true });
       }
@@ -151,9 +155,10 @@
 
     const ex = ox + dx * endD, ey = oy + dy * endD;
     if (upgraded) FX.tracer(mx, my, ex, ey, s.color, s.pellets > 1 ? 2.2 : 3.2, 0.13, true);
+    else if (look && look[0] === '#') FX.tracer(mx, my, ex, ey, look, 1.8, 0.09, true);
     else FX.tracer(mx, my, ex, ey, '#ffe7a3', s.pellets > 1 ? 1 : 1.5, 0.07, false);
-    if (endD === wallD && wallD < s.range - 0.5) FX.sparks(ex, ey, ang + Math.PI, 4, upgraded ? s.color : '#ffd68a', 200);
-  }
+    if (endD === wallD && wallD < s.range - 0.5) FX.sparks(ex, ey, ang + Math.PI, ally ? 2 : 4, upgraded ? s.color : look && look[0] === '#' ? look : '#ffd68a', 200);
+  };
 
   /** Chain lightning: strikes the first zombie in the beam, then leaps between neighbours. */
   function arcFire(p, s, mx, my, dx, dy, shot) {
@@ -245,6 +250,12 @@
   Wp.throwGrenade = function (p, tx, ty) {
     if (p.grenades <= 0) return false;
     p.grenades--;
+    Wp.launch(p, tx, ty, 'frag', 1.6);
+    return true;
+  };
+
+  /** Throw any grenade kind toward (tx,ty). Frags explode; tactical kinds hand over to Gadgets on landing. */
+  Wp.launch = function (p, tx, ty, kind, fuse) {
     const ca = Math.cos(p.angle), sa = Math.sin(p.angle);
     const d = U.clamp(U.dist(p.x, p.y, tx, ty), 130, 540);
     const sp = d * 2.3;
@@ -253,9 +264,8 @@
       gx = p.x;
       gy = p.y;
     }
-    Wp.grenades.push({ x: gx, y: gy, vx: ca * sp, vy: sa * sp, fuse: 1.6, spin: 0 });
+    Wp.grenades.push({ x: gx, y: gy, vx: ca * sp, vy: sa * sp, fuse, spin: 0, kind });
     A.play('throw');
-    return true;
   };
 
   Wp.update = function (dt) {
@@ -331,6 +341,10 @@
       g.fuse -= dt;
       if (g.fuse <= 0) {
         Wp.grenades.splice(i, 1);
+        if (g.kind !== 'frag') {
+          GW.Gadgets.land(g);
+          continue;
+        }
         const dmg = Math.max(350, GW.Rounds.health(GW.Director.round || 1) * 0.9);
         Wp.explode(g.x, g.y, 165, dmg, dmg * 0.25, { color: '#ffb14d', hurtPlayer: 70 });
       }

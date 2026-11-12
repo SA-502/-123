@@ -102,6 +102,7 @@
     if (z.flash > 0) z.flash -= dt;
     if (z.stun > 0) z.stun -= dt;
     if (z.attackCd > 0) z.attackCd -= dt;
+    if (z.slowT > 0) z.slowT -= dt;
 
     // staggered death from a Purge power-up
     if (z.nukeT !== undefined) {
@@ -119,8 +120,16 @@
       else A.play('groan', { x: z.x, y: z.y, pitch: z.type === 'brute' ? 0.62 : z.speedClass === 'sprint' ? 1.35 : 1 });
     }
 
+    // frozen solid by a Cryo grenade: no walking, tearing or swinging
+    if (z.freezeT > 0) {
+      z.freezeT -= dt;
+      if (z.state === 'chase') knockback(z, dt);
+      return;
+    }
+
     const dxp = P.x - z.x, dyp = P.y - z.y;
     const dp = Math.hypot(dxp, dyp);
+    const Gd = GW.Gadgets;
 
     if (z.state === 'rise') {
       z.riseT -= dt;
@@ -151,7 +160,7 @@
       z.angle += U.angDiff(z.angle, Math.atan2(dyp, dxp)) * Math.min(1, dt * 12);
       z.attackT -= dt;
       if (z.attackT <= 0) {
-        if (P.alive && dp < z.r + P.r + 24) {
+        if (P.alive && dp < z.r + P.r + 24 && !Gd.shielded(P)) {
           A.play('zattack', { x: z.x, y: z.y });
           P.hurt(z.damage, true);
         }
@@ -162,10 +171,19 @@
       return;
     }
 
-    // ---- chase ----
-    let tx = P.x, ty = P.y;
-    const direct = dp < 440 && M.los(z.x, z.y, P.x, P.y, M.solidForZombie);
-    if (!direct && M.flowTarget(z.x, z.y, tgt)) {
+    // ---- chase: the player, or a Neon Lure that is close enough to pull this one in ----
+    let gx = P.x, gy = P.y, field = M.flow, toPlayer = true;
+    const lure = Gd.activeLure();
+    if (lure && (U.dist(z.x, z.y, lure.x, lure.y) < C.LURE.pull || M.flowAt(z.x, z.y, M.flowLure) < C.LURE.pullFlow)) {
+      gx = lure.x;
+      gy = lure.y;
+      field = M.flowLure;
+      toPlayer = false;
+    }
+    const dg = toPlayer ? dp : Math.hypot(gx - z.x, gy - z.y);
+    let tx = gx, ty = gy;
+    const direct = dg < 440 && M.los(z.x, z.y, gx, gy, M.solidForZombie);
+    if (!direct && M.flowTarget(z.x, z.y, tgt, field)) {
       tx = tgt.x;
       ty = tgt.y;
     }
@@ -174,8 +192,8 @@
     z.angle += U.angDiff(z.angle, Math.atan2(mdy, mdx)) * Math.min(1, dt * 10);
 
     const reach = z.r + P.r + 4;
-    let step = z.speed * (z.stun > 0 ? 0.35 : 1) * dt;
-    if (direct) step = Math.min(step, Math.max(0, dp - reach)); // never shove into the player
+    let step = z.speed * (z.stun > 0 ? 0.35 : 1) * (z.slowT > 0 ? C.CRYO.slowMult : 1) * dt;
+    if (direct) step = Math.min(step, Math.max(0, dg - (toPlayer ? reach : z.r + 6))); // never shove into the target
     M.moveCircle(z, (mdx / md) * step + z.kx * dt, (mdy / md) * step + z.ky * dt, M.solidForZombie);
     if (z.kx || z.ky) {
       const k = Math.exp(-8 * dt);
@@ -184,19 +202,21 @@
       if (Math.abs(z.kx) + Math.abs(z.ky) < 2) z.kx = z.ky = 0;
     }
 
-    if (P.alive && dp < reach + 8 && z.attackCd <= 0) {
+    if (P.alive && dp < reach + 8 && z.attackCd <= 0 && !Gd.shielded(P)) {
       z.state = 'attack';
       z.attackT = C.ZOMBIE.attackWindup;
     }
 
     // stragglers: too far along the path, unreachable, or wedged somewhere -> respawn nearer
-    const far = M.flowAt(z.x, z.y) > 380;
+    // (not while lured or while the panic room is sealed: waiting at the shutter is the point)
+    const holding = !toPlayer || GW.Facilities.sealed();
+    const far = !holding && M.flowAt(z.x, z.y) > 380;
     z.farT = far ? z.farT + dt : 0;
     if (U.dist(z.x, z.y, z.lastX, z.lastY) > 18) {
       z.lastX = z.x;
       z.lastY = z.y;
       z.stuckT = 0;
-    } else if (dp > 130) z.stuckT += dt;
+    } else if (dp > 130 && !holding) z.stuckT += dt;
     else z.stuckT = 0;
     if (z.farT > 6 || z.stuckT > 6) relocate(z);
   }
@@ -243,7 +263,9 @@
     }
     for (let i = 0; i < n; i++) {
       const z = list[i];
-      if (z.state !== 'breach') M.resolveCircle(z, z.r, M.solidForZombie);
+      if (z.state === 'breach') continue;
+      if (z.state !== 'rise') GW.Gadgets.pushOut(z);
+      M.resolveCircle(z, z.r, M.solidForZombie);
     }
   };
 
@@ -291,6 +313,8 @@
     const P = GW.Player, Pt = C.POINTS;
     let pts = info.melee ? Pt.melee : info.crit ? Pt.crit : Pt.kill;
     if (z.type === 'brute') pts = Pt.brute;
+    else if (info.trap) pts = Pt.trap;
+    else if (info.ally) pts = Pt.ally;
     if (!info.silent) GW.Game.addPoints(pts, z.x, z.y - z.r - 4, { crit: info.crit });
     P.stats.kills++;
     if (info.crit) P.stats.crits++;

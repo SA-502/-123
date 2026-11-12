@@ -23,6 +23,9 @@
     P.perkOrder = [];
     P.windBought = 0;
     P.grenades = PC.grenadesStart;
+    P.tactical = { type: null, count: 0 };
+    P.armor = 0;
+    P.sentryCarried = false;
     P.stamina = P.staminaMax = PC.stamina;
     P.staminaDelay = 0;
     P.exhausted = false;
@@ -159,6 +162,16 @@
     if (melee) {
       if (P.hitGrace > 0) return;
       P.hitGrace = 0.4;
+    }
+    if (P.armor > 0) {
+      const soak = Math.min(P.armor, amount * C.ARMOR.absorb);
+      P.armor -= soak;
+      amount -= soak;
+      if (P.armor <= 0.5) {
+        P.armor = 0;
+        A.play('armorBreak');
+        FX.burst(P.x, P.y, 14, '#4f8bff', 260);
+      }
     }
     P.hp -= amount;
     P.sinceHurt = 0;
@@ -302,6 +315,8 @@
     }
 
     if (In.hit('KeyG')) Wp.throwGrenade(P, P.aimX, P.aimY);
+    if (In.hit('KeyT')) GW.Gadgets.throwTactical(P);
+    if (In.hit('KeyX')) GW.Allies.deploySentry(P);
     if (In.hit('KeyV') || In.mouse.rpressed) P.melee();
 
     // health regeneration

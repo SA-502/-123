@@ -35,10 +35,20 @@
       speeds: { walk: [52, 72], run: [125, 150], sprint: [182, 206] },
       plankTearTime: 0.9,
     },
-    POINTS: { hit: 10, kill: 60, crit: 100, melee: 130, brute: 250, nuke: 400, carpenter: 200, plank: 10 },
+    POINTS: { hit: 10, kill: 60, crit: 100, melee: 130, brute: 250, nuke: 400, carpenter: 200, plank: 10, trap: 50, ally: 50 },
     COSTS: { box: 950, pap: 5000, upgradedAmmo: 4500 },
     POWERUP_LIFE: 26,
     POWERUP_DURATION: 30,
+    TRAP: { cost: 1000, duration: 25, cooldown: 60, tick: 0.25, playerDmg: 40, playerTick: 0.5, bruteFrac: 0.07 },
+    SAFEROOM: { cost: 1500, duration: 20, cooldown: 120, warn: 3 },
+    ARMOR: { cost: 1250, max: 150, absorb: 0.7 },
+    TELEPORT: { cost: 500, cooldown: 25 },
+    TACTICAL_MAX: 3,
+    PAL: { cost: 2000, duration: 45, dropDuration: 25, cooldown: 90, rpm: 600, range: 520, speed: 270, dmgBase: 30, dmgRound: 10 },
+    SENTRY: { cost: 1500, duration: 40, rpm: 700, range: 470, dmgBase: 25, dmgRound: 9 },
+    CRYO: { radius: 170, freeze: 1.5, slow: 6, slowMult: 0.4, damage: 50 },
+    LURE: { life: 7, pull: 420, pullFlow: 200, radius: 190, mult: 1.5 },
+    BUBBLE: { life: 10, radius: 120, max: 2 },
   };
 
   /**
@@ -163,5 +173,19 @@
     double: { id: 'double', name: 'DOUBLE SCORE', color: '#ffe14d', sub: 'All points x2', timed: true },
     nuke: { id: 'nuke', name: 'PURGE', color: '#ff7a1a', sub: 'The horde is vaporised  +400' },
     carpenter: { id: 'carpenter', name: 'BOARD UP', color: '#19f0ff', sub: 'All barricades rebuilt  +200' },
+    pal: { id: 'pal', name: 'PIXEL PAL', color: '#b77dff', sub: 'A robot buddy joins the fight' },
+  };
+
+  /** Tactical grenades (thrown with T). One type carried at a time. */
+  GW.TACTICALS = {
+    cryo: { id: 'cryo', name: 'Cryo Grenade', cost: 750, color: '#8fe9ff', desc: 'Freezes, then slows the horde' },
+    lure: { id: 'lure', name: 'Neon Lure', cost: 1000, color: '#ff4fd8', desc: 'Draws zombies in, then detonates' },
+    bubble: { id: 'bubble', name: 'Safety Bubble', cost: 1500, color: '#3dff8b', desc: 'A dome zombies cannot enter' },
+  };
+
+  GW.TRAPS = {
+    zap: { name: 'Zapper Floor', color: '#8fd8ff' },
+    fire: { name: 'Burnout Jets', color: '#ff7a1a' },
+    laser: { name: 'Laser Grid', color: '#ff3b6b' },
   };
 })();

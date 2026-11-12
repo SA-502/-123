@@ -12,7 +12,8 @@
   H.init = function () {
     for (const id of ['hud', 'zone-name', 'objective', 'powerups', 'announce', 'announce-main', 'announce-sub', 'prompt', 'perks',
       'health', 'health-fill', 'health-num', 'stamina-fill', 'round', 'score-pops', 'points', 'weapon-name', 'weapon-icon',
-      'clip', 'reserve', 'ammo-hint', 'grenades', 'slots', 'vignette', 'flash', 'minimap']) {
+      'clip', 'reserve', 'ammo-hint', 'grenades', 'slots', 'vignette', 'flash', 'minimap', 'armor', 'armor-fill', 'armor-num',
+      'tactical', 'sentry-tag']) {
       el[id] = $(id);
     }
     roundCtx = el.round.getContext('2d');
@@ -166,35 +167,46 @@
     g.restore();
   }
 
+  /** Timed effects shown as pills at the top: power-ups, allies, lockdown. */
+  function activeTimers() {
+    const G = GW.Game, AL = GW.Allies, S = M.safeRoom;
+    const out = [];
+    if (G.timers.double > 0) out.push({ id: 'double', kind: 'powerup', t: G.timers.double, name: GW.POWERUPS.double.name, color: GW.POWERUPS.double.color });
+    if (G.timers.instakill > 0) out.push({ id: 'instakill', kind: 'powerup', t: G.timers.instakill, name: GW.POWERUPS.instakill.name, color: GW.POWERUPS.instakill.color });
+    if (AL.pal) out.push({ id: 'pal', kind: 'gadget', t: AL.pal.t, name: 'PIXEL PAL', color: '#b77dff' });
+    if (AL.sentry) out.push({ id: 'sentry', kind: 'gadget', t: AL.sentry.t, name: 'SENTRY', color: '#19f0ff' });
+    if (S.state === 'sealed') out.push({ id: 'safe', kind: 'gadget', t: S.t, name: 'LOCKDOWN', color: '#3dff8b' });
+    return out;
+  }
+
   function updatePowerupTimers() {
-    const timers = GW.Game.timers;
-    for (const id of ['double', 'instakill']) {
-      const t = timers[id];
-      let node = puNodes[id];
-      if (t > 0) {
-        if (!node) {
-          const def = GW.POWERUPS[id];
-          node = puNodes[id] = document.createElement('div');
-          node.className = 'pu-timer';
-          node.style.color = def.color;
-          node.appendChild(Art.iconCanvas('powerup', id, 26));
-          const label = document.createElement('span');
-          node.appendChild(label);
-          node._label = label;
-          node._name = def.name;
-          el.powerups.appendChild(node);
-          last['pu' + id] = null;
-        }
-        const secs = Math.ceil(t);
-        if (last['pu' + id] !== secs) {
-          last['pu' + id] = secs;
-          node._label.textContent = node._name + ' ' + secs;
-          node.classList.toggle('ending', secs <= 5);
-        }
-      } else if (node) {
-        node.remove();
-        delete puNodes[id];
+    const list = activeTimers();
+    const seen = {};
+    for (const e of list) {
+      seen[e.id] = true;
+      let node = puNodes[e.id];
+      if (!node) {
+        node = puNodes[e.id] = document.createElement('div');
+        node.className = 'pu-timer';
+        node.style.color = e.color;
+        node.appendChild(Art.iconCanvas(e.kind, e.id, 26));
+        const label = document.createElement('span');
+        node.appendChild(label);
+        node._label = label;
+        el.powerups.appendChild(node);
+        last['pu' + e.id] = null;
       }
+      const secs = Math.ceil(e.t);
+      if (last['pu' + e.id] !== secs) {
+        last['pu' + e.id] = secs;
+        node._label.textContent = e.name + ' ' + secs;
+        node.classList.toggle('ending', secs <= 5);
+      }
+    }
+    for (const id in puNodes) {
+      if (seen[id]) continue;
+      puNodes[id].remove();
+      delete puNodes[id];
     }
   }
 
@@ -223,6 +235,39 @@
     } else {
       g.fillStyle = '#ff4fd8';
       g.fillRect(M.pap.x * s - 3, M.pap.y * s - 2, 6, 4);
+    }
+    // traps, pads and the panic room
+    for (const tr of M.traps) {
+      if (!I.powerOn) break;
+      g.fillStyle = tr.state === 'active' ? (blink ? GW.TRAPS[tr.kind].color : '#ffffff') : U.rgba(GW.TRAPS[tr.kind].color, tr.state === 'idle' ? 0.55 : 0.2);
+      g.fillRect(tr.rx * s, tr.ry * s, tr.rw * s, tr.rh * s);
+    }
+    if (I.powerOn) {
+      for (const pr of M.pads) {
+        for (const e of [pr.a, pr.b]) {
+          if (!M.zones[e.zone].open) continue;
+          g.strokeStyle = pr.color;
+          g.globalAlpha = pr.cd > 0 ? 0.35 : 1;
+          g.lineWidth = 1;
+          g.beginPath();
+          g.arc(e.x * s, e.y * s, 2.5, 0, U.TAU);
+          g.stroke();
+        }
+      }
+      g.globalAlpha = 1;
+    }
+    const SR = M.safeRoom;
+    g.strokeStyle = SR.state === 'sealed' ? '#ff3b4e' : '#3dff8b';
+    g.lineWidth = 1;
+    g.strokeRect(SR.rx * s + 0.5, SR.ry * s + 0.5, SR.rw * s - 1, SR.rh * s - 1);
+    const AL = GW.Allies;
+    if (AL.pal) {
+      g.fillStyle = '#b77dff';
+      g.fillRect(AL.pal.x * s - 1.5, AL.pal.y * s - 1.5, 3, 3);
+    }
+    if (AL.sentry) {
+      g.fillStyle = '#19f0ff';
+      g.fillRect(AL.sentry.x * s - 1.5, AL.sentry.y * s - 1.5, 3, 3);
     }
     const bs = M.boxSpots[I.box.spot];
     if (I.box.state !== 'moving') {
@@ -300,6 +345,30 @@
         .map((x, i) => '<div class="slot' + (i === P.cur ? ' on' : '') + '">' + (i + 1) + ' ' + x.s.name + '</div>')
         .join('');
     }
+
+    // armor
+    cls('armoff', el.armor, 'off', P.armor <= 0);
+    set('armw', el['armor-fill'].style, (U.clamp(P.armor / C.ARMOR.max, 0, 1) * 100).toFixed(1) + '%', 'width');
+    set('armn', el['armor-num'], String(Math.ceil(P.armor)));
+
+    // tactical slot + carried sentry
+    const tkey = (P.tactical.type || '-') + P.tactical.count;
+    if (last.tac !== tkey) {
+      last.tac = tkey;
+      el.tactical.innerHTML = '';
+      if (P.tactical.type) {
+        const def = GW.TACTICALS[P.tactical.type];
+        el.tactical.appendChild(Art.iconCanvas('gadget', P.tactical.type, 22));
+        const n = document.createElement('span');
+        n.textContent = 'T ×' + P.tactical.count;
+        n.style.color = def.color;
+        n.style.textShadow = '0 0 8px ' + def.color;
+        el.tactical.appendChild(n);
+        el.tactical.title = def.name;
+      }
+      el.tactical.classList.toggle('empty', !!P.tactical.type && P.tactical.count === 0);
+    }
+    cls('sentrytag', el['sentry-tag'], 'on', P.sentryCarried);
 
     // vitals
     const frac = U.clamp(P.hp / P.maxHp, 0, 1);

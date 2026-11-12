@@ -14,6 +14,10 @@
     power: () => GW.Interact.turnOnPower(),
     weapon: (id) => GW.Player.giveWeapon(id),
     openAll: () => M.doors.forEach((d) => !d.power && M.openDoor(d)),
+    pal: (t) => GW.Allies.summonPal(t || 45),
+    sentry: () => (GW.Player.sentryCarried = true),
+    tactical: (type) => GW.Gadgets.give(GW.Player, type || 'cryo'),
+    armor: () => (GW.Player.armor = GW.CFG.ARMOR.max),
   };
 
   /* ------------------------------------------------------------------ */
@@ -70,6 +74,9 @@
     GW.MapArt.build();
     FX.reset();
     GW.Weapons.reset();
+    GW.Gadgets.reset();
+    GW.Allies.reset();
+    GW.Facilities.reset();
     GW.Zombies.reset();
     GW.Player.reset();
     GW.Interact.reset();
@@ -165,18 +172,27 @@
     P.update(dt);
     if (G.state !== 'playing') return; // player died this step
 
-    const tx = Math.floor(P.x / GW.CFG.TILE), ty = Math.floor(P.y / GW.CFG.TILE);
-    if (M.flowDirty || tx !== M.flowTx || ty !== M.flowTy) M.computeFlow(P.x, P.y);
+    updateFlow();
 
     GW.Director.update(dt);
     GW.Zombies.update(dt);
     GW.Weapons.update(dt);
+    GW.Gadgets.update(dt);
+    GW.Allies.update(dt);
+    GW.Facilities.update(dt);
     GW.Interact.update(dt);
-    if (M.flowDirty) M.computeFlow(P.x, P.y); // a door opened this step
+    updateFlow(); // a door or shutter may have changed this step
     FX.update(dt);
     GW.HUD.update(dt);
     In.endFrame();
   };
+
+  /** The horde's main flow field targets the player, or the panic-room shutter while it is sealed. */
+  function updateFlow() {
+    const goal = GW.Facilities.flowGoal() || GW.Player;
+    const tx = Math.floor(goal.x / GW.CFG.TILE), ty = Math.floor(goal.y / GW.CFG.TILE);
+    if (M.flowDirty || tx !== M.flowTx || ty !== M.flowTy) M.computeFlow(goal.x, goal.y);
+  }
 
   function frame(ts) {
     requestAnimationFrame(frame);
