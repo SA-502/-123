@@ -2,7 +2,9 @@
 (function () {
   'use strict';
   const GW = window.GW, U = GW.U, C = GW.CFG, M = GW.Map, FX = GW.FX, Art = GW.Art, T = C.TILE;
-  const R = (GW.Render = { cam: { x: M.pxW / 2, y: M.pxH / 2, zoom: 1 }, vw: 0, vh: 0, dpr: 1, quality: 1, time: 0, ox: 0, oy: 0, lightsOut: 0 });
+  const R = (GW.Render = { cam: { x: M.pxW / 2, y: M.pxH / 2, zoom: 1 }, vw: 0, vh: 0, dpr: 1, quality: 1, time: 0, ox: 0, oy: 0, lightsOut: 0, dim: 1, inGame: false, amb: 0 });
+  /** Light level 0..1 of a zone this frame (its generator, flicker, and special-round blackouts). */
+  const lv = (z) => (!R.inGame ? 1 : z < 0 || z === undefined ? 0 : GW.Interact.zoneLevel[z] || 0) * R.dim;
   const WH = 16;
   const FONT = GW.FONT;
   const view = { x: 0, y: 0, w: 0, h: 0 };
@@ -295,7 +297,8 @@
   function drawGround(power) {
     const I = GW.Interact;
     // dance floor on the Overclock Stage pulses to the beat once powered
-    if (power > 0.3 && inView(32 * T, 36 * T, 7 * T)) {
+    const stage = lv(M.Z.VAULT);
+    if (stage > 0.3 && inView(32 * T, 36 * T, 7 * T)) {
       const beat = Math.floor(R.time * (104 / 60));
       const pal = ['#ff4fd8', '#19f0ff', '#ffe14d', '#a855ff', '#3dff8b'];
       ctx.save();
@@ -307,7 +310,7 @@
             for (let i = 0; i < 2; i++) {
               const h = U.hash(tx * 2 + i, ty * 2 + j, beat);
               if (h > 0.34) continue;
-              ctx.globalAlpha = power * (0.2 + h);
+              ctx.globalAlpha = stage * (0.2 + h);
               ctx.fillStyle = pal[Math.floor(h * 14.7) % 5];
               ctx.fillRect(tx * T + i * 24 + 1, ty * T + j * 24 + 1, 22, 22);
             }
@@ -509,7 +512,7 @@
     // twin rotors
     for (const side of [-1, 1]) {
       const cx = pm.x + side * 26, cy = y + h / 2;
-      const spin = k.anim * (k.state === 'working' ? 14 : 1.5) * side * (power > 0.3 ? 1 : 0);
+      const spin = k.anim * (k.state === 'working' ? 14 : 1.5) * side * (lv(M.Z.VAULT) > 0.3 ? 1 : 0);
       ctx.strokeStyle = '#5a2a66';
       ctx.lineWidth = 3;
       ctx.beginPath();
@@ -539,10 +542,10 @@
       ctx.fillStyle = 'rgba(8,5,16,0.85)';
       ctx.fillRect(wb.x - 44, wb.y - WH - 19, 88, 38);
     }
-    // power switch housing
-    const ps = M.powerSwitch;
-    if (inView(ps.x, ps.y, 80)) {
-      const on = GW.Interact.powerOn;
+    // generator breaker boxes, one per zone
+    for (const ps of M.generators) {
+      if (!inView(ps.x, ps.y, 80)) continue;
+      const on = GW.Interact.powered(ps.zone);
       const x = ps.x, y = ps.y - WH;
       ctx.fillStyle = '#2b3036';
       ctx.fillRect(x - 15, y - 17, 30, 34);
@@ -669,9 +672,9 @@
     for (const v of M.vendors) {
       const icon = v.kind === 'tactical' ? v.item : v.kind;
       const price = v.kind === 'armor' ? C.ARMOR.cost : v.kind === 'tactical' ? GW.TACTICALS[v.item].cost : v.kind === 'pal' ? C.PAL.cost : C.SENTRY.cost;
-      items.push({ spot: v, icon, price, needsPower: v.kind === 'pal' || v.kind === 'sentry' });
+      items.push({ spot: v, icon, price, needsPower: v.kind === 'pal' || v.kind === 'sentry', zone: v.zone });
     }
-    for (const tr of M.traps) items.push({ spot: tr.sw, icon: tr.kind, price: C.TRAP.cost, needsPower: true, trap: tr });
+    for (const tr of M.traps) items.push({ spot: tr.sw, icon: tr.kind, price: C.TRAP.cost, needsPower: true, trap: tr, zone: tr.zone });
     items.push({ spot: M.safeRoom.console, icon: 'safe', price: C.SAFEROOM.cost, needsPower: false, safe: true });
     return items;
   }
@@ -733,7 +736,7 @@
     for (const it of wallItems()) {
       const v = it.spot;
       if (!inView(v.x, v.y, 80)) continue;
-      const live = !it.needsPower || I.powerOn;
+      const live = !it.needsPower || I.powered(it.zone);
       let col = Art.GADGET_COLORS[it.icon] || '#ffffff';
       let lamp = live ? '#3dff8b' : '#ff3b4e';
       if (it.trap && it.trap.state === 'active') lamp = '#ff3b4e';
@@ -754,10 +757,10 @@
     for (const pr of M.pads) {
       for (const [e, other] of [[pr.a, pr.b], [pr.b, pr.a]]) {
         if (!inView(e.x, e.y, 80)) continue;
-        const ready = I.powerOn && M.zones[other.zone].open && M.zones[e.zone].open;
+        const ready = I.powered(e.zone) && I.powered(other.zone) && M.zones[other.zone].open && M.zones[e.zone].open;
         if (!ready) continue;
         const cd = pr.cd > 0 ? pr.cd / C.TELEPORT.cooldown : 0;
-        const a = (cd > 0 ? 0.35 : 0.85) * power;
+        const a = (cd > 0 ? 0.35 : 0.85) * lv(e.zone);
         Art.drawGlow(ctx, pr.color, e.x, e.y, 48, a * 0.6);
         ctx.strokeStyle = pr.color;
         ctx.lineWidth = 2;
@@ -874,7 +877,7 @@
       } else if (it.safe && (M.safeRoom.state === 'sealed' || M.safeRoom.cd > 0)) {
         text = Math.ceil(M.safeRoom.state === 'sealed' ? M.safeRoom.t : M.safeRoom.cd) + 's';
         col = M.safeRoom.state === 'sealed' ? '#3dff8b' : '#ffb14d';
-      } else if (it.needsPower && !I.powerOn) col = '#8a7fa6';
+      } else if (it.needsPower && !I.powered(it.zone)) col = '#8a7fa6';
       label(text, v.x, v.y - WH + 14, 10, col, 0.95);
     }
     const S = M.safeRoom;
@@ -909,7 +912,7 @@
     lctx.globalCompositeOperation = 'source-over';
     lctx.globalAlpha = 1;
     lctx.clearRect(0, 0, lcan.width, lcan.height);
-    const amb = U.lerp(0.8, 0.48, power);
+    const amb = U.lerp(0.8, 0.48, power); // `power` = light level where the camera is
     lctx.fillStyle = 'rgba(4,2,14,' + amb + ')';
     lctx.fillRect(0, 0, lcan.width, lcan.height);
     lctx.setTransform(ls, 0, 0, ls, R.ox * 0.5, R.oy * 0.5);
@@ -919,8 +922,8 @@
       let a;
       if (L.always) {
         const fl = Math.sin(R.time * 1.7 + L.phase) > 0.92 ? 0.25 : 1; // occasional dip
-        a = Math.max(0.5 * fl, power * 0.85);
-      } else a = power * (0.82 + 0.05 * Math.sin(R.time * 3 + L.phase));
+        a = Math.max(0.5 * fl, lv(L.zone) * 0.85);
+      } else a = lv(L.zone) * (0.82 + 0.05 * Math.sin(R.time * 3 + L.phase));
       carve(L.x, L.y, L.r, a);
     }
     for (const f of FX.lights) carve(f.x, f.y, f.r, f.life / f.max);
@@ -928,8 +931,9 @@
     for (const wb of M.wallbuys) carve(wb.x, wb.y + wb.fy * 20, 95, 0.5);
     const bs = M.boxSpots[I.box.spot];
     if (I.box.state !== 'moving') carve(bs.x, bs.y, 150, 0.7);
-    carve(M.powerSwitch.x, M.powerSwitch.y + 20, 90, 0.45);
-    if (power > 0.1) carve(M.pap.x, M.pap.y - 20, 190, power * 0.8);
+    for (const g of M.generators) carve(g.x + g.fx * 20, g.y + g.fy * 20, 80, 0.4);
+    for (const f of I.fuses) if (!f.taken) carve(f.x, f.y, 46, 0.25 + 0.15 * Math.sin(R.time * 4 + f.t));
+    if (lv(M.Z.VAULT) > 0.1) carve(M.pap.x, M.pap.y - 20, 190, lv(M.Z.VAULT) * 0.8);
     for (const pr of GW.Weapons.projectiles) carve(pr.x, pr.y, 110, 0.8);
     const AL = GW.Allies, Gd = GW.Gadgets;
     if (AL.pal) carve(AL.pal.x, AL.pal.y, 150, 0.75);
@@ -939,7 +943,7 @@
     for (const b of Gd.bubbles) carve(b.x, b.y, b.r * 1.25, 0.65);
     for (const tr of M.traps) if (tr.state === 'active') carve(tr.rx + tr.rw / 2, tr.ry + tr.rh / 2, Math.max(tr.rw, tr.rh) * 1.1, 0.7 + Math.random() * 0.2);
     for (const v of M.vendors) carve(v.x, v.y + v.fy * 20, 75, 0.4);
-    if (power > 0.1) for (const pr of M.pads) for (const e of [pr.a, pr.b]) carve(e.x, e.y, 80, 0.5 * power);
+    for (const pr of M.pads) for (const e of [pr.a, pr.b]) if (lv(e.zone) > 0.1) carve(e.x, e.y, 80, 0.5 * lv(e.zone));
 
     if (inGame && P.alive) {
       lctx.globalAlpha = 1;
@@ -999,14 +1003,20 @@
     // (powered lights are baked into the neon layer; only emergency lights are dynamic)
     for (const L of M.lights) {
       if (!L.always || !inView(L.x, L.y, L.r)) continue;
-      Art.drawGlow(ctx, L.color, L.x, L.y, L.r * 1.15, Math.max(0.1, power * 0.16));
+      Art.drawGlow(ctx, L.color, L.x, L.y, L.r * 1.15, Math.max(0.1, lv(L.zone) * 0.16));
     }
     for (const f of FX.lights) if (inView(f.x, f.y, f.r)) Art.drawGlow(ctx, f.color, f.x, f.y, f.r * 0.7, 0.55 * (f.life / f.max));
 
     // neon tubes, signs and screens
     const hum = 0.92 + 0.08 * Math.sin(R.time * 23) * Math.sin(R.time * 3.1);
-    ctx.globalAlpha = U.clamp(0.1 + 0.88 * power * hum, 0, 1);
-    blit(MA.neon, MA.NEON_SCALE);
+    for (const nz of MA.neonZones) {
+      const x0 = Math.max(view.x, nz.x), y0 = Math.max(view.y, nz.y);
+      const x1 = Math.min(view.x + view.w, nz.x + nz.w), y1 = Math.min(view.y + view.h, nz.y + nz.h);
+      if (x1 <= x0 || y1 <= y0) continue;
+      ctx.globalAlpha = U.clamp(0.1 + 0.88 * lv(nz.z) * hum, 0, 1);
+      const s = MA.NEON_SCALE;
+      ctx.drawImage(nz.canvas, (x0 - nz.x) * s, (y0 - nz.y) * s, (x1 - x0) * s, (y1 - y0) * s, x0, y0, x1 - x0, y1 - y0);
+    }
     ctx.globalAlpha = 1;
 
     // laser gate across the Overclock Stage entrance
@@ -1042,9 +1052,27 @@
       Art.weapon(ctx, wb.def.cls, wb.x, wb.y - WH - 3, 70, '#fff3b0', 'neon');
       ctx.globalAlpha = 1;
     }
-    // power switch lamp
-    const ps = M.powerSwitch;
-    if (inView(ps.x, ps.y, 80)) Art.drawGlow(ctx, I.powerOn ? '#3dff8b' : '#ff3b4e', ps.x, ps.y - WH + (I.powerOn ? 11 : -11), 26, 0.7 + 0.3 * Math.sin(R.time * 6));
+    // generator lamps, and the faint glint of hidden fuses
+    for (const ps of M.generators) {
+      if (!inView(ps.x, ps.y, 80)) continue;
+      const on = I.powered(ps.zone);
+      Art.drawGlow(ctx, on ? '#3dff8b' : '#ff3b4e', ps.x, ps.y - WH + (on ? 11 : -11), 26, 0.7 + 0.3 * Math.sin(R.time * 6));
+    }
+    for (const f of I.fuses) {
+      if (f.taken || !inView(f.x, f.y, 40)) continue;
+      const tw = Math.max(0, Math.sin(f.t * 2.3)) ** 6;
+      Art.drawGlow(ctx, '#ffe14d', f.x, f.y, 14 + tw * 22, 0.35 + tw * 0.65);
+      ctx.save();
+      ctx.translate(f.x, f.y);
+      ctx.rotate(0.5);
+      ctx.fillStyle = '#ffe14d';
+      ctx.globalAlpha = 0.85;
+      ctx.fillRect(-4, -8, 8, 16);
+      ctx.fillStyle = '#3a2a10';
+      ctx.fillRect(-4, -3, 8, 6);
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
 
     // Prize Crate beam + contents
     const b = I.box, bs = M.boxSpots[b.spot];
@@ -1085,12 +1113,13 @@
 
     // Overclocker glow + weapon
     const pm = M.pap, pk = I.pap;
-    if (power > 0.1 && inView(pm.x, pm.y, 200)) {
+    const stagePow = lv(M.Z.VAULT);
+    if (stagePow > 0.1 && inView(pm.x, pm.y, 200)) {
       const hot = pk.state === 'working' ? 1 : pk.state === 'ready' ? 0.8 : 0.45;
-      Art.drawGlow(ctx, '#ff4fd8', pm.x, pm.y - WH, 120, power * hot * (0.4 + 0.12 * Math.sin(R.time * 5)));
+      Art.drawGlow(ctx, '#ff4fd8', pm.x, pm.y - WH, 120, stagePow * hot * (0.4 + 0.12 * Math.sin(R.time * 5)));
       ctx.strokeStyle = '#ff4fd8';
       ctx.lineWidth = 2;
-      ctx.globalAlpha = power * (0.6 + 0.4 * Math.sin(R.time * 4));
+      ctx.globalAlpha = stagePow * (0.6 + 0.4 * Math.sin(R.time * 4));
       ctx.strokeRect(pm.tx * T + 3, pm.ty * T - WH + 3, pm.w * T - 6, pm.h * T - 6);
       ctx.globalAlpha = 1;
       if (pk.weapon) {
@@ -1255,7 +1284,7 @@
       label(String(wb.def.cost), wb.x, wb.y - WH + 15, 11, '#ffe14d', 0.95);
     }
     const pm2 = M.pap;
-    if (power > 0.5 && inView(pm2.x, pm2.y, 200) && I.pap.state === 'idle') label('OVERCLOCKER', pm2.x, pm2.y + 22, 10, '#ff8fe6', 0.9);
+    if (lv(M.Z.VAULT) > 0.5 && inView(pm2.x, pm2.y, 200) && I.pap.state === 'idle') label('OVERCLOCKER', pm2.x, pm2.y + 22, 10, '#ff8fe6', 0.9);
     // brute health bars
     for (const z of Zs.list) {
       if (z.type !== 'brute' || z.hp >= z.maxHp || !inView(z.x, z.y, 40)) continue;
@@ -1342,8 +1371,12 @@
     // special rounds kill the lights; the attract screen always shows the park lit up
     const wantOut = inGame && D.special && D.state === 'active' ? 1 : 0;
     R.lightsOut += (wantOut - R.lightsOut) * Math.min(1, dt * 2.5);
-    let power = inGame ? I.powerLevel : 1;
-    power *= 1 - 0.8 * R.lightsOut * (0.85 + 0.15 * Math.sin(R.time * 31));
+    R.inGame = inGame;
+    R.dim = 1 - 0.8 * R.lightsOut * (0.85 + 0.15 * Math.sin(R.time * 31));
+    // ambient darkness follows the power of whichever zone the camera is over
+    const camZone = M.zoneAt(cam.x, cam.y);
+    if (camZone >= 0) R.amb += ((I.zoneLevel[camZone] || 0) - R.amb) * Math.min(1, dt * 3);
+    const power = inGame ? R.amb * R.dim : 1;
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;

@@ -12,6 +12,7 @@
     god: false,
     give: (n) => G.addPoints(n || 10000, GW.Player.x, GW.Player.y, { raw: true }),
     power: () => GW.Interact.turnOnPower(),
+    fuse: (n) => (GW.Player.fuses += n || 1),
     weapon: (id) => GW.Player.giveWeapon(id),
     openAll: () => M.doors.forEach((d) => !d.power && M.openDoor(d)),
     pal: (t) => GW.Allies.summonPal(t || 45),

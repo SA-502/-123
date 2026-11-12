@@ -4,11 +4,11 @@
   const GW = window.GW, U = GW.U, T = GW.CFG.TILE;
 
   /** Tile types. */
-  const TT = { WALL: 0, FLOOR: 1, LOW: 2, DOOR: 3, WINDOW: 4, SOLID: 5 };
+  const TT = { WALL: 0, FLOOR: 1, LOW: 2, DOOR: 3, WINDOW: 4, SOLID: 5, WATER: 6 };
   /** Zone ids. */
-  const Z = { HUB: 0, ARCADE: 1, AQUA: 2, SPEED: 3, SUB: 4, VAULT: 5 };
+  const Z = { HUB: 0, ARCADE: 1, AQUA: 2, SPEED: 3, SUB: 4, VAULT: 5, FERRIS: 6, HAUNT: 7, PIER: 8 };
 
-  const M = (GW.Map = { TT, Z, W: 64, H: 50 });
+  const M = (GW.Map = { TT, Z, W: 96, H: 72 });
   M.pxW = M.W * T;
   M.pxH = M.H * T;
 
@@ -19,6 +19,9 @@
     { id: 3, name: 'Burnout Speedway', color: '#ff8a1f', short: 'SPEEDWAY' },
     { id: 4, name: 'The Substation', color: '#c8ff3a', short: 'SUBSTATION' },
     { id: 5, name: 'Overclock Stage', color: '#ff3b6b', short: 'STAGE' },
+    { id: 6, name: 'Starwheel Plaza', color: '#ffd426', short: 'STARWHEEL' },
+    { id: 7, name: 'Nightmare Manor', color: '#c9b8ff', short: 'MANOR' },
+    { id: 8, name: 'Pier Nine Docks', color: '#3d8bff', short: 'PIER' },
   ];
 
   const W = M.W, H = M.H;
@@ -115,6 +118,25 @@
     carve(53, 34, 3, 11, Z.SPEED); carve(50, 42, 3, 3, Z.SPEED); carve(48, 42, 2, 3, Z.SUB); // speedway <-> substation
     carve(12, 36, 4, 3, Z.ARCADE); carve(11, 36, 1, 2, Z.ARCADE); // panic room off the arcade tunnel
 
+    // ---- expansion: Starwheel Plaza (east), Nightmare Manor (south-east), Pier Nine (south) ----
+    carve(66, 6, 26, 30, Z.FERRIS); // x66..91 y6..35
+    carve(61, 21, 5, 4, Z.SPEED); // speedway east tunnel (door at x65)
+    carve(86, 36, 3, 4, Z.FERRIS); // starwheel -> manor tunnel (door at y39)
+    carve(66, 40, 26, 24, Z.HAUNT); // x66..91 y40..63, then the maze walls
+    for (const [x0, y0, w, h] of [[66, 46, 19, 1], [73, 52, 19, 1], [66, 58, 19, 1], [78, 40, 1, 3], [72, 47, 1, 3], [84, 53, 1, 3], [76, 59, 1, 3]]) {
+      for (let j = y0; j < y0 + h; j++) for (let i = x0; i < x0 + w; i++) {
+        M.tiles[idx(i, j)] = TT.WALL;
+        M.zone[idx(i, j)] = -1;
+      }
+    }
+    carve(31, 48, 3, 2, Z.SUB); carve(31, 50, 3, 2, Z.PIER); // substation -> pier stairs (door at y49)
+    carve(14, 52, 49, 5, Z.PIER); // main deck x14..62 y52..56
+    carve(18, 57, 4, 9, Z.PIER); carve(32, 57, 4, 12, Z.PIER); carve(46, 57, 4, 9, Z.PIER); // docks
+    carve(18, 66, 32, 2, Z.PIER); // lower boardwalk
+    carve(60, 57, 3, 5, Z.PIER); carve(63, 59, 3, 3, Z.PIER); // pier -> manor (door at x65)
+    // open water around the pier
+    for (let y = 52; y < H - 1; y++) for (let x = 8; x <= 64; x++) if (M.tiles[idx(x, y)] === TT.WALL) M.tiles[idx(x, y)] = TT.WATER;
+
     // ---- buyable doors ----
     addDoor('Pixel Palace', 750, [[19, 22], [19, 23], [19, 24], [19, 25]], Z.HUB, Z.ARCADE, 'v');
     addDoor('Deep Six Aquarium', 1000, [[30, 13], [31, 13], [32, 13], [33, 13]], Z.HUB, Z.AQUA, 'h');
@@ -124,6 +146,10 @@
     addDoor('The Substation', 1250, [[13, 42], [13, 43], [13, 44]], Z.ARCADE, Z.SUB, 'v');
     addDoor('The Substation', 1250, [[50, 42], [50, 43], [50, 44]], Z.SPEED, Z.SUB, 'v');
     M.gate = addDoor('Overclock Stage', 0, [[30, 32], [31, 32], [32, 32], [33, 32]], Z.HUB, Z.VAULT, 'h', true);
+    addDoor('Starwheel Plaza', 1500, [[65, 21], [65, 22], [65, 23], [65, 24]], Z.SPEED, Z.FERRIS, 'v');
+    addDoor('Nightmare Manor', 1750, [[86, 39], [87, 39], [88, 39]], Z.FERRIS, Z.HAUNT, 'h');
+    addDoor('Pier Nine Docks', 1500, [[31, 49], [32, 49], [33, 49]], Z.SUB, Z.PIER, 'h');
+    addDoor('Nightmare Manor', 1750, [[65, 59], [65, 60], [65, 61]], Z.PIER, Z.HAUNT, 'v');
 
     // ---- barricaded windows (zombie entry points) ----
     addWindow(25, 15, 0, 1, Z.HUB); addWindow(38, 15, 0, 1, Z.HUB);
@@ -135,13 +161,21 @@
     addWindow(22, 12, 0, -1, Z.AQUA); addWindow(41, 12, 0, -1, Z.AQUA);
     addWindow(61, 16, -1, 0, Z.SPEED); addWindow(61, 28, -1, 0, Z.SPEED);
     addWindow(56, 11, 0, 1, Z.SPEED); addWindow(58, 34, 0, -1, Z.SPEED); addWindow(48, 34, 0, -1, Z.SPEED);
-    addWindow(20, 48, 0, -1, Z.SUB); addWindow(32, 48, 0, -1, Z.SUB); addWindow(44, 48, 0, -1, Z.SUB);
+    addWindow(20, 48, 0, -1, Z.SUB); addWindow(44, 48, 0, -1, Z.SUB);
+    addWindow(70, 5, 0, 1, Z.FERRIS); addWindow(84, 5, 0, 1, Z.FERRIS); addWindow(92, 14, -1, 0, Z.FERRIS);
+    addWindow(92, 28, -1, 0, Z.FERRIS); addWindow(72, 36, 0, -1, Z.FERRIS);
+    addWindow(92, 43, -1, 0, Z.HAUNT); addWindow(92, 55, -1, 0, Z.HAUNT); addWindow(65, 49, 1, 0, Z.HAUNT);
+    // ladders: the dead climb out of the water onto the pier
+    addWindow(26, 57, 0, -1, Z.PIER); addWindow(40, 57, 0, -1, Z.PIER); addWindow(55, 57, 0, -1, Z.PIER);
+    addWindow(17, 61, 1, 0, Z.PIER); addWindow(50, 61, -1, 0, Z.PIER); addWindow(34, 69, 0, -1, Z.PIER); addWindow(13, 54, 1, 0, Z.PIER);
     addWindow(24, 39, 0, 1, Z.SUB); addWindow(40, 39, 0, 1, Z.SUB);
 
     // ---- ground "riser" spawns ----
     M.risers = [
       { tx: 5, ty: 31, zone: Z.ARCADE }, { tx: 42, ty: 4, zone: Z.AQUA }, { tx: 59, ty: 14, zone: Z.SPEED },
       { tx: 46, ty: 46, zone: Z.SUB }, { tx: 17, ty: 41, zone: Z.SUB },
+      { tx: 68, ty: 33, zone: Z.FERRIS }, { tx: 90, ty: 8, zone: Z.FERRIS }, { tx: 90, ty: 61, zone: Z.HAUNT },
+      { tx: 68, ty: 54, zone: Z.HAUNT }, { tx: 58, ty: 54, zone: Z.PIER }, { tx: 20, ty: 63, zone: Z.PIER },
     ].map((r) => Object.assign(r, { x: (r.tx + 0.5) * T, y: (r.ty + 0.5) * T, cool: 0 }));
 
     // ---- props: scenery, cover and choke points ----
@@ -178,11 +212,34 @@
     // stage
     addProp('speaker', 26, 34, 1, 1, true);
     addProp('speaker', 37, 34, 1, 1, true);
+    // starwheel plaza: the wheel's base, booths and benches
+    addProp('wheelbase', 78, 19, 3, 3, true);
+    addProp('booth', 69, 27, 2, 2, true);
+    addProp('booth', 87, 13, 2, 2, true);
+    addProp('bench', 70, 12, 2, 1, false);
+    addProp('bench', 85, 30, 2, 1, false);
+    addProp('bench', 76, 30, 1, 2, false);
+    // nightmare manor: mirrors, coffins, pillars and animatronics
+    addProp('mirror', 70, 42, 1, 2, true);
+    addProp('mirror', 82, 42, 1, 2, true);
+    addProp('coffin', 77, 48, 1, 2, false);
+    addProp('coffin', 69, 54, 2, 1, false);
+    addProp('pillar', 80, 55, 1, 1, true);
+    addProp('pillar', 72, 61, 1, 1, true);
+    addProp('scare', 88, 48, 1, 1, true);
+    addProp('scare', 86, 61, 1, 1, true);
+    // pier: crates, barrels and a lamp post
+    addProp('crate', 16, 53, 2, 1, false);
+    addProp('barrel', 44, 53, 1, 1, false);
+    addProp('barrel', 57, 55, 1, 1, false);
+    addProp('barrel', 47, 63, 1, 1, false);
+    addProp('lamp', 25, 54, 1, 1, true);
+    addProp('lamp', 54, 53, 1, 1, true);
 
     // ---- interactable placements (logic lives in interact.js) ----
     M.perkSpots = [
       { perk: 'wind', tx: 41, ty: 17 }, { perk: 'quick', tx: 3, ty: 21 }, { perk: 'thick', tx: 28, ty: 3 },
-      { perk: 'burner', tx: 60, ty: 22 }, { perk: 'twin', tx: 45, ty: 40 },
+      { perk: 'burner', tx: 60, ty: 12 }, { perk: 'twin', tx: 45, ty: 40 },
     ];
     for (const s of M.perkSpots) s.prop = addProp('perk', s.tx, s.ty, 1, 1, true, { perk: s.perk });
 
@@ -190,6 +247,9 @@
       { tx: 17, ty: 29, w: 1, h: 2, zone: Z.ARCADE },
       { tx: 35, ty: 11, w: 2, h: 1, zone: Z.AQUA },
       { tx: 46, ty: 29, w: 1, h: 2, zone: Z.SPEED },
+      { tx: 91, ty: 19, w: 1, h: 2, zone: Z.FERRIS },
+      { tx: 66, ty: 50, w: 1, h: 2, zone: Z.HAUNT },
+      { tx: 51, ty: 52, w: 2, h: 1, zone: Z.PIER },
     ];
     for (const s of M.boxSpots) addProp('box', s.tx, s.ty, s.w, s.h, true);
 
@@ -204,8 +264,35 @@
       { weapon: 'riptide', tx: 36, ty: 2, fx: 0, fy: 1 },
       { weapon: 'kestrel', tx: 52, ty: 11, fx: 0, fy: 1 },
       { weapon: 'hornet', tx: 27, ty: 39, fx: 0, fy: 1 },
+      { weapon: 'anvil', tx: 77, ty: 5, fx: 0, fy: 1 },
+      { weapon: 'boomstick', tx: 92, ty: 50, fx: -1, fy: 0 },
+      { weapon: 'sixgun', tx: 40, ty: 51, fx: 0, fy: 1 },
     ];
-    M.powerSwitch = { tx: 32, ty: 39, fx: 0, fy: 1 };
+
+    // ---- one generator per zone; each needs a fuse found somewhere in the park ----
+    M.generators = [
+      { zone: Z.HUB, tx: 21, ty: 20, fx: 1, fy: 0 },
+      { zone: Z.ARCADE, tx: 2, ty: 24, fx: 1, fy: 0 },
+      { zone: Z.AQUA, tx: 44, ty: 8, fx: -1, fy: 0 },
+      { zone: Z.SPEED, tx: 61, ty: 31, fx: -1, fy: 0 },
+      { zone: Z.SUB, tx: 32, ty: 39, fx: 0, fy: 1 },
+      { zone: Z.VAULT, tx: 38, ty: 36, fx: -1, fy: 0 },
+      { zone: Z.FERRIS, tx: 88, ty: 5, fx: 0, fy: 1 },
+      { zone: Z.HAUNT, tx: 65, ty: 42, fx: 1, fy: 0 },
+      { zone: Z.PIER, tx: 20, ty: 51, fx: 0, fy: 1 },
+    ];
+    for (const g of M.generators) {
+      g.x = (g.tx + 0.5) * T;
+      g.y = (g.ty + 0.5) * T;
+    }
+    M.powerSwitch = M.generators[4]; // the substation breaker also opens the Overclock Stage
+
+    // hidden fuse spots (one fuse per generator is scattered among these every game)
+    M.fuseSpots = [
+      [22, 16], [41, 31], [3, 12], [16, 33], [8, 16], [20, 11], [43, 11], [15, 6], [48, 6],
+      [60, 33], [46, 33], [55, 41], [16, 47], [47, 47], [26, 38], [37, 38], [66, 6], [91, 35],
+      [73, 20], [66, 40], [91, 51], [71, 63], [84, 57], [14, 56], [21, 65], [49, 65], [32, 68],
+    ].map(([tx, ty]) => ({ tx, ty, x: (tx + 0.5) * T, y: (ty + 0.5) * T, zone: M.zone[idx(tx, ty)] }));
 
     // ---- traps: a floor rectangle (tiles) plus a wall switch ----
     M.traps = [
@@ -220,7 +307,8 @@
       door: [[11, 36], [11, 37]], dx: 11 * T, dy: 36 * T, dw: T, dh: 2 * T,
       outside: { x: 10.5 * T, y: 37 * T },
       console: { tx: 16, ty: 37, fx: -1, fy: 0 },
-      state: 'open', t: 0, cd: 0, warned: false, bangT: 0,
+      hatch: { tx: 12, ty: 38 },
+      state: 'open', t: 0, cd: 0, warned: false, bangT: 0, hatchT: 0,
     };
 
     // ---- teleporter pairs (pads are plain floor tiles) ----
@@ -228,6 +316,7 @@
       { color: '#19f0ff', a: { tx: 24, ty: 23 }, b: { tx: 37, ty: 46 } },
       { color: '#ffe14d', a: { tx: 11, ty: 14 }, b: { tx: 59, ty: 32 } },
       { color: '#ff4fd8', a: { tx: 23, ty: 10 }, b: { tx: 27, ty: 37 } },
+      { color: '#3d8bff', a: { tx: 88, ty: 32 }, b: { tx: 34, ty: 64 } },
     ];
     for (const pr of M.pads) {
       pr.cd = 0;
@@ -272,6 +361,15 @@
     light(13.9, 37.5, 170, '#3dff8b', Z.ARCADE, true); // panic room
     // dim emergency lighting that works without power
     light(32, 44, 190, '#ff3b4e', Z.SUB, true);
+    // expansion lights
+    light(70, 10, 260, '#ffd426', Z.FERRIS); light(88, 10, 260, '#ff4fd8', Z.FERRIS); light(79.5, 20.5, 340, '#ffd426', Z.FERRIS);
+    light(70, 31, 260, '#ff4fd8', Z.FERRIS); light(88, 31, 260, '#ffd426', Z.FERRIS); light(63, 23, 180, '#ff8a1f', Z.SPEED);
+    light(79.5, 30, 170, '#ff3b4e', Z.FERRIS, true);
+    light(72, 43, 200, '#c9b8ff', Z.HAUNT); light(86, 49, 200, '#7dff5a', Z.HAUNT); light(70, 55, 200, '#c9b8ff', Z.HAUNT);
+    light(84, 61, 200, '#ff3b4e', Z.HAUNT); light(87, 37.5, 150, '#ffd426', Z.FERRIS);
+    light(20, 54, 230, '#3d8bff', Z.PIER); light(34, 54, 230, '#ffb14d', Z.PIER); light(50, 54, 230, '#3d8bff', Z.PIER);
+    light(34, 63, 230, '#3d8bff', Z.PIER); light(20, 64, 210, '#ffb14d', Z.PIER); light(48, 64, 210, '#ffb14d', Z.PIER);
+    light(34, 59, 160, '#ff3b4e', Z.PIER, true);
     light(10.5, 23.5, 170, '#ff3b4e', Z.ARCADE, true);
     light(32, 7.5, 170, '#ff3b4e', Z.AQUA, true);
     light(53.5, 23, 170, '#ff3b4e', Z.SPEED, true);
@@ -469,10 +567,10 @@
     if (!inb(sx, sy) || M.solidForZombie(sx, sy)) return;
     heap.length = 0;
     flow[idx(sx, sy)] = 0;
-    hpush(idx(sx, sy)); // key = cost * 4096 + index (index < 4096)
+    hpush(idx(sx, sy)); // key = cost * 16384 + index (index < 16384)
     while (heap.length) {
       const key = hpop();
-      const cost = Math.floor(key / 4096), i = key % 4096;
+      const cost = Math.floor(key / 16384), i = key % 16384;
       if (cost > flow[i]) continue;
       const x = i % W, y = (i / W) | 0;
       for (const d of DIRS) {
@@ -483,7 +581,7 @@
         const ni = idx(nx, ny);
         if (nc < flow[ni]) {
           flow[ni] = nc;
-          hpush(nc * 4096 + ni);
+          hpush(nc * 16384 + ni);
         }
       }
     }

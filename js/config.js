@@ -40,14 +40,14 @@
     POWERUP_LIFE: 26,
     POWERUP_DURATION: 30,
     TRAP: { cost: 1000, duration: 25, cooldown: 60, tick: 0.25, playerDmg: 40, playerTick: 0.5, bruteFrac: 0.07 },
-    SAFEROOM: { cost: 1500, duration: 20, cooldown: 120, warn: 3 },
+    SAFEROOM: { cost: 1500, duration: 20, cooldown: 120, warn: 3, blastR: 380, daze: 3, blastFrac: 0.2, hatchWindow: 10 },
     ARMOR: { cost: 1250, max: 150, absorb: 0.7 },
     TELEPORT: { cost: 500, cooldown: 25 },
     TACTICAL_MAX: 3,
     PAL: { cost: 2000, duration: 45, dropDuration: 25, cooldown: 90, rpm: 600, range: 520, speed: 270, dmgBase: 30, dmgRound: 10 },
     SENTRY: { cost: 1500, duration: 40, rpm: 700, range: 470, dmgBase: 25, dmgRound: 9 },
     CRYO: { radius: 170, freeze: 1.5, slow: 6, slowMult: 0.4, damage: 50 },
-    LURE: { life: 7, pull: 420, pullFlow: 200, radius: 190, mult: 1.5 },
+    LURE: { life: 7, pull: 260, pullFlow: 110, radius: 190, mult: 1.5 },
     BUBBLE: { life: 10, radius: 120, max: 2 },
   };
 
@@ -127,7 +127,7 @@
     },
     anvil: {
       name: 'Anvil LMG', cls: 'lmg', auto: true, dmg: 80, rpm: 520, mag: 100, reserve: 300, reload: 4.2,
-      spread: 0.05, range: 1300, pierce: 2, kick: 2.5, len: 30, move: 0.88, box: 3,
+      spread: 0.05, range: 1300, pierce: 2, kick: 2.5, len: 30, move: 0.88, cost: 2500, box: 3,
       up: { name: 'Thunder Anvil', dmg: 170, rpm: 560, mag: 150, reserve: 450, pierce: 3, color: '#c44dff' },
     },
     longshot: {
@@ -137,12 +137,12 @@
     },
     boomstick: {
       name: 'Boomstick', cls: 'shotgun', auto: false, dmg: 75, rpm: 260, mag: 2, reserve: 60, reload: 1.9,
-      spread: 0.2, pellets: 10, range: 380, crit: 1.5, kick: 8, len: 20, box: 2,
+      spread: 0.2, pellets: 10, range: 380, crit: 1.5, kick: 8, len: 20, cost: 1750, box: 2,
       up: { name: 'Doomstick', dmg: 185, reserve: 80, reload: 1.5, color: '#ff4fd8' },
     },
     sixgun: {
       name: 'Sixgun .50', cls: 'pistol', auto: false, dmg: 330, rpm: 200, mag: 6, reserve: 72, reload: 2.2,
-      spread: 0.012, range: 1300, pierce: 3, crit: 2.5, kick: 5, len: 18, box: 3,
+      spread: 0.012, range: 1300, pierce: 3, crit: 2.5, kick: 5, len: 18, cost: 1500, box: 3,
       up: { name: 'Dead Ringer', dmg: 850, mag: 8, reserve: 96, pierce: 5, color: '#ffd426' },
     },
     quasar: {
@@ -178,9 +178,9 @@
 
   /** Tactical grenades (thrown with T). One type carried at a time. */
   GW.TACTICALS = {
-    cryo: { id: 'cryo', name: 'Cryo Grenade', cost: 750, color: '#8fe9ff', desc: 'Freezes, then slows the horde' },
-    lure: { id: 'lure', name: 'Neon Lure', cost: 1000, color: '#ff4fd8', desc: 'Draws zombies in, then detonates' },
-    bubble: { id: 'bubble', name: 'Safety Bubble', cost: 1500, color: '#3dff8b', desc: 'A dome zombies cannot enter' },
+    cryo: { id: 'cryo', name: 'Cryo Grenade', cost: 750, max: 3, color: '#8fe9ff', desc: 'Freezes, then slows the horde' },
+    lure: { id: 'lure', name: 'Neon Lure', cost: 2000, max: 1, color: '#ff4fd8', desc: 'Draws zombies in, then detonates' },
+    bubble: { id: 'bubble', name: 'Safety Bubble', cost: 1500, max: 2, color: '#3dff8b', desc: 'A dome zombies cannot enter' },
   };
 
   GW.TRAPS = {

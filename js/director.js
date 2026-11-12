@@ -61,7 +61,7 @@
     D.timer = 9;
     const P = GW.Player;
     P.grenades = Math.min(C.PLAYER.grenadesMax, P.grenades + 2);
-    if (P.tactical.type) P.tactical.count = Math.min(C.TACTICAL_MAX, P.tactical.count + 1);
+    if (P.tactical.type) P.tactical.count = Math.min(GW.TACTICALS[P.tactical.type].max, P.tactical.count + 1);
     P.stats.round = D.round;
     A.play('roundEnd');
     GW.HUD.roundOver();

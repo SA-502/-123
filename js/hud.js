@@ -13,7 +13,7 @@
     for (const id of ['hud', 'zone-name', 'objective', 'powerups', 'announce', 'announce-main', 'announce-sub', 'prompt', 'perks',
       'health', 'health-fill', 'health-num', 'stamina-fill', 'round', 'score-pops', 'points', 'weapon-name', 'weapon-icon',
       'clip', 'reserve', 'ammo-hint', 'grenades', 'slots', 'vignette', 'flash', 'minimap', 'armor', 'armor-fill', 'armor-num',
-      'tactical', 'sentry-tag']) {
+      'tactical', 'sentry-tag', 'power-status']) {
       el[id] = $(id);
     }
     roundCtx = el.round.getContext('2d');
@@ -215,7 +215,11 @@
     const g = miniCtx, P = GW.Player, I = GW.Interact;
     const s = 3 / T;
     const blink = Math.sin(performance.now() / 160) > 0;
+    g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, 192, 150);
+    // fit the whole park into the panel
+    const k = Math.min(192 / (M.W * 3), 150 / (M.H * 3));
+    g.setTransform(k, 0, 0, k, (192 - M.W * 3 * k) / 2, (150 - M.H * 3 * k) / 2);
     g.drawImage(GW.MapArt.mini, 0, 0);
     for (const d of M.doors) {
       if (d.open) continue;
@@ -223,29 +227,32 @@
       g.fillRect(d.rx * s - 0.5, d.ry * s - 0.5, d.rw * s + 1, d.rh * s + 1);
     }
     for (const sp of M.perkSpots) {
-      if (!I.powerOn || P.perks[sp.perk]) continue;
+      if (!I.powered(sp.zone) || P.perks[sp.perk]) continue;
       g.fillStyle = GW.PERKS[sp.perk].color;
       g.fillRect(sp.x * s - 2, sp.y * s - 2, 4, 4);
     }
-    if (!I.powerOn) {
-      if (M.zones[M.Z.SUB].open && blink) {
-        g.fillStyle = '#3dff8b';
-        g.fillRect(M.powerSwitch.x * s - 2.5, M.powerSwitch.y * s - 1, 5, 5);
-      }
-    } else {
+    // generators in opened zones: red until fed a fuse (blinking while you carry one)
+    for (const gen of M.generators) {
+      if (!M.zones[gen.zone].open) continue;
+      const on = I.powered(gen.zone);
+      if (!on && P.fuses > 0 && !blink) continue;
+      g.fillStyle = on ? '#3dff8b' : '#ff3b4e';
+      g.fillRect(gen.x * s - 2.5, gen.y * s - 2.5, 5, 5);
+    }
+    if (I.powered(M.Z.VAULT)) {
       g.fillStyle = '#ff4fd8';
       g.fillRect(M.pap.x * s - 3, M.pap.y * s - 2, 6, 4);
     }
     // traps, pads and the panic room
     for (const tr of M.traps) {
-      if (!I.powerOn) break;
+      if (!I.powered(tr.zone)) continue;
       g.fillStyle = tr.state === 'active' ? (blink ? GW.TRAPS[tr.kind].color : '#ffffff') : U.rgba(GW.TRAPS[tr.kind].color, tr.state === 'idle' ? 0.55 : 0.2);
       g.fillRect(tr.rx * s, tr.ry * s, tr.rw * s, tr.rh * s);
     }
-    if (I.powerOn) {
+    {
       for (const pr of M.pads) {
         for (const e of [pr.a, pr.b]) {
-          if (!M.zones[e.zone].open) continue;
+          if (!M.zones[e.zone].open || !I.powered(e.zone)) continue;
           g.strokeStyle = pr.color;
           g.globalAlpha = pr.cd > 0 ? 0.35 : 1;
           g.lineWidth = 1;
@@ -393,6 +400,7 @@
       el['zone-name'].style.textShadow = '0 0 6px ' + z.color + ', 0 0 18px ' + z.color;
     }
     set('obj', el.objective, I.objective());
+    set('pow', el['power-status'], 'POWER ' + I.poweredCount() + '/' + M.generators.length + (P.fuses > 0 ? '   ·   FUSES ' + P.fuses : ''));
 
     updatePowerupTimers();
 

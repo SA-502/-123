@@ -21,9 +21,12 @@
   I.reset = function () {
     I.list = [];
     I.powerups = [];
-    I.powerOn = false;
-    I.powerT = 0;
-    I.powerLevel = 0;
+    I.powerOn = false; // true once any generator runs
+    I.zonePower = M.zones.map(() => false);
+    I.zoneLevel = M.zones.map(() => 0);
+    I.zoneT = M.zones.map(() => 0);
+    I.musicPowered = false;
+    I.fuses = placeFuses();
     I.current = null;
     I.prompt = null;
     I.holdT = 0;
@@ -104,41 +107,46 @@
       });
     }
 
-    // --- power switch ---
-    {
-      const ps = M.powerSwitch;
-      const cx = (ps.tx + 0.5) * T, cy = (ps.ty + 0.5) * T;
-      ps.x = cx;
-      ps.y = cy;
+    // --- generators: one per zone, each takes any fuse ---
+    for (const g of M.generators) {
+      const zn = M.zones[g.zone];
       I.list.push({
-        kind: 'power', ref: ps,
-        dist(p) {
-          if ((p.x - cx) * ps.fx + (p.y - cy) * ps.fy < T / 2) return Infinity;
-          return U.rectDist(p.x, p.y, ps.tx * T, ps.ty * T, T, T);
+        kind: g === M.powerSwitch ? 'power' : 'generator', ref: g,
+        dist: wallDist(g),
+        prompt(p) {
+          if (I.zonePower[g.zone]) return null;
+          if (p.fuses > 0) return ok('Press ' + key('F') + ' to insert a fuse and power ' + zn.name + (g.zone === M.Z.SUB ? ' <span class="dim">opens the Overclock Stage</span>' : ''));
+          return info(zn.name + ' generator — needs a fuse');
         },
-        prompt: () => (I.powerOn ? null : ok('Press ' + key('F') + ' to restore the power')),
-        use() {
-          I.turnOnPower();
+        use(p) {
+          if (I.zonePower[g.zone] || p.fuses <= 0) return;
+          p.fuses--;
+          A.play('fuseInsert', { x: g.x, y: g.y });
+          I.powerZone(g.zone);
         },
       });
     }
+
+    // --- fuses hidden around the park ---
+    for (const f of I.fuses) addFuseItem(f);
 
     // --- perk machines ---
     for (const s of M.perkSpots) {
       const perk = GW.PERKS[s.perk];
       s.x = (s.tx + 0.5) * T;
       s.y = (s.ty + 0.5) * T;
+      s.zone = M.zone[M.idx(s.tx, s.ty)];
       I.list.push({
         kind: 'perk', ref: s,
         dist: (p) => U.rectDist(p.x, p.y, s.tx * T, s.ty * T, T, T),
         prompt(p) {
-          if (!I.powerOn) return info(perk.name + ' — power required');
+          if (!I.powered(s.zone)) return info(perk.name + ' — no power in ' + M.zones[s.zone].name);
           if (p.perks[s.perk]) return info(perk.name + ' — already active');
           if (s.perk === 'wind' && p.windBought >= 3) return info(perk.name + ' — sold out');
           return ok('Press ' + key('F') + ' for ' + perk.name + ' <span class="dim">' + perk.desc + '</span> ' + cost(perk.cost));
         },
         use(p) {
-          if (!I.powerOn || p.perks[s.perk]) return;
+          if (!I.powered(s.zone) || p.perks[s.perk]) return;
           if (!GW.Game.spend(perk.cost)) return;
           p.addPerk(s.perk);
           A.play('perk', { id: s.perk });
@@ -195,7 +203,7 @@
         dist: (p) => U.rectDist(p.x, p.y, pm.tx * T, pm.ty * T, pm.w * T, pm.h * T),
         prompt(p) {
           const k = I.pap;
-          if (!I.powerOn) return info('Overclocker — power required');
+          if (!I.powered(M.Z.VAULT)) return info('Overclocker — no power on the stage');
           if (k.state === 'ready') return ok('Press ' + key('F') + ' to take ' + k.weapon.s.name);
           if (k.state !== 'idle') return null;
           const w = p.weapon();
@@ -205,7 +213,7 @@
         },
         use(p) {
           const k = I.pap;
-          if (!I.powerOn) return;
+          if (!I.powered(M.Z.VAULT)) return;
           if (k.state === 'ready') {
             p.giveInstance(k.weapon);
             k.weapon = null;
@@ -253,16 +261,70 @@
   /* ------------------------------------------------------------------ */
   /* power                                                              */
   /* ------------------------------------------------------------------ */
-  I.turnOnPower = function () {
-    if (I.powerOn) return;
+  I.powered = (z) => z >= 0 && !!I.zonePower[z];
+  I.poweredCount = () => I.zonePower.filter(Boolean).length;
+
+  /** Bring one zone's generator online. */
+  I.powerZone = function (z, quiet) {
+    if (I.zonePower[z]) return;
+    I.zonePower[z] = true;
+    I.zoneT[z] = 0;
     I.powerOn = true;
-    I.powerT = 0;
-    M.openDoor(M.gate);
+    if (z === M.Z.SUB) M.openDoor(M.gate);
+    if (quiet) return;
+    const g = M.generators.find((x) => x.zone === z);
+    A.play('generator', g ? { x: g.x, y: g.y } : {});
     A.play('power');
-    A.setPower(true);
-    FX.flash = 0.35;
-    FX.shake(9);
-    GW.Game.announce('POWER RESTORED', 'Perk machines online · Overclock Stage unlocked', '#c8ff3a');
+    FX.flash = Math.max(FX.flash, 0.25);
+    FX.shake(7);
+    const n = I.poweredCount(), total = M.generators.length;
+    GW.Game.announce(M.zones[z].short + ' POWERED', n + ' / ' + total + ' generators online' + (z === M.Z.SUB ? ' · Overclock Stage unlocked' : ''), M.zones[z].color);
+  };
+
+  /** Debug / test helper: everything on. */
+  I.turnOnPower = function () {
+    for (let z = 0; z < M.zones.length; z++) I.powerZone(z, true);
+    A.play('power');
+  };
+
+  /** Scatter one generic fuse per generator among the hidden spots. */
+  function placeFuses() {
+    const spots = U.shuffle(M.fuseSpots.slice());
+    const out = [];
+    let vault = 0;
+    for (const s of spots) {
+      if (out.length >= M.generators.length) break;
+      // at most two behind the stage gate, so the substation can always be powered first
+      if (s.zone === M.Z.VAULT && ++vault > 2) continue;
+      out.push({ x: s.x, y: s.y, tx: s.tx, ty: s.ty, taken: false, t: Math.random() * 10 });
+    }
+    return out;
+  }
+
+  function addFuseItem(f) {
+    I.list.push({
+      kind: 'fuse', ref: { tx: f.tx, ty: f.ty, w: 1, h: 1 }, fuse: f,
+      dist: (p) => (f.taken ? Infinity : Math.max(0, U.dist(p.x, p.y, f.x, f.y) - 22)),
+      prompt: () => (f.taken ? null : ok('Press ' + key('F') + ' to pick up a fuse')),
+      use(p) {
+        if (f.taken) return;
+        f.taken = true;
+        p.fuses++;
+        A.play('fusePickup', { x: f.x, y: f.y });
+        FX.burst(f.x, f.y, 14, '#ffe14d', 220);
+        FX.ring(f.x, f.y, 40, '#ffe14d', 0.35, 3);
+        GW.Game.announce('FUSE FOUND', 'Insert it into any zone generator', '#ffe14d');
+      },
+    });
+  }
+
+  /** A fuse dropped by an enemy (e.g. the first Bloater). */
+  I.dropFuse = function (x, y) {
+    const f = { x, y, tx: Math.floor(x / T), ty: Math.floor(y / T), taken: false, t: 0, dropped: true };
+    I.fuses.push(f);
+    addFuseItem(f);
+    FX.ring(x, y, 60, '#ffe14d', 0.5, 4);
+    A.play('powerupDrop', { x, y });
   };
 
   /* ------------------------------------------------------------------ */
@@ -280,7 +342,7 @@
     if (type === 'ammo') {
       for (const w of P.weapons) w.reserve = w.s.reserve;
       P.grenades = C.PLAYER.grenadesMax;
-      if (P.tactical.type) P.tactical.count = C.TACTICAL_MAX;
+      if (P.tactical.type) P.tactical.count = GW.TACTICALS[P.tactical.type].max;
     } else if (type === 'pal') {
       GW.Allies.summonPal(C.PAL.dropDuration);
     } else if (type === 'instakill') {
@@ -395,13 +457,25 @@
   I.update = function (dt) {
     const P = GW.Player;
 
-    // power-on flicker, then steady
-    let target = 0;
-    if (I.powerOn) {
-      I.powerT += dt;
-      target = I.powerT < 1.6 ? (Math.random() < I.powerT / 1.6 ? 1 : 0.1) : 1;
+    // each zone flickers on after its generator starts, then holds steady
+    for (let z = 0; z < I.zonePower.length; z++) {
+      let target = 0;
+      if (I.zonePower[z]) {
+        I.zoneT[z] += dt;
+        target = I.zoneT[z] < 1.6 ? (Math.random() < I.zoneT[z] / 1.6 ? 1 : 0.1) : 1;
+      }
+      I.zoneLevel[z] += (target - I.zoneLevel[z]) * Math.min(1, dt * 22);
     }
-    I.powerLevel += (target - I.powerLevel) * Math.min(1, dt * 22);
+    for (const f of I.fuses) f.t += dt;
+    // the full soundtrack plays only where the lights are on
+    const pz = M.zoneAt(P.x, P.y);
+    if (pz >= 0) {
+      const on = I.powered(pz);
+      if (on !== I.musicPowered) {
+        I.musicPowered = on;
+        A.setPower(on);
+      }
+    }
 
     for (const d of M.doors) if (d.open && d.openT < 1) d.openT = Math.min(1, d.openT + dt * 1.7);
 
@@ -456,12 +530,14 @@
 
   /** One-line current objective for the HUD. */
   I.objective = function () {
-    const z = M.zones;
-    if (!I.powerOn) {
-      if (!z[1].open && !z[2].open && !z[3].open) return 'Earn points and buy a way out of the plaza';
-      if (!z[4].open) return 'Find a route down to the Substation';
-      return 'Throw the power switch in the Substation';
-    }
+    const z = M.zones, P = GW.Player;
+    const n = I.poweredCount(), total = M.generators.length;
+    if (P.fuses > 0) return 'Insert your fuse into a zone generator (' + n + '/' + total + ' online)';
+    if (n === 0 && !z[1].open && !z[2].open && !z[3].open) return 'Earn points, open the park and search for fuses';
+    if (n === 0) return 'Search the park for a fuse and power a generator';
+    if (!I.powered(M.Z.SUB)) return 'Power the Substation to unlock the Overclock Stage (' + n + '/' + total + ')';
+    if (!I.everUpgraded && I.powered(M.Z.VAULT)) return 'Overclock a weapon on the Overclock Stage [5000]';
+    if (n < total) return 'Restore the park: ' + n + '/' + total + ' generators online';
     if (!I.everUpgraded) return 'Overclock a weapon on the Overclock Stage [5000]';
     return 'Survive';
   };

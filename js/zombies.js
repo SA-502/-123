@@ -120,9 +120,10 @@
       else A.play('groan', { x: z.x, y: z.y, pitch: z.type === 'brute' ? 0.62 : z.speedClass === 'sprint' ? 1.35 : 1 });
     }
 
-    // frozen solid by a Cryo grenade: no walking, tearing or swinging
-    if (z.freezeT > 0) {
-      z.freezeT -= dt;
+    // frozen solid by a Cryo grenade, or dazed by a shockwave: no walking, tearing or swinging
+    if (z.freezeT > 0 || z.dazeT > 0) {
+      if (z.freezeT > 0) z.freezeT -= dt;
+      if (z.dazeT > 0) z.dazeT -= dt;
       if (z.state === 'chase') knockback(z, dt);
       return;
     }

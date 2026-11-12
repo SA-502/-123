@@ -25,7 +25,7 @@
   /** Give a tactical type with a full stack (vendor purchase). */
   G.give = function (p, type) {
     p.tactical.type = type;
-    p.tactical.count = C.TACTICAL_MAX;
+    p.tactical.count = GW.TACTICALS[type].max;
   };
 
   /** A tactical grenade finished its flight. */

@@ -26,6 +26,7 @@
     P.tactical = { type: null, count: 0 };
     P.armor = 0;
     P.sentryCarried = false;
+    P.fuses = 0;
     P.stamina = P.staminaMax = PC.stamina;
     P.staminaDelay = 0;
     P.exhausted = false;

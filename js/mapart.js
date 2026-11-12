@@ -5,7 +5,7 @@
   const WH = 16; // fake wall height in pixels (tops are drawn shifted up by this much)
   const NS = 0.5; // neon layer resolution scale
   const MA = (GW.MapArt = { WALL_H: WH, NEON_SCALE: NS, floor: null, top: null, neon: null, mini: null });
-  let fg, tg, ng;
+  let fg, tg;
 
   const SIGNS = [
     { text: 'PIXEL PALACE', tx: 20, ty: 21, zone: Z.ARCADE, size: 15 },
@@ -15,6 +15,10 @@
     { text: 'SUBSTATION', tx: 12.5, ty: 41, zone: Z.SUB, size: 13 },
     { text: 'SUBSTATION', tx: 51.5, ty: 41, zone: Z.SUB, size: 13 },
     { text: 'SAFE ROOM', tx: 14, ty: 35, zone: Z.ARCADE, size: 11, color: '#3dff8b' },
+    { text: 'STARWHEEL', tx: 63, ty: 20, zone: Z.FERRIS, size: 13 },
+    { text: 'NIGHTMARE MANOR', tx: 77, ty: 39, zone: Z.HAUNT, size: 15 },
+    { text: 'PIER NINE', tx: 25, ty: 49, zone: Z.PIER, size: 15 },
+    { text: 'DOCKS', tx: 39, ty: 49, zone: Z.PIER, size: 11 },
   ];
 
   function makeCanvas(w, h) {
@@ -28,12 +32,10 @@
     if (!MA.floor) {
       MA.floor = makeCanvas(M.pxW, M.pxH);
       MA.top = makeCanvas(M.pxW, M.pxH);
-      MA.neon = makeCanvas(M.pxW * NS, M.pxH * NS);
       MA.mini = makeCanvas(M.W * 3, M.H * 3);
     }
     fg = MA.floor.getContext('2d');
     tg = MA.top.getContext('2d');
-    ng = MA.neon.getContext('2d');
     paintFloor();
     paintTop();
     paintNeon();
@@ -134,9 +136,100 @@
           g.lineWidth = 1;
           g.strokeRect(px + i * 24 + 0.5, py + j * 24 + 0.5, 23, 23);
         }
+    } else if (z === Z.FERRIS) {
+      // candy-striped promenade tiles
+      for (let j = 0; j < 2; j++)
+        for (let i = 0; i < 2; i++) {
+          const h = U.hash(x * 2 + i, y * 2 + j, 13);
+          g.fillStyle = (x * 2 + i + y * 2 + j) % 2 ? 'hsl(350,32%,' + (15 + h * 3) + '%)' : 'hsl(38,28%,' + (17 + h * 3) + '%)';
+          g.fillRect(px + i * 24, py + j * 24, 24, 24);
+        }
+      g.fillStyle = 'rgba(0,0,0,0.25)';
+      g.fillRect(px, py, T, 1);
+      g.fillRect(px, py, 1, T);
+    } else if (z === Z.HAUNT) {
+      // rotten floorboards
+      for (let i = 0; i < 4; i++) {
+        const h = U.hash(x * 4 + i, y, 17);
+        g.fillStyle = 'hsl(' + (275 + h * 20) + ',14%,' + (8 + h * 4) + '%)';
+        g.fillRect(px + i * 12, py, 12, T);
+        g.fillStyle = 'rgba(0,0,0,0.5)';
+        g.fillRect(px + i * 12, py, 1, T);
+        if (U.hash(x * 4 + i, y, 18) < 0.3) g.fillRect(px + i * 12 + 2, py + Math.floor(U.hash(x, y, i) * (T - 8)), 8, 2);
+      }
+      if (U.hash(x, y, 19) < 0.025) {
+        g.fillStyle = '#020104';
+        g.beginPath();
+        g.ellipse(px + 24, py + 24, 12, 8, U.hash(x, y, 20) * 3, 0, U.TAU); // hole in the floor
+        g.fill();
+      }
+    } else if (z === Z.PIER) {
+      // sun-bleached deck planks
+      for (let i = 0; i < 4; i++) {
+        const h = U.hash(x, y * 4 + i, 21);
+        g.fillStyle = 'hsl(' + (28 + h * 8) + ',22%,' + (19 + h * 6) + '%)';
+        g.fillRect(px, py + i * 12, T, 12);
+        g.fillStyle = 'rgba(0,0,0,0.45)';
+        g.fillRect(px, py + i * 12 + 11, T, 1);
+        g.fillStyle = 'rgba(0,0,0,0.35)';
+        if ((x + i) % 3 === 0) g.fillRect(px + 2, py + i * 12 + 5, 2, 2);
+        if (U.hash(x, y * 4 + i, 22) < 0.35) g.fillRect(px + Math.floor(h * (T - 1)), py + i * 12, 1, 11);
+      }
     } else {
       g.fillStyle = '#04030b';
       g.fillRect(px, py, T, T);
+    }
+  }
+
+  function waterTile(g, x, y) {
+    const px = x * T, py = y * T;
+    const h = U.hash(x, y, 31);
+    g.fillStyle = 'hsl(' + (212 + h * 10) + ',70%,' + (7 + h * 2.5) + '%)';
+    g.fillRect(px, py, T, T);
+    g.strokeStyle = 'rgba(120,180,255,0.12)';
+    g.lineWidth = 1.5;
+    for (let i = 0; i < 2; i++) {
+      const wy = py + 12 + i * 22 + U.hash(x, y, 32 + i) * 6;
+      g.beginPath();
+      g.moveTo(px, wy);
+      g.quadraticCurveTo(px + T * 0.5, wy - 5, px + T, wy);
+      g.stroke();
+    }
+  }
+
+  /** Planks over water get a dark edge and mooring posts. */
+  function pierEdges(g) {
+    const isWater = (x, y) => M.tile(x, y) === TT.WATER;
+    for (let y = 0; y < M.H; y++)
+      for (let x = 0; x < M.W; x++) {
+        if (M.tile(x, y) === TT.WATER || M.tile(x, y) === TT.WALL) continue;
+        const px = x * T, py = y * T;
+        g.fillStyle = 'rgba(10,6,4,0.75)';
+        if (isWater(x, y + 1)) g.fillRect(px, py + T - 4, T, 4);
+        if (isWater(x, y - 1)) g.fillRect(px, py, T, 3);
+        if (isWater(x - 1, y)) g.fillRect(px, py, 3, T);
+        if (isWater(x + 1, y)) g.fillRect(px + T - 3, py, 3, T);
+        g.fillStyle = '#3a2a1c';
+        if (isWater(x, y + 1) && (x + y) % 2 === 0) g.fillRect(px + T / 2 - 4, py + T - 6, 8, 8);
+        if (isWater(x - 1, y) && y % 2 === 0) g.fillRect(px - 2, py + T / 2 - 4, 8, 8);
+        if (isWater(x + 1, y) && y % 2 === 0) g.fillRect(px + T - 6, py + T / 2 - 4, 8, 8);
+      }
+    // moored boats
+    for (const [bx, by, rot, col] of [[27, 61, 0.15, '#c22a3a'], [41, 62, -0.1, '#e8e4d8'], [56, 60, 0.3, '#2c7fb8'], [12, 63, -0.2, '#e8e4d8']]) {
+      g.save();
+      g.translate(bx * T, by * T);
+      g.rotate(rot + Math.PI / 2);
+      g.fillStyle = 'rgba(0,0,0,0.35)';
+      g.beginPath(); g.ellipse(4, 6, 62, 22, 0, 0, U.TAU); g.fill();
+      g.fillStyle = col;
+      g.beginPath();
+      g.moveTo(-60, -18); g.lineTo(40, -18); g.quadraticCurveTo(66, 0, 40, 18); g.lineTo(-60, 18); g.closePath();
+      g.fill();
+      g.fillStyle = '#5a4030';
+      g.fillRect(-52, -13, 86, 26);
+      g.fillStyle = '#3b2a1e';
+      for (let i = 0; i < 3; i++) g.fillRect(-40 + i * 26, -13, 5, 26);
+      g.restore();
     }
   }
 
@@ -238,9 +331,11 @@
   }
 
   /** Trap floor plates and teleporter rings. `glow` = the powered neon version. */
-  function facilityPaint(g, glow) {
+  function facilityPaint(g, glow, zone) {
     g.save();
+    const want = (z) => zone === undefined || z === zone;
     for (const tr of M.traps) {
+      if (!want(M.zone[M.idx(tr.x, tr.y)])) continue;
       const col = GW.TRAPS[tr.kind].color;
       if (!glow) {
         g.fillStyle = 'rgba(0,0,0,0.38)';
@@ -280,6 +375,7 @@
     }
     for (const pr of M.pads) {
       for (const e of [pr.a, pr.b]) {
+        if (!want(e.zone)) continue;
         g.globalAlpha = glow ? 0.9 : 0.4;
         g.strokeStyle = glow ? pr.color : '#6a6290';
         g.lineWidth = glow ? 3 : 2;
@@ -300,8 +396,21 @@
         }
       }
     }
-    // panic room floor: green safety stripe inside the shutter line
+    // panic room floor: green safety stripe inside the shutter line, and the hatch
     const S = M.safeRoom;
+    if (!want(Z.ARCADE)) {
+      g.restore();
+      return;
+    }
+    if (!glow) {
+      const hx = S.hatch.tx * T, hy = S.hatch.ty * T;
+      g.fillStyle = '#20262a';
+      g.fillRect(hx + 8, hy + 8, T - 16, T - 16);
+      g.strokeStyle = '#4a5560';
+      g.lineWidth = 2;
+      g.strokeRect(hx + 9, hy + 9, T - 18, T - 18);
+      for (let i = 0; i < 4; i++) g.fillRect(hx + 13, hy + 14 + i * 6, T - 26, 2);
+    }
     g.globalAlpha = glow ? 0.6 : 0.35;
     g.strokeStyle = '#3dff8b';
     g.lineWidth = 3;
@@ -314,6 +423,40 @@
   function drawLowProp(g, p) {
     const x = p.tx * T, y = p.ty * T, w = p.w * T, h = p.h * T;
     g.save();
+    if (p.kind === 'coffin') {
+      g.fillStyle = 'rgba(0,0,0,0.45)';
+      g.fillRect(x + 6, y + 7, w - 6, h - 6);
+      const vert = h > w;
+      g.translate(x + w / 2, y + h / 2);
+      if (!vert) g.rotate(Math.PI / 2);
+      const L = Math.max(w, h) / 2 - 4;
+      g.fillStyle = '#2a1712';
+      g.beginPath();
+      g.moveTo(-10, -L); g.lineTo(10, -L); g.lineTo(16, -L * 0.45); g.lineTo(10, L); g.lineTo(-10, L); g.lineTo(-16, -L * 0.45);
+      g.closePath();
+      g.fill();
+      g.strokeStyle = '#5a3a2a';
+      g.lineWidth = 2;
+      g.stroke();
+      g.fillStyle = '#7a6a8a';
+      g.fillRect(-1.5, -L * 0.5, 3, L * 0.8);
+      g.fillRect(-7, -L * 0.25, 14, 3);
+      g.restore();
+      return;
+    }
+    if (p.kind === 'barrel') {
+      const cx = x + w / 2, cy = y + h / 2;
+      g.fillStyle = 'rgba(0,0,0,0.45)';
+      g.beginPath(); g.arc(cx + 4, cy + 5, 17, 0, U.TAU); g.fill();
+      g.fillStyle = '#5a3a22';
+      g.beginPath(); g.arc(cx, cy, 17, 0, U.TAU); g.fill();
+      g.strokeStyle = '#2a2a2e';
+      g.lineWidth = 3;
+      g.beginPath(); g.arc(cx, cy, 13, 0, U.TAU); g.stroke();
+      g.beginPath(); g.arc(cx, cy, 6, 0, U.TAU); g.stroke();
+      g.restore();
+      return;
+    }
     g.fillStyle = 'rgba(0,0,0,0.42)';
     g.fillRect(x + 5, y + 7, w - 4, h - 4);
     if (p.kind === 'fountain') {
@@ -417,8 +560,10 @@
         const t = M.tile(x, y);
         if (t === TT.WALL) continue;
         if (t === TT.WINDOW) continue; // painted below
-        floorTile(g, x, y, M.zone[M.idx(x, y)]);
+        if (t === TT.WATER) waterTile(g, x, y);
+        else floorTile(g, x, y, M.zone[M.idx(x, y)]);
       }
+    pierEdges(g);
 
     hubGuides(g, false);
     speedwayPaint(g, false);
@@ -451,9 +596,22 @@
       g.restore();
     }
 
-    // windows: dark opening with a sill on the inside edge
+    // windows: dark opening with a sill on the inside edge (ladders where they rise out of the water)
     for (const w of M.windows) {
       const px = w.tx * T, py = w.ty * T;
+      if (M.tile(w.tx - w.dx, w.ty - w.dy) === TT.WATER) {
+        waterTile(g, w.tx, w.ty);
+        g.save();
+        g.translate(px + T / 2, py + T / 2);
+        if (w.dx !== 0) g.rotate(Math.PI / 2);
+        g.fillStyle = '#6b6f78';
+        g.fillRect(-14, -T / 2, 4, T);
+        g.fillRect(10, -T / 2, 4, T);
+        g.fillStyle = '#8a8f98';
+        for (let i = 0; i < 4; i++) g.fillRect(-12, -T / 2 + 6 + i * 11, 24, 3);
+        g.restore();
+        continue;
+      }
       g.fillStyle = '#020106';
       g.fillRect(px, py, T, T);
       const fog = g.createRadialGradient(px + T / 2, py + T / 2, 2, px + T / 2, py + T / 2, T * 0.7);
@@ -695,6 +853,71 @@
         g.fillRect(x + 6, y + h + 5, w - 12, 4);
       }
       g.globalAlpha = 1;
+    } else if (p.kind === 'wheelbase') {
+      box('#2a2238', '#141020');
+      const cx = x + w / 2, cy = y + h / 2;
+      if (!neon) {
+        g.fillStyle = '#3a3050';
+        g.beginPath(); g.arc(cx, cy, 34, 0, U.TAU); g.fill();
+        g.fillStyle = '#17121f';
+        g.beginPath(); g.arc(cx, cy, 20, 0, U.TAU); g.fill();
+      }
+      g.strokeStyle = '#ffd426';
+      g.lineWidth = 3;
+      g.globalAlpha = neon ? 0.95 : 0.3;
+      g.beginPath(); g.arc(cx, cy, 27, 0, U.TAU); g.stroke();
+      g.fillStyle = '#ffd426';
+      g.beginPath(); g.arc(cx, cy, 7, 0, U.TAU); g.fill();
+      g.globalAlpha = 1;
+    } else if (p.kind === 'mirror') {
+      box('#1a1626', '#0c0a14');
+      if (!neon) {
+        const mg = g.createLinearGradient(x, y, x + w, y + h);
+        mg.addColorStop(0, '#5a5f78'); mg.addColorStop(0.5, '#c8cde0'); mg.addColorStop(1, '#3a3f58');
+        g.fillStyle = mg;
+        g.fillRect(x + 7, y + 7, w - 14, h - 14);
+        g.strokeStyle = '#8a6a3a';
+        g.lineWidth = 3;
+        g.strokeRect(x + 5, y + 5, w - 10, h - 10);
+      } else {
+        g.globalAlpha = 0.35;
+        g.fillStyle = '#c9b8ff';
+        g.fillRect(x + 7, y + 7, w - 14, h - 14);
+        g.globalAlpha = 1;
+      }
+    } else if (p.kind === 'pillar') {
+      box('#2c2735', '#16131c');
+      if (!neon) {
+        g.fillStyle = '#3a3445';
+        g.beginPath(); g.arc(x + w / 2, y + h / 2, 17, 0, U.TAU); g.fill();
+      }
+    } else if (p.kind === 'scare') {
+      box('#1c1220', '#0c0810');
+      const cx = x + w / 2, cy = y + h / 2;
+      if (!neon) {
+        g.fillStyle = '#e8e0e8';
+        g.beginPath(); g.arc(cx, cy, 17, 0, U.TAU); g.fill();
+        g.fillStyle = '#c22a3a';
+        g.beginPath(); g.arc(cx, cy + 3, 5, 0, U.TAU); g.fill();
+        g.fillStyle = '#12091f';
+        g.fillRect(cx - 10, cy + 8, 20, 3);
+      }
+      g.fillStyle = '#ff3b4e';
+      g.globalAlpha = neon ? 1 : 0.5;
+      g.beginPath(); g.arc(cx - 6, cy - 5, 3, 0, U.TAU); g.arc(cx + 6, cy - 5, 3, 0, U.TAU); g.fill();
+      g.globalAlpha = 1;
+    } else if (p.kind === 'lamp') {
+      const cx = x + w / 2, cy = y + h / 2;
+      if (!neon) {
+        g.fillStyle = '#1a1a22';
+        g.beginPath(); g.arc(cx, cy + WH, 10, 0, U.TAU); g.fill();
+        g.fillStyle = '#2e2e38';
+        g.fillRect(cx - 3, cy, 6, WH);
+      }
+      g.fillStyle = '#ffb14d';
+      g.globalAlpha = neon ? 1 : 0.45;
+      g.beginPath(); g.arc(cx, cy, 8, 0, U.TAU); g.fill();
+      g.globalAlpha = 1;
     } else if (p.kind === 'box' || p.kind === 'pap') {
       // base plate only; the machine itself is drawn dynamically
       if (!neon) {
@@ -708,12 +931,12 @@
   /* ================================================================== */
   /* wall tops + neon trims                                             */
   /* ================================================================== */
+  /** Neon trim segments along every wall edge, grouped by the zone they face. */
   function collectTrims() {
-    const byColor = {};
+    const byZone = {};
     const add = (zn, x1, y1, x2, y2) => {
       if (zn < 0) return;
-      const c = zoneColor(zn);
-      (byColor[c] = byColor[c] || []).push(x1, y1, x2, y2);
+      (byZone[zn] = byZone[zn] || []).push(x1, y1, x2, y2);
     };
     for (let y = 0; y < M.H; y++)
       for (let x = 0; x < M.W; x++) {
@@ -724,7 +947,7 @@
         if (M.inb(x - 1, y) && !isWall(x - 1, y)) add(M.zone[M.idx(x - 1, y)], px, py, px, py + T);
         if (M.inb(x + 1, y) && !isWall(x + 1, y)) add(M.zone[M.idx(x + 1, y)], px + T, py, px + T, py + T);
       }
-    return byColor;
+    return byZone;
   }
 
   function strokeSegs(g, segs) {
@@ -736,11 +959,12 @@
     g.stroke();
   }
 
-  function drawSigns(g, neon) {
+  function drawSigns(g, neon, zone) {
     g.save();
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     for (const s of SIGNS) {
+      if (zone !== undefined && s.zone !== zone) continue;
       const col = s.color || zoneColor(s.zone);
       const x = s.tx * T, y = (s.ty + 0.5) * T - WH;
       g.font = '900 ' + s.size + 'px ' + GW.FONT;
@@ -781,48 +1005,99 @@
     // dim (unpowered) trims
     const trims = collectTrims();
     g.lineCap = 'square';
-    for (const c in trims) {
-      g.strokeStyle = U.rgba(c, 0.42);
+    for (const z in trims) {
+      g.strokeStyle = U.rgba(zoneColor(+z), 0.42);
       g.lineWidth = 2;
-      strokeSegs(g, trims[c]);
+      strokeSegs(g, trims[z]);
     }
     for (const p of M.props) if (p.tall) tallProp(g, p, false);
     drawSigns(g, false);
+    ferrisWheel(g, false);
+  }
+
+  /** The Starwheel's giant frame hangs over the plaza (static part; lights spin in the renderer). */
+  MA.WHEEL = { x: 79.5 * T, y: 20.5 * T, r: 5.6 * T };
+  function ferrisWheel(g, neon) {
+    const W = MA.WHEEL;
+    g.save();
+    g.globalAlpha = neon ? 0.5 : 0.42;
+    g.strokeStyle = neon ? '#ffd426' : '#5a5070';
+    g.lineWidth = neon ? 2 : 5;
+    g.beginPath(); g.arc(W.x, W.y, W.r, 0, U.TAU); g.stroke();
+    g.beginPath(); g.arc(W.x, W.y, W.r * 0.93, 0, U.TAU); g.stroke();
+    g.lineWidth = neon ? 1 : 3;
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * U.TAU;
+      g.beginPath();
+      g.moveTo(W.x + Math.cos(a) * 30, W.y + Math.sin(a) * 30);
+      g.lineTo(W.x + Math.cos(a) * W.r, W.y + Math.sin(a) * W.r);
+      g.stroke();
+    }
+    g.restore();
+  }
+
+  /**
+   * The neon layer is split per zone (each canvas covers that zone's bounding box at half resolution),
+   * so every zone lights up independently when its generator starts.
+   */
+  function zoneBoxes() {
+    const box = M.zones.map(() => ({ x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity }));
+    for (let y = 0; y < M.H; y++)
+      for (let x = 0; x < M.W; x++) {
+        const z = M.zone[M.idx(x, y)];
+        if (z < 0) continue;
+        const b = box[z];
+        b.x0 = Math.min(b.x0, x); b.y0 = Math.min(b.y0, y); b.x1 = Math.max(b.x1, x); b.y1 = Math.max(b.y1, y);
+      }
+    return box.map((b, z) => {
+      const pad = 7; // reach light pools and wall trims just outside the floor
+      const x = Math.max(0, (b.x0 - pad) * T), y = Math.max(0, (b.y0 - pad) * T);
+      const w = Math.min(M.pxW, (b.x1 + 1 + pad) * T) - x, h = Math.min(M.pxH, (b.y1 + 1 + pad) * T) - y;
+      return { z, x, y, w, h };
+    });
   }
 
   function paintNeon() {
-    const g = ng;
-    g.setTransform(1, 0, 0, 1, 0, 0);
-    g.clearRect(0, 0, MA.neon.width, MA.neon.height);
-    g.setTransform(NS, 0, 0, NS, 0, 0);
-    // bake the coloured pools of every powered light so they cost nothing per frame
-    g.globalCompositeOperation = 'lighter';
-    for (const L of M.lights) if (!L.always) Art.drawGlow(g, L.color, L.x, L.y, L.r * 1.15, 0.17);
-    g.globalCompositeOperation = 'source-over';
-    hubGuides(g, true);
-    speedwayPaint(g, true);
-    aquaPaint(g, true);
-    hazardPaint(g, true);
-    facilityPaint(g, true);
-    const trims = collectTrims();
-    g.lineCap = 'round';
-    for (const c in trims) {
-      g.shadowColor = c;
-      g.shadowBlur = 9;
-      g.strokeStyle = c;
-      g.lineWidth = 3.5;
-      strokeSegs(g, trims[c]);
-      strokeSegs(g, trims[c]); // second pass thickens the bloom
-      g.shadowBlur = 0;
-      g.strokeStyle = 'rgba(255,255,255,0.7)';
-      g.lineWidth = 1.2;
-      strokeSegs(g, trims[c]);
+    if (!MA.neonZones) {
+      MA.neonZones = zoneBoxes().map((b) => Object.assign(b, { canvas: makeCanvas(Math.ceil(b.w * NS), Math.ceil(b.h * NS)) }));
     }
+    const trims = collectTrims();
+    for (const nz of MA.neonZones) {
+      const g = nz.canvas.getContext('2d');
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.clearRect(0, 0, nz.canvas.width, nz.canvas.height);
+      g.setTransform(NS, 0, 0, NS, -nz.x * NS, -nz.y * NS);
+      paintZoneNeon(g, nz.z, trims[nz.z] || []);
+    }
+  }
+
+  function paintZoneNeon(g, z, segs) {
+    // bake the coloured pools of this zone's powered lights so they cost nothing per frame
+    g.globalCompositeOperation = 'lighter';
+    for (const L of M.lights) if (!L.always && L.zone === z) Art.drawGlow(g, L.color, L.x, L.y, L.r * 1.15, 0.17);
+    g.globalCompositeOperation = 'source-over';
+    if (z === Z.HUB) hubGuides(g, true);
+    if (z === Z.SPEED) speedwayPaint(g, true);
+    if (z === Z.AQUA) aquaPaint(g, true);
+    if (z === Z.SUB) hazardPaint(g, true);
+    if (z === Z.FERRIS) ferrisWheel(g, true);
+    facilityPaint(g, true, z);
+    const c = zoneColor(z);
+    g.lineCap = 'round';
+    g.shadowColor = c;
+    g.shadowBlur = 9;
+    g.strokeStyle = c;
+    g.lineWidth = 3.5;
+    strokeSegs(g, segs);
+    strokeSegs(g, segs); // second pass thickens the bloom
     g.shadowBlur = 0;
-    for (const p of M.props) if (p.tall) tallProp(g, p, true);
+    g.strokeStyle = 'rgba(255,255,255,0.7)';
+    g.lineWidth = 1.2;
+    strokeSegs(g, segs);
+    for (const p of M.props) if (p.tall && M.zone[M.idx(p.tx, p.ty)] === z) tallProp(g, p, true);
     // fountain glow ring
     for (const p of M.props) {
-      if (p.kind !== 'fountain') continue;
+      if (p.kind !== 'fountain' || z !== Z.HUB) continue;
       g.strokeStyle = '#19f0ff';
       g.shadowColor = '#19f0ff';
       g.shadowBlur = 10;
@@ -832,7 +1107,7 @@
       g.stroke();
       g.shadowBlur = 0;
     }
-    drawSigns(g, true);
+    drawSigns(g, true, z);
   }
 
   function paintMini() {
@@ -842,6 +1117,11 @@
       for (let x = 0; x < M.W; x++) {
         const t = M.tile(x, y);
         if (t === TT.WALL) continue;
+        if (t === TT.WATER) {
+          g.fillStyle = 'rgba(30,70,140,0.35)';
+          g.fillRect(x * 3, y * 3, 3, 3);
+          continue;
+        }
         const zn = M.zone[M.idx(x, y)];
         g.fillStyle = t === TT.WINDOW ? 'rgba(255,255,255,0.25)' : U.rgba(zoneColor(zn), t === TT.FLOOR || t === TT.DOOR ? 0.4 : 0.2);
         g.fillRect(x * 3, y * 3, 3, 3);
