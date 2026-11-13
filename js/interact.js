@@ -32,7 +32,7 @@
     I.holdT = 0;
     I.everUpgraded = false;
     I.box = { spot: U.randInt(0, M.boxSpots.length - 1), state: 'idle', t: 0, uses: 0, final: null, display: null, cycleT: 0, jester: false, anim: 0 };
-    I.pap = { state: 'idle', t: 0, weapon: null, anim: 0 };
+    I.pap = { state: 'idle', t: 0, weapon: null, anim: 0, modIdx: 0, modT: 0 };
     build();
     GW.Facilities.buildInteractables(I.list, I.ui);
   };
@@ -204,17 +204,22 @@
         prompt(p) {
           const k = I.pap;
           if (!I.powered(M.Z.VAULT)) return info('Overclocker — no power on the stage');
-          if (k.state === 'ready') return ok('Press ' + key('F') + ' to take ' + k.weapon.s.name);
+          if (k.state === 'ready') {
+            const md = GW.MODS[GW.MOD_ORDER[k.modIdx]];
+            return ok('Press ' + key('F') + ' to take ' + k.weapon.s.name + ' with <span style="color:' + md.color + '">' + md.name + ' rounds</span> <span class="dim">' + md.desc + '</span>');
+          }
           if (k.state !== 'idle') return null;
           const w = p.weapon();
           if (!w) return info('No weapon to overclock');
-          if (w.up) return info(w.s.name + ' is already overclocked');
-          return ok('Press ' + key('F') + ' to overclock ' + w.s.name + ' ' + cost(C.COSTS.pap));
+          if (w.tier >= 3) return info(w.s.name + ' is fully overclocked');
+          return ok('Press ' + key('F') + ' to overclock ' + w.s.name + (w.tier ? ' to tier ' + (w.tier + 1) : '') + ' ' + cost(C.COSTS.papTiers[w.tier]));
         },
         use(p) {
           const k = I.pap;
           if (!I.powered(M.Z.VAULT)) return;
           if (k.state === 'ready') {
+            GW.Weapons.setMod(k.weapon, GW.MOD_ORDER[k.modIdx]);
+            A.play('tierUp', { tier: k.weapon.tier });
             p.giveInstance(k.weapon);
             k.weapon = null;
             k.state = 'idle';
@@ -224,7 +229,7 @@
           }
           if (k.state !== 'idle') return;
           const w = p.weapon();
-          if (!w || w.up || !GW.Game.spend(C.COSTS.pap)) return;
+          if (!w || w.tier >= 3 || !GW.Game.spend(C.COSTS.papTiers[w.tier])) return;
           k.weapon = p.removeCurrent();
           k.state = 'working';
           k.t = 3.4;
@@ -427,12 +432,21 @@
       if (k.t <= 0) {
         GW.Weapons.upgrade(k.weapon);
         k.state = 'ready';
-        k.t = 14;
+        k.t = 16;
+        k.modIdx = U.randInt(0, GW.MOD_ORDER.length - 1);
+        k.modT = 0.9;
         A.play('papDone');
         FX.light(M.pap.x, M.pap.y, 300, '#ff4fd8', 0.5);
       }
     } else if (k.state === 'ready') {
       k.t -= dt;
+      // the ammo mod on offer cycles: grab the weapon while the one you want is showing
+      k.modT -= dt;
+      if (k.modT <= 0) {
+        k.modT = 0.9;
+        k.modIdx = (k.modIdx + 1) % GW.MOD_ORDER.length;
+        A.play('modCycle', { x: M.pap.x, y: M.pap.y });
+      }
       if (k.t <= 0) {
         // not collected in time: the machine keeps it
         k.weapon = null;

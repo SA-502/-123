@@ -29,14 +29,21 @@
     },
     ZOMBIE: {
       radius: 13,
+      helmetFrac: 0.4,
+      spit: { min: 200, max: 420, windup: 0.8, cd: [3.5, 5.5], flight: 0.75, puddleR: 55, puddleLife: 4, puddleDmg: 15, puddleTick: 0.5 },
+      bloat: { trigger: 30, swell: 0.8, radius: 130, dmg: 70, deathRadius: 110, deathDmg: 40, zombieFrac: 0.5 },
+      leap: { min: 140, max: 300, crouch: 0.45, speed: 520, range: 320, dmg: 30, cd: [3, 5], recover: 0.6 },
+      caps: { spitter: 3, bloater: 3, leaper: 4 },
       damage: 45,
       attackWindup: 0.3,
       attackCooldown: 0.8,
       speeds: { walk: [52, 72], run: [125, 150], sprint: [182, 206] },
       plankTearTime: 0.9,
     },
-    POINTS: { hit: 10, kill: 60, crit: 100, melee: 130, brute: 250, nuke: 400, carpenter: 200, plank: 10, trap: 50, ally: 50 },
-    COSTS: { box: 950, pap: 5000, upgradedAmmo: 4500 },
+    POINTS: { hit: 10, kill: 60, crit: 100, melee: 130, brute: 250, nuke: 400, carpenter: 200, plank: 10, trap: 50, ally: 50, boss: 2000 },
+    COSTS: { box: 950, pap: 5000, papTiers: [5000, 10000, 15000], upgradedAmmo: 4500 },
+    TIER: { dmg: [1, 2, 3.5], mag: [1, 1.15, 1.3], suffix: ['', ' II', ' III'] },
+    MOD: { burnTime: 3, burnFrac: 0.08, burnFracBig: 0.01, shockJumps: 3, shockRange: 200, shockMult: 2, frostStacks: 5, frostSlow: 3, frostFreeze: 1.5, blastR: 62, blastMult: 1.5 },
     POWERUP_LIFE: 26,
     POWERUP_DURATION: 30,
     TRAP: { cost: 1000, duration: 25, cooldown: 60, tick: 0.25, playerDmg: 40, playerTick: 0.5, bruteFrac: 0.07 },
@@ -75,6 +82,16 @@
     },
     spawnDelay(r) {
       return Math.max(0.08, 2 * Math.pow(0.95, r - 1));
+    },
+    /** Which kind of zombie to send next: specials join gradually as the rounds climb. */
+    mix(r) {
+      return [
+        ['walker', 1],
+        ['helmet', r >= 6 ? Math.min(0.4, (r - 5) * 0.05) : 0],
+        ['spitter', r >= 8 ? Math.min(0.16, (r - 7) * 0.025) : 0],
+        ['bloater', r >= 10 ? Math.min(0.13, (r - 9) * 0.02) : 0],
+        ['leaper', r >= 12 ? Math.min(0.18, (r - 11) * 0.025) : 0],
+      ];
     },
     speedClass(r) {
       const base = r <= 1 ? 1 : r * 8;
@@ -182,6 +199,15 @@
     lure: { id: 'lure', name: 'Neon Lure', cost: 2000, max: 1, color: '#ff4fd8', desc: 'Draws zombies in, then detonates' },
     bubble: { id: 'bubble', name: 'Safety Bubble', cost: 1500, max: 2, color: '#3dff8b', desc: 'A dome zombies cannot enter' },
   };
+
+  /** Ammo mods chosen at the Overclocker. `icon` is a glyph id from art.js. */
+  GW.MODS = {
+    fire: { id: 'fire', name: 'Inferno', color: '#ff7a1a', icon: 'fire', desc: 'burns a share of max health' },
+    shock: { id: 'shock', name: 'Arc', color: '#8fd8ff', icon: 'zap', desc: 'chains to nearby zombies' },
+    frost: { id: 'frost', name: 'Frost', color: '#8fe9ff', icon: 'cryo', desc: 'slows, then freezes' },
+    blast: { id: 'blast', name: 'Blast', color: '#ffd426', icon: 'nuke', desc: 'small explosions' },
+  };
+  GW.MOD_ORDER = ['fire', 'shock', 'frost', 'blast'];
 
   GW.TRAPS = {
     zap: { name: 'Zapper Floor', color: '#8fd8ff' },

@@ -13,7 +13,7 @@
     for (const id of ['hud', 'zone-name', 'objective', 'powerups', 'announce', 'announce-main', 'announce-sub', 'prompt', 'perks',
       'health', 'health-fill', 'health-num', 'stamina-fill', 'round', 'score-pops', 'points', 'weapon-name', 'weapon-icon',
       'clip', 'reserve', 'ammo-hint', 'grenades', 'slots', 'vignette', 'flash', 'minimap', 'armor', 'armor-fill', 'armor-num',
-      'tactical', 'sentry-tag', 'power-status']) {
+      'tactical', 'sentry-tag', 'power-status', 'boss', 'boss-fill', 'boss-phase']) {
       el[id] = $(id);
     }
     roundCtx = el.round.getContext('2d');
@@ -289,7 +289,7 @@
       g.fillRect(pu.x * s - 1.5, pu.y * s - 1.5, 3, 3);
     }
     g.fillStyle = '#ff2b3c';
-    for (const z of GW.Zombies.list) g.fillRect(z.x * s - 1, z.y * s - 1, z.type === 'brute' ? 3 : 2, z.type === 'brute' ? 3 : 2);
+    for (const z of GW.Zombies.list) g.fillRect(z.x * s - 1, z.y * s - 1, z.type === 'boss' ? 6 : z.type === 'brute' ? 3 : 2, z.type === 'boss' ? 6 : z.type === 'brute' ? 3 : 2);
     // player arrow
     g.save();
     g.translate(P.x * s, P.y * s);
@@ -313,7 +313,7 @@
 
     const w = P.weapon();
     if (w) {
-      set('wname', el['weapon-name'], w.s.name);
+      set('wname', el['weapon-name'], w.s.name + (w.mod ? '  ·  ' + GW.MODS[w.mod].name.toUpperCase() : ''));
       cls('wup', el['weapon-name'], 'up', w.up);
       set('clip', el.clip, String(w.clip));
       set('res', el.reserve, String(w.reserve));
@@ -333,7 +333,7 @@
       cls('cliplow', el.clip, 'low', false);
       set('hint', el['ammo-hint'], '');
     }
-    const wkey = w ? w.id + (w.up ? '+' : '') : 'none';
+    const wkey = w ? w.id + w.tier + (w.mod || '') : 'none';
     if (last.wicon !== wkey) {
       last.wicon = wkey;
       drawWeaponIcon(w);
@@ -345,7 +345,7 @@
       for (let i = 0; i < C.PLAYER.grenadesMax; i++) html += '<div class="nade' + (i < P.grenades ? '' : ' off') + '"></div>';
       el.grenades.innerHTML = html;
     }
-    const skey = P.weapons.map((x) => x.id + (x.up ? '+' : '')).join('|') + '#' + P.cur;
+    const skey = P.weapons.map((x) => x.id + x.tier + (x.mod || '')).join('|') + '#' + P.cur;
     if (last.slots !== skey) {
       last.slots = skey;
       el.slots.innerHTML = P.weapons
@@ -403,6 +403,16 @@
     set('pow', el['power-status'], 'POWER ' + I.poweredCount() + '/' + M.generators.length + (P.fuses > 0 ? '   ·   FUSES ' + P.fuses : ''));
 
     updatePowerupTimers();
+
+    // boss health bar
+    const bz = GW.Boss.ref;
+    cls('bosson', el.boss, 'on', !!bz);
+    if (bz) {
+      set('bossw', el['boss-fill'].style, (U.clamp(bz.hp / bz.maxHp, 0, 1) * 100).toFixed(1) + '%', 'width');
+      const b = bz.boss;
+      set('bossp', el['boss-phase'], b.mode === 'stunned' ? 'STUNNED — HIT THE CORE ON ITS BACK' : b.phase === 1 ? 'ACT I — ARMOURED FRONT, WEAK BACK' : b.phase === 2 ? 'ACT II' : 'FINALE');
+      cls('bossst', el.boss, 'stunned', b.mode === 'stunned');
+    }
 
     miniT -= dt;
     if (miniT <= 0) {

@@ -69,6 +69,16 @@ html, body {
 .pu-timer.ending { animation: blink 0.4s steps(2) infinite; }
 @keyframes blink { 50% { opacity: 0.25; } }
 
+#boss { position: absolute; top: 62px; left: 50%; transform: translateX(-50%); width: min(520px, 60vw); text-align: center; display: none; }
+#boss.on { display: block; }
+#boss-name { font-size: 15px; font-weight: 900; letter-spacing: 0.35em; color: #fff; text-shadow: 0 0 8px var(--red), 0 0 22px var(--red); }
+#boss-bar { position: relative; height: 12px; margin-top: 5px; border-radius: 3px; overflow: hidden; background: rgba(10, 5, 24, 0.85);
+  border: 1px solid rgba(255, 59, 78, 0.9); box-shadow: 0 0 14px rgba(255, 59, 78, 0.55); }
+#boss-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff3b4e, #ff7a1a 60%, #ffd426); transition: width 0.15s linear; }
+#boss-bar i { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(10, 5, 24, 0.9); left: 33%; }
+#boss-bar i + i { left: 66%; }
+#boss-phase { margin-top: 4px; font-size: 9px; font-weight: 700; letter-spacing: 0.18em; color: #ffb14d; text-shadow: 0 0 8px rgba(255, 177, 77, 0.6); }
+#boss.stunned #boss-phase { color: var(--yellow); animation: blink 0.4s steps(2) infinite; }
 #announce { position: absolute; top: 19%; left: 0; right: 0; text-align: center; opacity: 0; }
 #announce.show { animation: announce 3.2s ease-out forwards; }
 #announce-main {

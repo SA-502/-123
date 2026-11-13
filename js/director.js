@@ -15,6 +15,9 @@
     D.spawnDelay = 2;
     D.health = 150;
     D.special = false;
+    D.boss = false;
+    D.bossSpawned = false;
+    D.bossT = 0;
     D.specialCount = 0;
     D.nextSpecial = U.randInt(5, 7);
     D.brutes = 0;
@@ -30,6 +33,13 @@
     D.state = 'active';
     D.health = GW.Rounds.health(r);
     D.special = r === D.nextSpecial;
+    D.boss = r % 10 === 0;
+    if (D.boss && D.special) {
+      D.special = false; // the boss takes the stage; the blackout waits a round
+      D.nextSpecial = r + 1;
+    }
+    D.bossSpawned = false;
+    D.bossT = 3.5;
     D.dropsThisRound = 0;
     D.plankPts = 0;
     D.spawned = 0;
@@ -43,6 +53,13 @@
       D.brutes = 0;
       A.play('special');
       GW.Game.announce('LIGHTS OUT', 'Shriekers are loose on the pier', '#35f0ff');
+    } else if (D.boss) {
+      D.total = 8 + Math.floor(r / 2);
+      D.spawnDelay = 2.2;
+      D.maxAlive = 12;
+      D.brutes = 0;
+      A.play('special');
+      GW.Game.announce('BOSS ROUND', 'The Headliner takes the stage', '#ff3b4e');
     } else {
       D.total = GW.Rounds.count(r);
       D.spawnDelay = GW.Rounds.spawnDelay(r);
@@ -111,7 +128,11 @@
       GW.Zombies.spawn('brute', spot, D.health, 'run');
       return true;
     }
-    GW.Zombies.spawn('walker', spot, D.health, GW.Rounds.speedClass(D.round));
+    // pick a type from the round's mix, respecting how many of each special may be alive at once
+    const caps = C.ZOMBIE.caps;
+    const pick = U.weighted(GW.Rounds.mix(D.round), (e) => (caps[e[0]] && GW.Zombies.count(e[0]) >= caps[e[0]] ? 0 : e[1]));
+    const type = pick ? pick[0] : 'walker';
+    GW.Zombies.spawn(type, spot, D.health, GW.Rounds.speedClass(D.round));
     return true;
   }
 
@@ -123,6 +144,15 @@
       return;
     }
     D.spawnT -= dt;
+    if (D.boss) {
+      if (!D.bossSpawned) {
+        D.bossT -= dt;
+        if (D.bossT <= 0) D.bossSpawned = !!GW.Boss.spawn(D.round);
+      } else if (GW.Boss.ref && D.toSpawn <= 0) {
+        D.toSpawn = 3; // the supporting cast keeps coming while the boss stands
+        D.spawnT = Math.max(D.spawnT, 3);
+      }
+    }
     if (D.toSpawn > 0 && D.spawnT <= 0 && GW.Zombies.list.length < D.maxAlive) {
       if (spawnOne()) {
         D.toSpawn--;
@@ -132,7 +162,7 @@
         D.spawnT = 0.3;
       }
     }
-    if (D.toSpawn <= 0 && GW.Zombies.list.length === 0) end();
+    if (D.toSpawn <= 0 && GW.Zombies.list.length === 0 && (!D.boss || D.bossSpawned)) end();
   };
 
   /** Zombies left this round (alive + yet to spawn). */

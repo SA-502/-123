@@ -94,6 +94,7 @@
   /* entities                                                           */
   /* ------------------------------------------------------------------ */
   function drawZombie(z) {
+    if (z.type === 'boss') return drawBoss(z);
     const s = (z.r / 13) * 1.15;
     let scale = 1, alpha = 1;
     if (z.state === 'rise') {
@@ -102,6 +103,9 @@
       alpha = 0.3 + 0.7 * k;
     }
     const brute = z.type === 'brute';
+    const bloater = z.type === 'bloater', leaper = z.type === 'leaper';
+    if (z.state === 'swell') scale *= 1 + 0.4 * U.clamp(1 - z.attackT / C.ZOMBIE.bloat.swell, 0, 1) + Math.sin(R.time * 40) * 0.03;
+    if (z.state === 'crouch') scale *= 0.86;
     ctx.save();
     ctx.translate(z.x, z.y);
     ctx.globalAlpha = alpha * 0.38;
@@ -122,15 +126,35 @@
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(2, -9);
-    ctx.lineTo(15 + reach + sw * 1.5, -6 + sw);
+    const armLen = leaper ? (z.state === 'leap' ? 24 : 19) : 15;
+    ctx.lineTo(armLen + reach + sw * 1.5, -6 + sw);
     ctx.moveTo(2, 9);
-    ctx.lineTo(15 + reach - sw * 1.5, 6 - sw);
+    ctx.lineTo(armLen + reach - sw * 1.5, 6 - sw);
     ctx.stroke();
     // torso
     ctx.fillStyle = z.shirt;
     ctx.beginPath();
-    ctx.ellipse(-1, 0, 7.5, 12, 0, 0, U.TAU);
+    ctx.ellipse(-1, 0, leaper ? 6 : bloater ? 9.5 : 7.5, leaper ? 10 : 12, 0, 0, U.TAU);
     ctx.fill();
+    if (bloater) {
+      // swollen, blistered belly
+      ctx.fillStyle = z.skin;
+      ctx.beginPath();
+      ctx.ellipse(-2, 0, 8, 10, 0, 0, U.TAU);
+      ctx.fill();
+      ctx.fillStyle = '#d9e06a';
+      for (const [bx, by, br] of [[-5, -4, 2.2], [0, 5, 2.6], [-3, 3, 1.6], [1, -5, 1.8], [-7, 2, 1.5]]) {
+        ctx.beginPath();
+        ctx.arc(bx, by, br, 0, U.TAU);
+        ctx.fill();
+      }
+    } else if (z.type === 'spitter') {
+      // acid sac at the throat
+      ctx.fillStyle = '#b4ff5a';
+      ctx.beginPath();
+      ctx.arc(7.5, 0, z.state === 'spit' ? 5.5 : 4, 0, U.TAU);
+      ctx.fill();
+    }
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
     ctx.fillRect(-6, -3 + sw, 5, 6);
     if (brute) {
@@ -149,6 +173,32 @@
     ctx.beginPath();
     ctx.arc(1.5, sw * 0.6, 6.6, Math.PI * 0.55, Math.PI * 1.45);
     ctx.fill();
+    if (z.helmet > 0) {
+      // riot helmet: headshots ring off it until it cracks
+      ctx.fillStyle = '#8f96a3';
+      ctx.beginPath();
+      ctx.arc(2.6, sw * 0.6, 7.6, 0, U.TAU);
+      ctx.fill();
+      ctx.fillStyle = '#5b6170';
+      ctx.beginPath();
+      ctx.arc(1.4, sw * 0.6, 5.2, 0, U.TAU);
+      ctx.fill();
+      ctx.fillStyle = '#14161c';
+      ctx.fillRect(6.2, sw * 0.6 - 4, 2.2, 8);
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(2.6, sw * 0.6, 6.6, -2.4, -1.2);
+      ctx.stroke();
+    }
+    if (z.burnT > 0) {
+      ctx.globalAlpha = alpha * 0.45;
+      ctx.fillStyle = '#ff7a1a';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 10, 13, 0, 0, U.TAU);
+      ctx.fill();
+      ctx.globalAlpha = alpha;
+    }
     if (z.freezeT > 0 || z.slowT > 0) {
       ctx.globalAlpha = alpha * (z.freezeT > 0 ? 0.7 : 0.32);
       ctx.fillStyle = '#a8efff';
@@ -165,6 +215,280 @@
       ctx.fill();
     }
     ctx.restore();
+  }
+
+  function drawBoss(z) {
+    const b = z.boss || {};
+    const k = z.state === 'rise' ? U.clamp(1 - z.riseT / 1.6, 0, 1) : 1;
+    const stunned = b.mode === 'stunned';
+    ctx.save();
+    ctx.translate(z.x, z.y);
+    ctx.globalAlpha = 0.4 * k;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(4, 8, z.r * 1.25, z.r * 1.05, 0, 0, U.TAU);
+    ctx.fill();
+    ctx.globalAlpha = 0.25 + 0.75 * k;
+    ctx.rotate(z.angle + (stunned ? Math.sin(R.time * 9) * 0.12 : 0));
+    ctx.scale(0.5 + 0.5 * k, 0.5 + 0.5 * k);
+    const raise = b.mode === 'slamWarn' ? 10 * U.clamp(1 - b.t / GW.Boss.CFG.slam.warn, 0, 1) : 0;
+    const sw = Math.sin(b.spin * 5) * 2;
+    // arms: heavy steel pistons
+    ctx.strokeStyle = '#6a7080';
+    ctx.lineWidth = 11;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(4, -24); ctx.lineTo(30 + raise + sw, -17);
+    ctx.moveTo(4, 24); ctx.lineTo(30 + raise - sw, 17);
+    ctx.stroke();
+    ctx.fillStyle = '#3a3f4c';
+    ctx.beginPath();
+    ctx.arc(32 + raise + sw, -17, 8, 0, U.TAU);
+    ctx.arc(32 + raise - sw, 17, 8, 0, U.TAU);
+    ctx.fill();
+    // coat
+    ctx.fillStyle = z.shirt;
+    ctx.beginPath();
+    ctx.ellipse(-3, 0, 23, 30, 0, 0, U.TAU);
+    ctx.fill();
+    ctx.fillStyle = '#ffd426';
+    for (let i = -2; i <= 2; i++) ctx.fillRect(3, i * 9 - 1.5, 3, 3);
+    // shoulder pads
+    ctx.fillStyle = '#4a4f5e';
+    ctx.beginPath();
+    ctx.arc(-2, -27, 11, 0, U.TAU);
+    ctx.arc(-2, 27, 11, 0, U.TAU);
+    ctx.fill();
+    // front armour plate (most damage glances off it)
+    ctx.strokeStyle = b.armorFlash > 0 ? '#ffffff' : '#9aa1b0';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.arc(-2, 0, 27, -1.05, 1.05);
+    ctx.stroke();
+    // exposed core on the back: the weak point
+    ctx.fillStyle = '#3a2a10';
+    ctx.beginPath();
+    ctx.arc(-24, 0, 10, 0, U.TAU);
+    ctx.fill();
+    ctx.fillStyle = b.weakFlash > 0 ? '#ffffff' : '#ffd426';
+    ctx.beginPath();
+    ctx.arc(-24, 0, 6.5, 0, U.TAU);
+    ctx.fill();
+    // porcelain head and top hat
+    ctx.fillStyle = z.skin;
+    ctx.beginPath();
+    ctx.arc(8, 0, 13, 0, U.TAU);
+    ctx.fill();
+    ctx.fillStyle = '#c22a3a';
+    ctx.beginPath();
+    ctx.arc(18, 0, 3.2, 0, U.TAU);
+    ctx.fill();
+    ctx.fillStyle = '#16121e';
+    ctx.beginPath();
+    ctx.arc(3, 0, 14.5, 0, U.TAU);
+    ctx.fill();
+    ctx.fillStyle = '#2a2436';
+    ctx.beginPath();
+    ctx.arc(2, 0, 9.5, 0, U.TAU);
+    ctx.fill();
+    ctx.fillStyle = '#ff3b6b';
+    ctx.fillRect(-2, -9.5, 3, 19);
+    if (z.flash > 0) {
+      ctx.globalAlpha = Math.min(1, z.flash * 6) * 0.6;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 28, 32, 0, 0, U.TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /** Ground hazards: spitter acid puddles and the shadows of globs in flight. */
+  function drawHazards() {
+    for (const h of GW.Zombies.hazards) {
+      if (!inView(h.x, h.y, h.r + 10)) continue;
+      const a = Math.min(1, h.t / 0.6);
+      ctx.globalAlpha = 0.55 * a;
+      ctx.fillStyle = '#3f7a1c';
+      ctx.beginPath();
+      ctx.ellipse(h.x, h.y, h.r, h.r * 0.86, 0, 0, U.TAU);
+      ctx.fill();
+      ctx.globalAlpha = 0.5 * a;
+      ctx.fillStyle = '#7dff5a';
+      ctx.beginPath();
+      ctx.ellipse(h.x, h.y, h.r * 0.7, h.r * 0.58, 0, 0, U.TAU);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = '#000';
+    for (const g of GW.Zombies.acid) {
+      if (g.x === undefined) continue;
+      ctx.beginPath();
+      ctx.ellipse(g.x, g.y, 7, 5, 0, 0, U.TAU);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /** Everything that warns the player: enemy wind-ups, danger zones, boss attacks. Drawn in the glow pass. */
+  function drawThreats() {
+    const Zs = GW.Zombies, ZC = C.ZOMBIE, Bo = GW.Boss;
+    // acid
+    for (const h of Zs.hazards) {
+      if (!inView(h.x, h.y, h.r + 20)) continue;
+      const a = Math.min(1, h.t / 0.6);
+      Art.drawGlow(ctx, '#7dff5a', h.x, h.y, h.r * 1.3, 0.3 * a);
+      ctx.fillStyle = '#c8ff8a';
+      for (let i = 0; i < 4; i++) {
+        const ph = (R.time * 1.3 + i * 0.27 + h.x * 0.01) % 1;
+        ctx.globalAlpha = (1 - ph) * 0.8 * a;
+        ctx.beginPath();
+        ctx.arc(h.x + Math.cos(i * 2.4 + h.y) * h.r * 0.55, h.y + Math.sin(i * 1.7 + h.x) * h.r * 0.45, 1.5 + ph * 3.5, 0, U.TAU);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    for (const g of Zs.acid) {
+      if (g.x === undefined) continue;
+      Art.drawGlow(ctx, '#7dff5a', g.x, g.y - g.h, 18, 1);
+      Art.drawGlow(ctx, '#ffffff', g.x, g.y - g.h, 6, 0.9);
+      // where it will land
+      ctx.strokeStyle = '#7dff5a';
+      ctx.globalAlpha = 0.5;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.arc(g.tx, g.ty, ZC.spit.puddleR, 0, U.TAU);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
+    for (const z of Zs.list) {
+      if (!inView(z.x, z.y, 400)) continue;
+      const ca = Math.cos(z.angle), sa = Math.sin(z.angle);
+      if (z.state === 'spit') {
+        const k = U.clamp(1 - z.attackT / ZC.spit.windup, 0, 1);
+        Art.drawGlow(ctx, '#7dff5a', z.x + ca * 9, z.y + sa * 9, 10 + k * 18, 0.5 + k * 0.5);
+      } else if (z.state === 'crouch' || z.state === 'leap') {
+        const d = Math.min(ZC.leap.range, M.raycast(z.x, z.y, ca, sa, ZC.leap.range, M.solidForZombie));
+        ctx.strokeStyle = '#ff4fd8';
+        ctx.globalAlpha = z.state === 'crouch' ? 0.35 + 0.45 * Math.abs(Math.sin(R.time * 22)) : 0.25;
+        ctx.lineWidth = z.state === 'crouch' ? 3 : 6;
+        ctx.setLineDash(z.state === 'crouch' ? [8, 6] : []);
+        ctx.beginPath();
+        ctx.moveTo(z.x, z.y);
+        ctx.lineTo(z.x + ca * d, z.y + sa * d);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+        Art.drawGlow(ctx, '#ff4fd8', z.x, z.y, 26, 0.6);
+      } else if (z.state === 'swell') {
+        const k = U.clamp(1 - z.attackT / ZC.bloat.swell, 0, 1);
+        ctx.fillStyle = '#ff7a1a';
+        ctx.globalAlpha = 0.08 + k * 0.14;
+        ctx.beginPath();
+        ctx.arc(z.x, z.y, ZC.bloat.radius, 0, U.TAU);
+        ctx.fill();
+        ctx.strokeStyle = '#ffd426';
+        ctx.globalAlpha = 0.5 + 0.5 * Math.abs(Math.sin(R.time * 24));
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(z.x, z.y, ZC.bloat.radius * (0.2 + 0.8 * k), 0, U.TAU);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        Art.drawGlow(ctx, '#ffd426', z.x, z.y, 30 + k * 30, 0.7);
+      }
+      if (z.burnT > 0 && Math.random() < 0.3) FX.sparks(z.x + U.rand(-6, 6), z.y + U.rand(-6, 6), -Math.PI / 2, 1, '#ff7a1a', 110, 0.5);
+    }
+
+    // boss
+    const z = Bo.ref;
+    if (z && z.boss && inView(z.x, z.y, 900)) {
+      const b = z.boss, BC = Bo.CFG;
+      const ca = Math.cos(z.angle), sa = Math.sin(z.angle);
+      // weak point always glows on its back
+      const wx = z.x - ca * 26, wy = z.y - sa * 26;
+      Art.drawGlow(ctx, '#ffd426', wx, wy, b.mode === 'stunned' ? 34 + Math.sin(R.time * 14) * 8 : 22, b.mode === 'stunned' ? 1 : 0.75);
+      if (b.mode === 'chargeWarn' || b.mode === 'charge') {
+        const d = M.raycast(z.x, z.y, b.dirX, b.dirY, BC.charge.range, M.blocksBullet);
+        const k = b.mode === 'charge' ? 1 : U.clamp(1 - b.t / BC.charge.warn, 0, 1);
+        const nx = -b.dirY * z.r, ny = b.dirX * z.r;
+        ctx.fillStyle = '#ff3b4e';
+        ctx.globalAlpha = 0.1 + 0.22 * k * (0.6 + 0.4 * Math.abs(Math.sin(R.time * 20)));
+        ctx.beginPath();
+        ctx.moveTo(z.x + nx, z.y + ny);
+        ctx.lineTo(z.x + nx + b.dirX * d, z.y + ny + b.dirY * d);
+        ctx.lineTo(z.x - nx + b.dirX * d, z.y - ny + b.dirY * d);
+        ctx.lineTo(z.x - nx, z.y - ny);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#ff3b4e';
+        ctx.globalAlpha = 0.5 + 0.5 * k;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      } else if (b.mode === 'slamWarn') {
+        const k = U.clamp(1 - b.t / BC.slam.warn, 0, 1);
+        ctx.fillStyle = '#ff3b4e';
+        ctx.globalAlpha = 0.1 + 0.2 * k;
+        ctx.beginPath();
+        ctx.arc(z.x, z.y, BC.slam.radius, 0, U.TAU);
+        ctx.fill();
+        ctx.strokeStyle = '#ff3b4e';
+        ctx.globalAlpha = 0.9;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(z.x, z.y, BC.slam.radius, 0, U.TAU);
+        ctx.stroke();
+        ctx.strokeStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(z.x, z.y, BC.slam.radius * k, 0, U.TAU);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      } else if (b.mode === 'volleyWarn') {
+        Art.drawGlow(ctx, '#ff4fd8', z.x, z.y, 60 + (1 - b.t / BC.volley.warn) * 50, 0.8);
+      } else if (b.mode === 'phase') {
+        Art.drawGlow(ctx, '#ffffff', z.x, z.y, 90 + Math.sin(R.time * 30) * 14, 0.8);
+      } else if (b.mode === 'stunned') {
+        for (let i = 0; i < 3; i++) {
+          const a = R.time * 5 + (i * U.TAU) / 3;
+          Art.drawGlow(ctx, '#ffe14d', z.x + Math.cos(a) * 26, z.y - 30 + Math.sin(a) * 9, 9, 1);
+        }
+      }
+      if (b.phase >= 3) Art.drawGlow(ctx, '#ff3b4e', z.x, z.y, 70 + Math.sin(R.time * 10) * 10, 0.35);
+    }
+    for (const o of Bo.orbs) {
+      if (!inView(o.x, o.y, 30)) continue;
+      Art.drawGlow(ctx, '#ff4fd8', o.x, o.y, 22, 1);
+      Art.drawGlow(ctx, '#ffffff', o.x, o.y, 8, 1);
+    }
+
+    // panic-room hatch lights up whenever it can be used
+    const S = M.safeRoom;
+    if ((S.state === 'sealed' || S.hatchT > 0) && inView(S.rx, S.ry, 300)) {
+      const hx = (S.hatch.tx + 0.5) * T, hy = (S.hatch.ty + 0.5) * T;
+      Art.drawGlow(ctx, '#3dff8b', hx, hy, 34 + Math.sin(R.time * 6) * 6, 0.8);
+      ctx.strokeStyle = '#3dff8b';
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.9;
+      ctx.strokeRect(hx - 15, hy - 15, 30, 30);
+      ctx.globalAlpha = 1;
+    }
+
+    // the Starwheel turns slowly once its zone has power
+    const W = GW.MapArt.WHEEL, wl = lv(M.Z.FERRIS);
+    if (wl > 0.05 && inView(W.x, W.y, W.r + 40)) {
+      const cols = ['#ffd426', '#ff4fd8', '#19f0ff', '#3dff8b'];
+      for (let i = 0; i < 12; i++) {
+        const a = R.time * 0.16 + (i / 12) * U.TAU;
+        const cx = W.x + Math.cos(a) * W.r, cy = W.y + Math.sin(a) * W.r;
+        Art.drawGlow(ctx, cols[i % 4], cx, cy, 26, 0.8 * wl);
+        ctx.fillStyle = cols[i % 4];
+        ctx.globalAlpha = wl;
+        ctx.fillRect(cx - 7, cy - 6, 14, 12);
+      }
+      ctx.globalAlpha = 1;
+    }
   }
 
   function drawCorpse(c) {
@@ -936,6 +1260,9 @@
     if (lv(M.Z.VAULT) > 0.1) carve(M.pap.x, M.pap.y - 20, 190, lv(M.Z.VAULT) * 0.8);
     for (const pr of GW.Weapons.projectiles) carve(pr.x, pr.y, 110, 0.8);
     const AL = GW.Allies, Gd = GW.Gadgets;
+    for (const h of GW.Zombies.hazards) carve(h.x, h.y, h.r * 1.5, 0.5);
+    for (const o of GW.Boss.orbs) carve(o.x, o.y, 60, 0.7);
+    if (GW.Boss.ref) carve(GW.Boss.ref.x, GW.Boss.ref.y, 230, 0.7);
     if (AL.pal) carve(AL.pal.x, AL.pal.y, 150, 0.75);
     if (AL.sentry) carve(AL.sentry.x, AL.sentry.y, 120, 0.6);
     const lure = Gd.activeLure();
@@ -1130,6 +1457,18 @@
         ctx.globalAlpha = blink;
         Art.weapon(ctx, pk.weapon.s.cls, pm.x + (pk.state === 'working' ? U.rand(-2, 2) : 0), wy, pk.state === 'ready' ? 66 : 44, col, 'neon');
         ctx.globalAlpha = 1;
+        if (pk.state === 'ready') {
+          // the four ammo mods orbit above; the lit one is what you get
+          GW.MOD_ORDER.forEach((id, i) => {
+            const md = GW.MODS[id], on = i === pk.modIdx;
+            const mx2 = pm.x + (i - 1.5) * 30, my2 = wy - 34;
+            if (on) Art.drawGlow(ctx, md.color, mx2, my2, 26, 0.9);
+            ctx.globalAlpha = on ? 1 : 0.25;
+            if (md.icon === 'nuke') Art.powerupIcon(ctx, 'nuke', mx2, my2, on ? 20 : 14);
+            else Art.gadgetIcon(ctx, md.icon, mx2, my2, on ? 20 : 14, md.color);
+            ctx.globalAlpha = 1;
+          });
+        }
       }
     }
 
@@ -1146,6 +1485,7 @@
     }
 
     drawFacilityGlow(power);
+    drawThreats();
 
     // zombie eyes burn through the dark
     for (const z of Zs.list) {
@@ -1387,6 +1727,7 @@
 
     blit(MA.floor, 1);
     drawGround(power);
+    drawHazards();
     drawLure();
     for (const zb of Zs.list) if (inView(zb.x, zb.y, 40)) drawZombie(zb);
     if (inGame) drawAllies();

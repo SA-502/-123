@@ -57,7 +57,7 @@
       z.trapT = (z.trapT || 0) - dt;
       if (z.trapT > 0) continue;
       z.trapT = C.TRAP.tick;
-      const dmg = z.type === 'brute' ? z.maxHp * C.TRAP.bruteFrac : z.hp + 1;
+      const dmg = z.type === 'boss' ? z.maxHp * 0.008 : z.type === 'brute' ? z.maxHp * C.TRAP.bruteFrac : z.hp + 1;
       const killed = GW.Zombies.damage(z, dmg, { trap: true, dir: Math.random() * U.TAU, shock: tr.kind === 'zap' });
       if (killed && tr.kind === 'fire') GW.MapArt.decal(z.x, z.y, 18, '#140804', 0.6);
     }

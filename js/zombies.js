@@ -11,7 +11,14 @@
   Zs.reset = function () {
     Zs.list = [];
     Zs.nextId = 1;
+    Zs.acid = []; // spitter globs in flight
+    Zs.hazards = []; // acid puddles on the ground
+    Zs.bloaterFuse = false;
   };
+  Zs.reset();
+
+  /** How many of a type are alive (for per-type caps). */
+  Zs.count = (type) => Zs.list.reduce((n, z) => n + (z.type === type ? 1 : 0), 0);
 
   /**
    * Spawn a zombie.
@@ -38,6 +45,34 @@
       z.skin = '#8f7a72';
       z.shirt = '#3b2230';
       z.eye = '#ff3b4e';
+    } else if (type === 'helmet') {
+      z.helmet = z.helmetMax = hp * ZC.helmetFrac;
+      z.shirt = '#4a4f5a';
+    } else if (type === 'spitter') {
+      z.hp = z.maxHp = hp * 0.8;
+      z.speed = U.rand(105, 120);
+      z.speedClass = 'run';
+      z.skin = '#86b052';
+      z.shirt = '#2f4a22';
+      z.eye = '#7dff5a';
+      z.spitCd = U.rand(1.5, 3);
+    } else if (type === 'bloater') {
+      z.r = 17;
+      z.hp = z.maxHp = hp * 1.6;
+      z.speed = U.rand(58, 66);
+      z.speedClass = 'walk';
+      z.skin = '#a8955e';
+      z.shirt = '#5a4a2a';
+      z.eye = '#ffd426';
+    } else if (type === 'leaper') {
+      z.r = 12;
+      z.hp = z.maxHp = hp * 0.7;
+      z.speed = U.rand(165, 180);
+      z.speedClass = 'sprint';
+      z.skin = '#a77fa0';
+      z.shirt = '#3a1f3a';
+      z.eye = '#ff4fd8';
+      z.leapCd = U.rand(1, 2.5);
     } else if (type === 'shrieker') {
       z.r = 11;
       z.hp = z.maxHp = Math.max(100, hp * 0.55);
@@ -108,16 +143,39 @@
     if (z.nukeT !== undefined) {
       z.nukeT -= dt;
       if (z.nukeT <= 0) {
-        Zs.kill(z, { silent: true, nuke: true, dir: Math.random() * U.TAU });
-        return;
+        if (z.type === 'boss') {
+          // the Purge only wounds a boss
+          z.nukeT = undefined;
+          Zs.damage(z, z.maxHp * 0.1, { nuke: true, dir: z.angle });
+          if (z.dead) return;
+        } else {
+          Zs.kill(z, { silent: true, nuke: true, dir: Math.random() * U.TAU });
+          return;
+        }
       }
     }
 
     z.groanT -= dt;
     if (z.groanT <= 0) {
       z.groanT = U.rand(3, 8);
-      if (z.type === 'shrieker') A.play('shriek', { x: z.x, y: z.y });
-      else A.play('groan', { x: z.x, y: z.y, pitch: z.type === 'brute' ? 0.62 : z.speedClass === 'sprint' ? 1.35 : 1 });
+      const kind = z.type === 'walker' ? (z.speedClass === 'walk' ? 'walker' : z.speedClass === 'run' ? 'runner' : 'sprinter') : z.type;
+      A.play('voice', { x: z.x, y: z.y, kind });
+    }
+    // burning from Inferno rounds: a share of max health every second
+    if (z.burnT > 0) {
+      z.burnT -= dt;
+      z.burnTick -= dt;
+      if (z.burnTick <= 0) {
+        z.burnTick = 0.25;
+        Zs.damage(z, z.burnDps * 0.25, { burn: true, dir: Math.random() * U.TAU });
+        if (z.dead) return;
+      }
+    }
+    if (z.spitCd > 0) z.spitCd -= dt;
+    if (z.leapCd > 0) z.leapCd -= dt;
+    if (z.type === 'boss') {
+      GW.Boss.update(z, dt, P);
+      return;
     }
 
     // frozen solid by a Cryo grenade, or dazed by a shockwave: no walking, tearing or swinging
@@ -157,12 +215,67 @@
       return;
     }
 
+    if (z.state === 'spit') {
+      z.angle += U.angDiff(z.angle, Math.atan2(dyp, dxp)) * Math.min(1, dt * 10);
+      z.attackT -= dt;
+      if (z.attackT <= 0) {
+        spitAt(z, P);
+        z.state = 'chase';
+        z.spitCd = U.rand(C.ZOMBIE.spit.cd[0], C.ZOMBIE.spit.cd[1]);
+      }
+      return;
+    }
+    if (z.state === 'crouch') {
+      z.angle = Math.atan2(dyp, dxp);
+      z.attackT -= dt;
+      if (z.attackT <= 0) {
+        const L = C.ZOMBIE.leap;
+        z.state = 'leap';
+        z.leapLeft = L.range;
+        z.leapDx = Math.cos(z.angle);
+        z.leapDy = Math.sin(z.angle);
+        z.leapHit = false;
+        A.play('leap', { x: z.x, y: z.y });
+      }
+      return;
+    }
+    if (z.state === 'leap') {
+      const L = C.ZOMBIE.leap;
+      const step = Math.min(z.leapLeft, L.speed * dt);
+      const ox = z.x, oy = z.y;
+      M.moveCircle(z, z.leapDx * step, z.leapDy * step, M.solidForZombie);
+      const moved = Math.hypot(z.x - ox, z.y - oy);
+      z.leapLeft -= step;
+      if (Math.random() < 0.6) FX.sparks(z.x, z.y, Math.atan2(-z.leapDy, -z.leapDx), 1, '#ff4fd8', 90, 0.4);
+      if (!z.leapHit && P.alive && Math.hypot(P.x - z.x, P.y - z.y) < z.r + P.r + 6 && !Gd.shielded(P)) {
+        z.leapHit = true;
+        P.hurt(L.dmg, true);
+        P.vx += z.leapDx * 420;
+        P.vy += z.leapDy * 420;
+        A.play('bite', { x: z.x, y: z.y });
+        z.leapLeft = 0;
+      }
+      if (z.leapLeft <= 0 || moved < step * 0.5) {
+        z.state = 'chase';
+        z.dazeT = L.recover;
+        z.leapCd = U.rand(L.cd[0], L.cd[1]);
+      }
+      return;
+    }
+    if (z.state === 'swell') {
+      z.attackT -= dt;
+      z.angle += U.angDiff(z.angle, Math.atan2(dyp, dxp)) * Math.min(1, dt * 6);
+      if (z.attackT <= 0) Zs.kill(z, { silent: true, burst: true, dir: z.angle });
+      return;
+    }
+
     if (z.state === 'attack') {
       z.angle += U.angDiff(z.angle, Math.atan2(dyp, dxp)) * Math.min(1, dt * 12);
       z.attackT -= dt;
       if (z.attackT <= 0) {
         if (P.alive && dp < z.r + P.r + 24 && !Gd.shielded(P)) {
           A.play('zattack', { x: z.x, y: z.y });
+          A.play('bite', { x: z.x, y: z.y });
           P.hurt(z.damage, true);
         }
         z.state = 'chase';
@@ -184,6 +297,36 @@
     const dg = toPlayer ? dp : Math.hypot(gx - z.x, gy - z.y);
     let tx = gx, ty = gy;
     const direct = dg < 440 && M.los(z.x, z.y, gx, gy, M.solidForZombie);
+    let retreat = false;
+    if (toPlayer && P.alive && !Gd.shielded(P)) {
+      const ZC = C.ZOMBIE;
+      if (z.type === 'bloater' && dp < z.r + P.r + ZC.bloat.trigger) {
+        z.state = 'swell';
+        z.attackT = ZC.bloat.swell;
+        A.play('swell', { x: z.x, y: z.y });
+        return;
+      }
+      if (z.type === 'spitter' && dp < ZC.spit.max && M.los(z.x, z.y, P.x, P.y, M.blocksBullet)) {
+        if (z.spitCd <= 0 && dp > ZC.spit.min * 0.8) {
+          z.state = 'spit';
+          z.attackT = ZC.spit.windup;
+          A.play('voice', { x: z.x, y: z.y, kind: 'spitter' });
+          return;
+        }
+        if (dp < ZC.spit.min) retreat = true; // keep its distance
+        else if (dp < ZC.spit.max * 0.85) tx = z.x, ty = z.y; // hold position and wait for the next glob
+      }
+      if (z.type === 'leaper' && z.leapCd <= 0 && dp > ZC.leap.min && dp < ZC.leap.max && M.los(z.x, z.y, P.x, P.y, M.solidForZombie)) {
+        z.state = 'crouch';
+        z.attackT = ZC.leap.crouch;
+        A.play('leapWarn', { x: z.x, y: z.y });
+        return;
+      }
+    }
+    if (retreat) {
+      tx = z.x - dxp;
+      ty = z.y - dyp;
+    }
     if (!direct && M.flowTarget(z.x, z.y, tgt, field)) {
       tx = tgt.x;
       ty = tgt.y;
@@ -194,7 +337,8 @@
 
     const reach = z.r + P.r + 4;
     let step = z.speed * (z.stun > 0 ? 0.35 : 1) * (z.slowT > 0 ? C.CRYO.slowMult : 1) * dt;
-    if (direct) step = Math.min(step, Math.max(0, dg - (toPlayer ? reach : z.r + 6))); // never shove into the target
+    if (retreat) step *= 0.7;
+    else if (direct) step = Math.min(step, Math.max(0, dg - (toPlayer ? reach : z.r + 6))); // never shove into the target
     M.moveCircle(z, (mdx / md) * step + z.kx * dt, (mdy / md) * step + z.ky * dt, M.solidForZombie);
     if (z.kx || z.ky) {
       const k = Math.exp(-8 * dt);
@@ -203,7 +347,7 @@
       if (Math.abs(z.kx) + Math.abs(z.ky) < 2) z.kx = z.ky = 0;
     }
 
-    if (P.alive && dp < reach + 8 && z.attackCd <= 0 && !Gd.shielded(P)) {
+    if (P.alive && dp < reach + 8 && z.attackCd <= 0 && !Gd.shielded(P) && z.type !== 'bloater') {
       z.state = 'attack';
       z.attackT = C.ZOMBIE.attackWindup;
     }
@@ -222,8 +366,76 @@
     if (z.farT > 6 || z.stuckT > 6) relocate(z);
   }
 
+  /** Spitter lobs a glob at where the player is heading. */
+  function spitAt(z, P) {
+    const S = C.ZOMBIE.spit;
+    let tx = P.x + P.vx * S.flight * 0.6, ty = P.y + P.vy * S.flight * 0.6;
+    if (!M.los(P.x, P.y, tx, ty, M.solidForPlayer)) {
+      tx = P.x;
+      ty = P.y;
+    }
+    Zs.acid.push({ sx: z.x, sy: z.y, tx, ty, t: 0, dur: S.flight });
+    A.play('spit', { x: z.x, y: z.y });
+  }
+
+  function updateAcid(dt, P) {
+    const S = C.ZOMBIE.spit;
+    for (let i = Zs.acid.length - 1; i >= 0; i--) {
+      const a = Zs.acid[i];
+      a.t += dt;
+      const k = Math.min(1, a.t / a.dur);
+      a.x = U.lerp(a.sx, a.tx, k);
+      a.y = U.lerp(a.sy, a.ty, k);
+      a.h = Math.sin(k * Math.PI) * 70;
+      if (k >= 1) {
+        Zs.acid.splice(i, 1);
+        if (Zs.hazards.length > 12) Zs.hazards.shift();
+        Zs.hazards.push({ x: a.tx, y: a.ty, r: S.puddleR, t: S.puddleLife, max: S.puddleLife });
+        FX.burst(a.tx, a.ty, 14, '#7dff5a', 200);
+        GW.MapArt.decal(a.tx, a.ty, S.puddleR * 0.6, '#1f3a10', 0.4);
+        A.play('acidSplash', { x: a.tx, y: a.ty });
+      }
+    }
+    let inAcid = false;
+    for (let i = Zs.hazards.length - 1; i >= 0; i--) {
+      const h = Zs.hazards[i];
+      h.t -= dt;
+      if (h.t <= 0) {
+        Zs.hazards.splice(i, 1);
+        continue;
+      }
+      if (P.alive && U.dist(P.x, P.y, h.x, h.y) < h.r + P.r * 0.4) inAcid = true;
+    }
+    if (inAcid) {
+      Zs.acidT = (Zs.acidT || 0) - dt;
+      if (Zs.acidT <= 0) {
+        Zs.acidT = S.puddleTick;
+        P.hurt(S.puddleDmg);
+        A.play('acidSizzle', { x: P.x, y: P.y });
+      }
+    } else Zs.acidT = 0;
+  }
+
+  /** Bloater detonation: hurts the player and the horde (no points for the zombies it kills). */
+  function bloaterBlast(z, radius, dmg) {
+    const B = C.ZOMBIE.bloat, P = GW.Player;
+    FX.explosion(z.x, z.y, radius, '#c8ff3a');
+    FX.blood(z.x, z.y, 0, 30, 380);
+    GW.MapArt.decal(z.x, z.y, radius * 0.5, '#3a3a10', 0.5);
+    A.play('bloaterPop', { x: z.x, y: z.y });
+    const d = U.dist(P.x, P.y, z.x, z.y);
+    if (d < radius && M.los(z.x, z.y, P.x, P.y, M.blocksBullet)) P.hurt(U.lerp(dmg * 0.4, dmg, 1 - d / radius));
+    for (const o of Zs.list.slice()) {
+      if (o === z || o.dead || o.type === 'boss') continue;
+      const od = U.dist(o.x, o.y, z.x, z.y);
+      if (od > radius || !M.los(z.x, z.y, o.x, o.y, M.blocksBullet)) continue;
+      Zs.damage(o, o.maxHp * B.zombieFrac * (1 - od / radius), { silent: true, explosive: true, dir: Math.atan2(o.y - z.y, o.x - z.x) });
+    }
+  }
+
   Zs.update = function (dt) {
     const P = GW.Player;
+    updateAcid(dt, P);
     const list = Zs.list;
     for (let i = list.length - 1; i >= 0; i--) {
       const z = list[i];
@@ -282,14 +494,29 @@
   Zs.damage = function (z, amount, info) {
     if (z.dead) return false;
     info = info || {};
-    if (GW.Game.timers.instakill > 0) amount = Math.max(amount, z.hp);
+    if (z.type === 'boss') amount = GW.Boss.adjustDamage(z, amount, info);
+    // helmets soak headshots: the crit bonus is lost until the helmet breaks
+    if (z.helmet > 0 && info.crit && !info.explosive && !info.melee) {
+      const base = amount / (info.critMult || 1);
+      z.helmet -= base;
+      z.flash = 0.08;
+      FX.sparks(z.x, z.y, (info.dir || 0) + Math.PI, 3, '#d8dce4', 220);
+      A.play('hit', { x: z.x, y: z.y });
+      if (z.helmet > 0) return false;
+      amount = -z.helmet;
+      z.helmet = 0;
+      FX.burst(z.x, z.y, 12, '#c8ccd6', 260);
+      A.play('helmetBreak', { x: z.x, y: z.y });
+      info = Object.assign({}, info, { crit: false });
+    }
+    if (GW.Game.timers.instakill > 0 && z.type !== 'boss') amount = Math.max(amount, z.hp);
     z.hp -= amount;
     z.flash = 0.1;
-    if (z.type !== 'brute') z.stun = Math.max(z.stun, 0.12);
+    if (z.type !== 'brute' && z.type !== 'boss' && !info.burn) z.stun = Math.max(z.stun, 0.12);
     const dir = info.dir === undefined ? Math.random() * U.TAU : info.dir;
     FX.blood(z.x, z.y, dir, info.crit ? 9 : 4, info.crit ? 320 : 220);
     A.play('hit', { x: z.x, y: z.y });
-    if (!info.explosive && z.type !== 'brute' && z.state === 'chase') {
+    if (!info.explosive && !info.burn && z.type !== 'brute' && z.type !== 'boss' && z.state === 'chase') {
       z.kx += Math.cos(dir) * 45;
       z.ky += Math.sin(dir) * 45;
     }
@@ -316,9 +543,20 @@
       z.window = null;
     }
 
+    if (z.type === 'bloater') {
+      const B = C.ZOMBIE.bloat;
+      bloaterBlast(z, info.burst ? B.radius : B.deathRadius, info.burst ? B.dmg : B.deathDmg);
+      if (!Zs.bloaterFuse && pos) {
+        Zs.bloaterFuse = true;
+        GW.Interact.dropFuse(pos.x, pos.y);
+      }
+    }
+    if (z.type === 'boss') GW.Boss.onDeath(z, pos);
+
     const P = GW.Player, Pt = C.POINTS;
     let pts = info.melee ? Pt.melee : info.crit ? Pt.crit : Pt.kill;
     if (z.type === 'brute') pts = Pt.brute;
+    else if (z.type === 'boss') pts = Pt.boss;
     else if (info.trap) pts = Pt.trap;
     else if (info.ally) pts = Pt.ally;
     if (!info.silent) GW.Game.addPoints(pts, z.x, z.y - z.r - 4, { crit: info.crit });

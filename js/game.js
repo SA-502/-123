@@ -19,6 +19,19 @@
     sentry: () => (GW.Player.sentryCarried = true),
     tactical: (type) => GW.Gadgets.give(GW.Player, type || 'cryo'),
     armor: () => (GW.Player.armor = GW.CFG.ARMOR.max),
+    round: (n) => {
+      GW.Zombies.list.slice().forEach((z) => GW.Zombies.kill(z, { silent: true }));
+      GW.Director.round = (n || 10) - 1;
+      GW.Director.state = 'intermission';
+      GW.Director.timer = 0.5;
+    },
+    spawn: (type, n) => {
+      const P = GW.Player;
+      for (let i = 0; i < (n || 1); i++) {
+        const pt = M.randomFloorNear(P.x, P.y, 200, 420);
+        if (pt) GW.Zombies.spawn(type || 'walker', { kind: 'point', x: pt.x, y: pt.y }, GW.Rounds.health(Math.max(1, GW.Director.round)), 'run');
+      }
+    },
   };
 
   /* ------------------------------------------------------------------ */
@@ -79,6 +92,7 @@
     GW.Allies.reset();
     GW.Facilities.reset();
     GW.Zombies.reset();
+    GW.Boss.reset();
     GW.Player.reset();
     GW.Interact.reset();
     GW.Director.reset();
@@ -125,6 +139,7 @@
     const P = GW.Player, D = GW.Director;
     const survived = Math.max(0, D.round - 1);
     A.play('gameOver');
+    A.setHorde(0);
     A.setPower(false);
     FX.flash = 0.5;
     $('game').classList.remove('playing');
@@ -177,12 +192,18 @@
 
     GW.Director.update(dt);
     GW.Zombies.update(dt);
+    GW.Boss.updateOrbs(dt);
     GW.Weapons.update(dt);
     GW.Gadgets.update(dt);
     GW.Allies.update(dt);
     GW.Facilities.update(dt);
     GW.Interact.update(dt);
     updateFlow(); // a door or shutter may have changed this step
+
+    // distant-horde ambience swells with the number of zombies nearby
+    let nearby = 0;
+    for (const z of GW.Zombies.list) if (U.dist(z.x, z.y, P.x, P.y) < 900) nearby++;
+    A.setHorde(Math.min(1, nearby / 14));
     FX.update(dt);
     GW.HUD.update(dt);
     In.endFrame();
