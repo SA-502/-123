@@ -34,6 +34,7 @@
       delete puNodes[k];
     }
     el.announce.classList.remove('show');
+    el.boss.classList.remove('on', 'stunned');
     el.vignette.style.opacity = 0;
     el.vignette.classList.remove('pulse');
     el.flash.style.opacity = 0;

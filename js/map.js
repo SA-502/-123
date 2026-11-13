@@ -274,7 +274,7 @@
       { zone: Z.HUB, tx: 21, ty: 20, fx: 1, fy: 0 },
       { zone: Z.ARCADE, tx: 2, ty: 24, fx: 1, fy: 0 },
       { zone: Z.AQUA, tx: 44, ty: 8, fx: -1, fy: 0 },
-      { zone: Z.SPEED, tx: 61, ty: 31, fx: -1, fy: 0 },
+      { zone: Z.SPEED, tx: 61, ty: 26, fx: -1, fy: 0 },
       { zone: Z.SUB, tx: 32, ty: 39, fx: 0, fy: 1 },
       { zone: Z.VAULT, tx: 38, ty: 36, fx: -1, fy: 0 },
       { zone: Z.FERRIS, tx: 88, ty: 5, fx: 0, fy: 1 },
@@ -290,8 +290,8 @@
     // hidden fuse spots (one fuse per generator is scattered among these every game)
     M.fuseSpots = [
       [22, 16], [41, 31], [3, 12], [16, 33], [8, 16], [20, 11], [43, 11], [15, 6], [48, 6],
-      [60, 33], [46, 33], [55, 41], [16, 47], [47, 47], [26, 38], [37, 38], [66, 6], [91, 35],
-      [73, 20], [66, 40], [91, 51], [71, 63], [84, 57], [14, 56], [21, 65], [49, 65], [32, 68],
+      [56, 30], [46, 33], [55, 41], [16, 47], [47, 47], [29, 35], [35, 35], [66, 6], [91, 35],
+      [73, 20], [75, 40], [89, 47], [71, 63], [84, 57], [14, 56], [21, 65], [49, 65], [32, 68],
     ].map(([tx, ty]) => ({ tx, ty, x: (tx + 0.5) * T, y: (ty + 0.5) * T, zone: M.zone[idx(tx, ty)] }));
 
     // ---- traps: a floor rectangle (tiles) plus a wall switch ----
