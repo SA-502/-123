@@ -48,9 +48,20 @@
   /* ================================================================== */
   /* floor layer                                                        */
   /* ================================================================== */
+  /** Per-zone darkening applied on top of delivered floor textures (index = zone id). */
+  const FLOOR_DIM = [0.18, 0.42, 0.18, 0.12, 0.38, 0.1, 0.32, 0.12, 0.12];
+
   function floorTile(g, x, y, z) {
     const px = x * T, py = y * T;
-    if (z >= 0 && GW.Assets.tile(g, 'floor_' + GW.Assets.ZONE_KEYS[z], x, y, T)) return;
+    if (z >= 0 && GW.Assets.tile(g, 'floor_' + GW.Assets.ZONE_KEYS[z], x, y, T)) {
+      // painted textures are brighter than the procedural floors: tone them down so zombies read clearly
+      const dim = FLOOR_DIM[z];
+      if (dim) {
+        g.fillStyle = 'rgba(6,3,16,' + dim + ')';
+        g.fillRect(px, py, T, T);
+      }
+      return;
+    }
     if (z === Z.HUB) {
       // weathered boardwalk planks
       for (let i = 0; i < 3; i++) {
