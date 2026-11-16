@@ -1,0 +1,35 @@
+# GRAVEWAVE on the Hostinger VPS. The VPS's existing Traefik (n8n project) provides HTTPS.
+# On every start the container fetches the latest game from GitHub, so "restart" = "update".
+services:
+  web:
+    image: node:22-alpine
+    container_name: gravewave-web
+    restart: always
+    command:
+      - sh
+      - -c
+      - >
+        apk add --no-cache git >/dev/null &&
+        rm -rf /srv/app &&
+        git clone --depth 1 --branch "$$GW_BRANCH" "$$GW_REPO" /srv/app &&
+        exec node /srv/app/server/server.js
+    environment:
+      - PORT=8080
+      - GW_REPO=${GW_REPO}
+      - GW_BRANCH=${GW_BRANCH}
+    networks:
+      - n8n_default
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=n8n_default
+      - traefik.http.services.gravewave.loadbalancer.server.port=8080
+      - traefik.http.routers.gravewave.rule=Host(`${GW_HOST}`)
+      - traefik.http.routers.gravewave.entrypoints=web,websecure
+      - traefik.http.routers.gravewave.tls=true
+      - traefik.http.routers.gravewave.tls.certresolver=mytlschallenge
+      - traefik.http.routers.gravewave.middlewares=gravewave-gzip@docker
+      - traefik.http.middlewares.gravewave-gzip.compress=true
+
+networks:
+  n8n_default:
+    external: true
