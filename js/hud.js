@@ -111,6 +111,7 @@
 
   /* ---------------- messages ---------------- */
   H.setPrompt = function (html) {
+    if (GW.Touch) GW.Touch.sync(GW.Player, !!html && html.indexOf('<span class="dim">') !== 0);
     if (last.prompt === html) return;
     last.prompt = html;
     if (html) el.prompt.innerHTML = html;

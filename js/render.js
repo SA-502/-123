@@ -33,10 +33,20 @@
     window.addEventListener('resize', R.resize);
   };
 
+  R.dprCap = 1.5;
+  R.pixelCap = 2.8e6;
+  /** Phones: fewer pixels and a slightly wider view so thumbs don't hide the action. */
+  R.setTouchProfile = function (on) {
+    R.dprCap = on ? 1.25 : 1.5;
+    R.pixelCap = on ? 1.6e6 : 2.8e6;
+    R.touch = on;
+    if (canvas) R.resize();
+  };
+
   R.resize = function () {
     const w = Math.max(320, window.innerWidth), h = Math.max(240, window.innerHeight);
-    let s = Math.min(window.devicePixelRatio || 1, 1.5);
-    if (w * h * s * s > 2.8e6) s = Math.sqrt(2.8e6 / (w * h));
+    let s = Math.min(window.devicePixelRatio || 1, R.dprCap);
+    if (w * h * s * s > R.pixelCap) s = Math.sqrt(R.pixelCap / (w * h));
     s *= R.quality; // lowered automatically if the frame rate struggles
     R.dpr = s;
     canvas.width = Math.round(w * s);
@@ -1807,7 +1817,7 @@
       ctx.fillStyle = 'rgba(40,200,230,' + 0.06 * R.lightsOut + ')';
       ctx.fillRect(0, 0, R.vw, R.vh);
     }
-    if (G.state === 'playing' && P.alive) drawCrosshair();
+    if (G.state === 'playing' && P.alive && !GW.Input.touch.active) drawCrosshair();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 })();

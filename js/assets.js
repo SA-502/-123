@@ -39,6 +39,10 @@
    * Resolves with the number of usable images; never rejects (offline, file://, missing manifest are all fine).
    */
   AS.load = function (onProgress) {
+    if (location.protocol === 'file:') {
+      AS.ready = true; // opened straight from disk: browsers block fetch here, use procedural art
+      return Promise.resolve(0);
+    }
     const timeout = new Promise((resolve) => setTimeout(resolve, 10000));
     const work = fetch(ROOT + 'manifest.json', { cache: 'no-cache' })
       .then((r) => (r.ok ? r.json() : null))

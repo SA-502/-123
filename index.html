@@ -2,7 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#07040f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Gravewave">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <title>GRAVEWAVE — Last Night at Lumina Pier</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -83,6 +90,23 @@
     </div>
   </div>
 
+  <!-- ===================== TOUCH CONTROLS (phones / tablets) ===================== -->
+  <div id="touch">
+    <div id="stick-l" class="stick-zone"><div class="stick-base"></div><div class="stick-knob"></div></div>
+    <div id="stick-r" class="stick-zone"><div class="stick-base"></div><div class="stick-knob"></div></div>
+    <div class="tbtns">
+      <button id="tb-use" class="tbtn big" data-key="KeyF">USE</button>
+      <button id="tb-reload" class="tbtn" data-key="KeyR">RELOAD</button>
+      <button id="tb-swap" class="tbtn" data-key="KeyQ">SWAP</button>
+      <button id="tb-nade" class="tbtn" data-key="KeyG">NADE</button>
+      <button id="tb-tac" class="tbtn" data-key="KeyT">TAC</button>
+      <button id="tb-knife" class="tbtn" data-key="KeyV">KNIFE</button>
+      <button id="tb-sentry" class="tbtn hidden" data-key="KeyX">SENTRY</button>
+    </div>
+    <button id="tb-pause" class="tbtn small" data-key="Escape">II</button>
+  </div>
+  <div id="rotate"><div>⟳</div><p>Turn your phone sideways to play</p></div>
+
   <!-- ===================== TITLE SCREEN ===================== -->
   <div id="menu" class="screen">
     <div class="title-wrap">
@@ -91,6 +115,8 @@
       <div class="subtitle">LAST NIGHT AT LUMINA PIER</div>
     </div>
     <button id="btn-start" class="neon-btn">START SHIFT</button>
+    <button id="btn-full" class="neon-btn alt hidden">FULL SCREEN</button>
+    <div class="touch-hint">Left thumb: move (push to the edge to sprint) · Right thumb: aim and shoot · USE appears when you can buy something</div>
     <div id="best"></div>
     <div class="controls">
       <div><b>W A S D</b> move</div>
@@ -141,6 +167,7 @@
 <script src="js/assets.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/input.js"></script>
+<script src="js/touch.js"></script>
 <script src="js/map.js"></script>
 <script src="js/mapart.js"></script>
 <script src="js/fx.js"></script>

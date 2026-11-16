@@ -3,7 +3,7 @@
   'use strict';
   const GW = window.GW, U = GW.U;
   const FX = (GW.FX = {});
-  const MAX_PARTS = 700;
+  FX.maxParts = 700; // lowered on touch devices
 
   FX.reset = function () {
     FX.parts = [];
@@ -20,7 +20,7 @@
   FX.reset();
 
   function part(p) {
-    if (FX.parts.length >= MAX_PARTS) FX.parts.shift();
+    if (FX.parts.length >= FX.maxParts) FX.parts.shift();
     FX.parts.push(p);
   }
 

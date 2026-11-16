@@ -222,25 +222,40 @@
     const PC = C.PLAYER;
     P.stats.time += dt;
 
-    // aim at the cursor
-    const mw = GW.Render.screenToWorld(In.mouse.x, In.mouse.y);
-    P.aimX = mw.x;
-    P.aimY = mw.y;
-    if (U.dist(P.x, P.y, mw.x, mw.y) > 6) P.angle = Math.atan2(mw.y - P.y, mw.x - P.x);
+    const TI = In.touch;
 
-    // movement input
+    // movement input: keys, or the left thumb stick (analog)
     let ix = (In.down('KeyD') || In.down('ArrowRight') ? 1 : 0) - (In.down('KeyA') || In.down('ArrowLeft') ? 1 : 0);
     let iy = (In.down('KeyS') || In.down('ArrowDown') ? 1 : 0) - (In.down('KeyW') || In.down('ArrowUp') ? 1 : 0);
-    const il = Math.hypot(ix, iy);
+    let il = Math.hypot(ix, iy), analog = 1;
+    if (TI.active && il === 0 && (TI.mx || TI.my)) {
+      ix = TI.mx;
+      iy = TI.my;
+      il = Math.hypot(ix, iy);
+      analog = U.clamp((Math.min(1, il) - 0.14) / 0.7, 0.35, 1);
+    }
     if (il > 0) {
       ix /= il;
       iy /= il;
     }
     P.moving = il > 0;
 
+    // aim: the cursor, or the right thumb stick (with gentle aim assist); thumbs-off faces where you walk
+    if (TI.active) {
+      if (TI.aiming) P.angle = GW.Touch.assist(P, Math.atan2(TI.ay, TI.ax));
+      else if (P.moving) P.angle += U.angDiff(P.angle, Math.atan2(iy, ix)) * Math.min(1, dt * 12);
+      P.aimX = P.x + Math.cos(P.angle) * 260;
+      P.aimY = P.y + Math.sin(P.angle) * 260;
+    } else {
+      const mw = GW.Render.screenToWorld(In.mouse.x, In.mouse.y);
+      P.aimX = mw.x;
+      P.aimY = mw.y;
+      if (U.dist(P.x, P.y, mw.x, mw.y) > 6) P.angle = Math.atan2(mw.y - P.y, mw.x - P.x);
+    }
+
     let w = P.weapon();
     const firing = In.mouse.down && w && w.clip > 0 && w.reloadT <= 0;
-    const wantSprint = (In.down('ShiftLeft') || In.down('ShiftRight')) && P.moving && !firing;
+    const wantSprint = (In.down('ShiftLeft') || In.down('ShiftRight') || (TI.active && TI.sprint)) && P.moving && !firing;
     if (wantSprint && P.stamina > 0 && !P.exhausted) {
       P.sprinting = true;
       P.stamina -= dt;
@@ -258,8 +273,8 @@
 
     const speed = (P.sprinting ? PC.sprintSpeed : PC.walkSpeed) * (P.perks.burner ? 1.1 : 1) * (w ? w.s.move : 1);
     const k = 1 - Math.exp(-dt * 16);
-    P.vx += (ix * speed - P.vx) * k;
-    P.vy += (iy * speed - P.vy) * k;
+    P.vx += (ix * speed * analog - P.vx) * k;
+    P.vy += (iy * speed * analog - P.vy) * k;
     M.moveCircle(P, P.vx * dt, P.vy * dt, M.solidForPlayer);
     if (P.moving) P.walkT += dt * (P.sprinting ? 15 : 10);
 

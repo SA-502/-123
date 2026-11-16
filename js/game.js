@@ -281,6 +281,7 @@
   function boot() {
     const canvas = $('view');
     In.init(canvas);
+    GW.Touch.init();
     GW.HUD.init();
     M.build();
     GW.MapArt.build();
@@ -320,6 +321,11 @@
     });
 
     requestAnimationFrame(frame);
+
+    // installable app + offline play (needs https, or localhost while developing)
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
 
     // optional art from the art agent: apply it as soon as it arrives (the game never waits for it)
     GW.Assets.load().then((n) => {

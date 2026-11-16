@@ -5,7 +5,7 @@
   const I = (GW.Interact = { list: [], powerups: [], powerOn: false, powerLevel: 0, box: null, pap: null });
   const RANGE = 42; // max distance from the player's centre to an interactable's bounds
 
-  const key = (k) => '<span class="key">' + k + '</span>';
+  const key = (k) => '<span class="key" data-k="' + k + '">' + k + '</span>';
   const cost = (c) => '<span class="cost' + (GW.Player.points < c ? ' poor' : '') + '">[' + c + ']</span>';
   const ok = (html) => ({ html, ok: true });
   const info = (html) => ({ html: '<span class="dim">' + html + '</span>', ok: false });

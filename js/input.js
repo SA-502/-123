@@ -77,5 +77,9 @@
     In.pressed = {};
     In.mouse.down = In.mouse.pressed = In.mouse.rdown = In.mouse.rpressed = false;
     In.wheel = 0;
+    if (In.touch) {
+      In.touch.mx = In.touch.my = 0;
+      In.touch.aiming = In.touch.fire = In.touch.sprint = false;
+    }
   };
 })();
