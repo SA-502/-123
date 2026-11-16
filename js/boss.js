@@ -56,6 +56,13 @@
     FX.light(pt.x, pt.y, 500, '#ff3b4e', 0.8);
     FX.shake(12);
     A.play('bossRoar', { x: pt.x, y: pt.y });
+    // intro card from the art agent, if delivered
+    const card = GW.Assets.get('boss_card'), el = document.getElementById('boss-card');
+    if (card && el) {
+      el.src = card.src;
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 2600);
+    }
     return z;
   };
 

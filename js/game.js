@@ -5,7 +5,7 @@
   const G = (GW.Game = { state: 'menu', timers: { double: 0, instakill: 0 }, time: 0 });
   const $ = (id) => document.getElementById(id);
   const BEST_KEY = 'gravewave.best';
-  let lastTs = 0, slowFrames = 0;
+  let lastTs = 0;
 
   /** Console helpers for testing / cheating: GW.debug.give(5000), GW.debug.power(), GW.debug.god = true */
   GW.debug = {
@@ -181,6 +181,7 @@
   /* ------------------------------------------------------------------ */
   G.update = function (dt) {
     const P = GW.Player;
+    snapshotPositions();
     G.time += dt;
     if (G.timers.double > 0) G.timers.double = Math.max(0, G.timers.double - dt);
     if (G.timers.instakill > 0) G.timers.instakill = Math.max(0, G.timers.instakill - dt);
@@ -216,36 +217,62 @@
     if (M.flowDirty || tx !== M.flowTx || ty !== M.flowTy) M.computeFlow(goal.x, goal.y);
   }
 
+  /**
+   * Main loop: the simulation always advances in fixed 1/60 s steps (stable physics, and the
+   * same tick rate the co-op host will use). Rendering runs at the display's refresh rate and
+   * draws moving things interpolated between the last two steps, so 60/120/144 Hz screens stay smooth.
+   */
+  const STEP = 1 / 60;
+  let acc = 0;
+  G.alpha = 1;
+  /** Remember where things were at the start of this step, for render interpolation. */
+  function snapshotPositions() {
+    const P = GW.Player;
+    P.px = P.x;
+    P.py = P.y;
+    for (const z of GW.Zombies.list) {
+      z.px = z.x;
+      z.py = z.y;
+      z.pa = z.angle;
+    }
+    const AL = GW.Allies;
+    if (AL.pal) {
+      AL.pal.px = AL.pal.x;
+      AL.pal.py = AL.pal.y;
+    }
+  }
+
   function frame(ts) {
     requestAnimationFrame(frame);
-    let dt = lastTs ? (ts - lastTs) / 1000 : 1 / 60;
+    let dt = lastTs ? (ts - lastTs) / 1000 : STEP;
     lastTs = ts;
     if (dt > 0.1) dt = 0.1; // tab was hidden; don't fast-forward
+    const t0 = performance.now();
     if (G.state === 'playing') {
-      let acc = dt;
-      while (acc > 1e-5 && G.state === 'playing') {
-        const step = Math.min(acc, 1 / 30);
-        G.update(step);
-        acc -= step;
+      acc += dt;
+      let steps = 0;
+      while (acc >= STEP && G.state === 'playing') {
+        G.update(STEP);
+        acc -= STEP;
+        if (++steps >= 6) {
+          acc = 0; // far behind (slow device or a hitch): drop time rather than spiral
+          break;
+        }
       }
+      G.alpha = U.clamp(acc / STEP, 0, 1);
     } else {
+      acc = 0;
+      G.alpha = 1;
       if (G.state === 'gameover') {
         FX.update(dt);
         GW.HUD.update(dt);
       }
       In.endFrame();
     }
+    const t1 = performance.now();
     GW.Render.draw(dt);
-
-    // adaptive resolution: if frames stay slow for a couple of seconds, render fewer pixels
-    if (G.state === 'playing') {
-      slowFrames = dt > 0.03 ? slowFrames + 1 : Math.max(0, slowFrames - 2);
-      if (slowFrames > 90 && GW.Render.quality > 0.55) {
-        GW.Render.quality *= 0.8;
-        GW.Render.resize();
-        slowFrames = 0;
-      }
-    }
+    const t2 = performance.now();
+    GW.Perf.frame(dt, t1 - t0, t2 - t1, G.state === 'playing');
   }
 
   /* ------------------------------------------------------------------ */
@@ -268,6 +295,9 @@
     $('btn-resume').addEventListener('click', G.resume);
     $('vol-music').addEventListener('input', (e) => A.setMusicVol(e.target.value / 100));
     $('vol-sfx').addEventListener('input', (e) => A.setSfxVol(e.target.value / 100));
+    $('opt-fps').checked = GW.Perf.show;
+    $('opt-fps').addEventListener('change', (e) => GW.Perf.toggle(e.target.checked));
+    GW.Perf.toggle(GW.Perf.show);
     // any click wakes the audio context (browsers require a user gesture)
     window.addEventListener('pointerdown', () => A.init(), { passive: true });
 
@@ -275,6 +305,8 @@
       if (code === 'Escape' || code === 'KeyP') {
         if (G.state === 'playing') G.pause();
         else if (G.state === 'paused') G.resume();
+      } else if (code === 'F3' || code === 'Backquote') {
+        GW.Perf.toggle();
       } else if (code === 'KeyM') {
         const on = A.toggleMusic();
         if (G.state === 'playing') G.announce(on ? 'MUSIC ON' : 'MUSIC OFF', '', '#19f0ff');
@@ -288,6 +320,30 @@
     });
 
     requestAnimationFrame(frame);
+
+    // optional art from the art agent: apply it as soon as it arrives (the game never waits for it)
+    GW.Assets.load().then((n) => {
+      if (!n) return;
+      const bg = GW.Assets.get('title_bg'), logo = GW.Assets.get('logo');
+      if (bg) {
+        $('menu').style.backgroundImage = 'linear-gradient(180deg, rgba(4,2,12,0.55), rgba(20,4,36,0.25) 45%, rgba(4,2,12,0.85)), url(' + bg.src + ')';
+        $('menu').style.backgroundSize = 'cover';
+        $('menu').style.backgroundPosition = 'center';
+      }
+      if (logo) {
+        const img = document.createElement('img');
+        img.src = logo.src;
+        img.alt = 'GRAVEWAVE';
+        img.className = 'logo-img';
+        const wrap = document.querySelector('.title-wrap');
+        wrap.querySelector('.title').classList.add('hidden');
+        wrap.querySelector('.title-sun').classList.add('hidden');
+        wrap.insertBefore(img, wrap.firstChild);
+      }
+      // rebuild the map layers with the delivered textures, if no game is running yet
+      if (G.state === 'menu') GW.MapArt.build();
+      GW.HUD.perksChanged();
+    });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

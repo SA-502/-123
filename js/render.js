@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const GW = window.GW, U = GW.U, C = GW.CFG, M = GW.Map, FX = GW.FX, Art = GW.Art, T = C.TILE;
-  const R = (GW.Render = { cam: { x: M.pxW / 2, y: M.pxH / 2, zoom: 1 }, vw: 0, vh: 0, dpr: 1, quality: 1, time: 0, ox: 0, oy: 0, lightsOut: 0, dim: 1, inGame: false, amb: 0 });
+  const R = (GW.Render = { cam: { x: M.pxW / 2, y: M.pxH / 2, zoom: 1 }, vw: 0, vh: 0, dpr: 1, quality: 1, maxQuality: 1, time: 0, ox: 0, oy: 0, lightsOut: 0, dim: 1, inGame: false, amb: 0 });
   /** Light level 0..1 of a zone this frame (its generator, flicker, and special-round blackouts). */
   const lv = (z) => (!R.inGame ? 1 : z < 0 || z === undefined ? 0 : GW.Interact.zoneLevel[z] || 0) * R.dim;
   const WH = 16;
@@ -791,6 +791,15 @@
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.translate(0, -8 - lift);
+      if (GW.Assets.drawFit(ctx, open ? 'box_open' : 'box_closed', x + 2, y - 2, w - 4, h - 4)) {
+        if (open) {
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.fillStyle = U.rgba(b.state === 'jester' ? '#ff3b4e' : '#ffe14d', 0.18 + 0.12 * Math.sin(R.time * 12));
+          ctx.fillRect(x + 8, y + 3, w - 16, h - 16);
+        }
+        ctx.restore();
+        return;
+      }
       // crate body
       ctx.fillStyle = '#3d2616';
       ctx.fillRect(x + 5, y, w - 10, h - 10);
@@ -825,6 +834,15 @@
     if (!inView(pm.x, pm.y, 160)) return;
     const x = pm.tx * T, y = pm.ty * T - WH, w = pm.w * T, h = pm.h * T;
     const shake = k.state === 'working' ? U.rand(-1.2, 1.2) : 0;
+    if (GW.Assets.get('pap')) {
+      ctx.save();
+      ctx.translate(shake, 0);
+      ctx.fillStyle = '#12081a';
+      ctx.fillRect(x, y + h, w, WH);
+      GW.Assets.drawFit(ctx, 'pap', x, y, w, h);
+      ctx.restore();
+      return;
+    }
     ctx.save();
     ctx.translate(shake, 0);
     ctx.fillStyle = '#12081a';
@@ -1692,7 +1710,44 @@
   /* ------------------------------------------------------------------ */
   /* frame                                                              */
   /* ------------------------------------------------------------------ */
+  /** Draw moving things between their last two simulation steps (see the fixed-step loop in game.js). */
+  const lerped = [];
+  function lerpIn(a) {
+    lerped.length = 0;
+    const take = (e) => {
+      if (!e || e.px === undefined) return;
+      const dx = e.x - e.px, dy = e.y - e.py;
+      if (dx * dx + dy * dy > 90 * 90) return; // teleported this step: don't smear
+      lerped.push(e, e.x, e.y, e.angle);
+      e.x = e.px + dx * a;
+      e.y = e.py + dy * a;
+      if (e.pa !== undefined) e.angle = e.pa + U.angDiff(e.pa, e.angle) * a;
+    };
+    take(GW.Player);
+    for (const z of GW.Zombies.list) take(z);
+    take(GW.Allies.pal);
+  }
+  function lerpOut() {
+    for (let i = 0; i < lerped.length; i += 4) {
+      const e = lerped[i];
+      e.x = lerped[i + 1];
+      e.y = lerped[i + 2];
+      e.angle = lerped[i + 3];
+    }
+    lerped.length = 0;
+  }
+
   R.draw = function (dt) {
+    const interp = GW.Game.state === 'playing' && GW.Game.alpha < 1;
+    if (interp) lerpIn(GW.Game.alpha);
+    try {
+      drawFrame(dt);
+    } finally {
+      if (interp) lerpOut();
+    }
+  };
+
+  function drawFrame(dt) {
     R.time += dt;
     const G = GW.Game, P = GW.Player, I = GW.Interact, MA = GW.MapArt, Zs = GW.Zombies, D = GW.Director;
     if (!MA.floor) return;
@@ -1754,5 +1809,5 @@
     }
     if (G.state === 'playing' && P.alive) drawCrosshair();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-  };
+  }
 })();

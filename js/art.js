@@ -401,7 +401,9 @@
     c.width = c.height = size * 2;
     const g = c.getContext('2d');
     g.scale(2, 2);
-    if (kind === 'perk') Art.perkIcon(g, id, size / 2, size / 2, size * 0.94);
+    const pic = kind === 'perk' && GW.Assets && GW.Assets.get('perk_icon_' + id);
+    if (pic) g.drawImage(pic, 0, 0, size, size);
+    else if (kind === 'perk') Art.perkIcon(g, id, size / 2, size / 2, size * 0.94);
     else if (kind === 'gadget') Art.gadgetIcon(g, id, size / 2, size / 2, size * 0.9);
     else Art.powerupIcon(g, id, size / 2, size / 2, size * 0.9);
     return c;

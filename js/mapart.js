@@ -50,6 +50,7 @@
   /* ================================================================== */
   function floorTile(g, x, y, z) {
     const px = x * T, py = y * T;
+    if (z >= 0 && GW.Assets.tile(g, 'floor_' + GW.Assets.ZONE_KEYS[z], x, y, T)) return;
     if (z === Z.HUB) {
       // weathered boardwalk planks
       for (let i = 0; i < 3; i++) {
@@ -183,6 +184,7 @@
 
   function waterTile(g, x, y) {
     const px = x * T, py = y * T;
+    if (GW.Assets.tile(g, 'water', x, y, T)) return;
     const h = U.hash(x, y, 31);
     g.fillStyle = 'hsl(' + (212 + h * 10) + ',70%,' + (7 + h * 2.5) + '%)';
     g.fillRect(px, py, T, T);
@@ -216,6 +218,10 @@
       }
     // moored boats
     for (const [bx, by, rot, col] of [[27, 61, 0.15, '#c22a3a'], [41, 62, -0.1, '#e8e4d8'], [56, 60, 0.3, '#2c7fb8'], [12, 63, -0.2, '#e8e4d8']]) {
+      if (GW.Assets.get('boat')) {
+        GW.Assets.drawFit(g, 'boat', bx * T - 1.5 * T, by * T - 0.5 * T, 3 * T, T, rot + Math.PI / 2);
+        continue;
+      }
       g.save();
       g.translate(bx * T, by * T);
       g.rotate(rot + Math.PI / 2);
@@ -422,6 +428,14 @@
 
   function drawLowProp(g, p) {
     const x = p.tx * T, y = p.ty * T, w = p.w * T, h = p.h * T;
+    if (GW.Assets.get(p.kind)) {
+      g.save();
+      g.fillStyle = 'rgba(0,0,0,0.42)';
+      g.fillRect(x + 5, y + 7, w - 4, h - 4);
+      g.restore();
+      GW.Assets.drawFit(g, p.kind, x, y, w, h, p.rot || 0);
+      return;
+    }
     g.save();
     if (p.kind === 'coffin') {
       g.fillStyle = 'rgba(0,0,0,0.45)';
@@ -697,6 +711,21 @@
   /* ================================================================== */
   function tallProp(g, p, neon) {
     const x = p.tx * T, y = p.ty * T - WH, w = p.w * T, h = p.h * T;
+    const imgKey = p.kind === 'perk' ? 'perk_' + p.perk : p.kind;
+    if (p.kind !== 'box' && p.kind !== 'pap' && GW.Assets.get(imgKey)) {
+      if (!neon) {
+        g.fillStyle = '#0b0712';
+        g.fillRect(x, y + h, w, WH); // front face keeps the sense of height
+        GW.Assets.drawFit(g, imgKey, x, y, w, h);
+      } else if (p.kind === 'perk') {
+        g.save();
+        g.globalAlpha = 0.35;
+        g.fillStyle = GW.PERKS[p.perk].color;
+        g.fillRect(x + 6, y + h + 5, w - 12, 4);
+        g.restore();
+      }
+      return;
+    }
     const box = (roof, face) => {
       if (neon) return;
       g.fillStyle = face;
@@ -995,6 +1024,12 @@
       for (let x = 0; x < M.W; x++) {
         if (!isWall(x, y)) continue;
         const h = U.hash(x, y, 12);
+        const wt = GW.Assets.get('wall_top');
+        if (wt) {
+          const n = Math.max(1, Math.round(wt.naturalWidth / 96));
+          g.drawImage(wt, (x % n) * 96, (y % n) * 96, 96, 96, x * T, y * T - WH, T, T + 0.5);
+          continue;
+        }
         g.fillStyle = 'hsl(252,32%,' + (5.2 + h * 1.6) + '%)';
         g.fillRect(x * T, y * T - WH, T, T + 0.5);
         if (h < 0.08) {
