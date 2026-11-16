@@ -4,7 +4,9 @@ An original round-based zombie survival game for the browser. Top-down HTML5 Can
 
 ## Play
 
-Open `index.html` in a desktop browser (Chrome, Edge, Firefox or Safari). Keyboard and mouse required.
+**Online:** https://game.srv2082532.hstgr.cloud — works on desktop (keyboard + mouse) and on phones (touch). On a phone, play in landscape; use **Add to Home Screen** to install it and open it full screen.
+
+**Locally:** open `index.html` in a desktop browser (Chrome, Edge, Firefox or Safari).
 
 Or serve the folder:
 
@@ -15,6 +17,9 @@ python3 -m http.server 8000
 then visit `http://localhost:8000`.
 
 ## Controls
+
+On touch screens the left thumb moves (push the stick to its rim to sprint) and the right thumb aims and fires, with a gentle aim assist. USE lights up when there is something to buy; hold it to rebuild a barricade. RELOAD, SWAP, NADE, TAC, KNIFE, SENTRY and pause are on-screen buttons.
+
 
 | Input | Action |
 | --- | --- |
@@ -89,3 +94,15 @@ Tactical grenades refill by one each round, and Full Reload restocks them.
 `GW.debug` in the console exposes test helpers (`give(n)`, `power()`, `openAll()`, `weapon(id)`, `pal()`, `sentry()`, `tactical(type)`, `armor()`, `fuse(n)`, `round(n)`, `spawn(type, n)`, `god`).
 
 `python3 tools/bundle.py out.html` inlines everything into a single page for hosting.
+
+## Server (Hostinger VPS)
+
+`server/server.js` is a dependency-free Node server that serves only the public game files. `server/docker-compose.yml` runs it as the `gravewave` Docker project on the VPS, behind the existing Traefik proxy, which provides HTTPS for `game.srv2082532.hstgr.cloud`. The container clones the latest commit of the branch on every start, so **restarting the project deploys the newest version**.
+
+## Performance
+
+The simulation runs in fixed 1/60 s steps and rendering interpolates between them. Press **F3** (or tick *Show FPS* in the pause menu) for a frame-rate meter; resolution adapts automatically to hold 60 fps.
+
+## Art
+
+Environment and UI images are produced by a separate art agent following `docs/ART_BRIEF.md` (task: `docs/GEMINI_TASK.md`). They live in `assets/` with `assets/manifest.json`; any missing image falls back to the procedural art.
