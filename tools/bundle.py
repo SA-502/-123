@@ -17,7 +17,12 @@ body = re.sub(r'<script src="js/[^"]+"></script>\s*', '', body)
 js = '\n'.join('/* ---- %s ---- */\n%s' % (f, (root / f).read_text()) for f in scripts)
 if '</script' in js:
     sys.exit('script source contains "</script", cannot inline safely')
-fonts = re.findall(r'<link[^>]+fonts\.(?:googleapis|gstatic)[^>]*>', html)
-out = '<title>Gravewave</title>\n%s\n<style>\n%s\n</style>\n%s\n<script>\n%s\n</script>\n' % ('\n'.join(fonts), css, body.strip(), js)
+# fonts are separate files next to the page; in a single-file bundle they are embedded as data URIs
+import base64
+def embed(m):
+    data = (root / 'fonts' / m.group(1)).read_bytes()
+    return 'url("data:font/woff2;base64,%s")' % base64.b64encode(data).decode()
+css = re.sub(r'url\("\.\./fonts/([^"]+)"\)', embed, css)
+out = '<title>Gravewave</title>\n<style>\n%s\n</style>\n%s\n<script>\n%s\n</script>\n' % (css, body.strip(), js)
 Path(sys.argv[1]).write_text(out)
 print('wrote %s (%d bytes, %d scripts)' % (sys.argv[1], len(out), len(scripts)))
