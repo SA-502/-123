@@ -12,12 +12,34 @@
 <link rel="apple-touch-icon" href="assets/ui/icon_192.png">
 <link rel="icon" href="assets/ui/icon_192.png">
 <title>GRAVEWAVE — Last Night at Lumina Pier</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Monoton&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="preload" href="fonts/orbitron-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/monoton-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+<script>
+/* If the game can't start (blocked script, old browser, bad network) say so on screen, so a screenshot tells us why. */
+(function () {
+  var shown = false;
+  function show(msg) {
+    if (shown || !document.body) return;
+    shown = true;
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99;padding:12px 16px;background:#7a0a1c;color:#fff;font:13px/1.5 monospace;white-space:pre-wrap;word-break:break-all';
+    d.textContent = 'GRAVEWAVE could not start\n' + msg + '\n(' + navigator.userAgent + ')';
+    document.body.appendChild(d);
+  }
+  window.addEventListener('error', function (e) {
+    var t = e.target;
+    if (t && t !== window && (t.src || t.href)) show('Failed to load: ' + (t.src || t.href));
+    else show((e.message || 'error') + (e.filename ? '\n' + e.filename + ':' + e.lineno : ''));
+  }, true);
+  window.addEventListener('unhandledrejection', function (e) { if (!window.GW || !GW.Game) show(String(e.reason)); });
+  setTimeout(function () {
+    if (!(window.GW && GW.Game)) show('The game files did not finish loading.\nCheck the connection and reload the page.');
+  }, 15000);
+})();
+</script>
 <div id="game">
   <canvas id="view"></canvas>
   <div id="vignette"></div>

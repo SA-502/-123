@@ -25,9 +25,10 @@ const TYPES = {
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
+  '.txt': 'text/plain; charset=utf-8',
 };
 // only the game itself is public; never the server code, docs, tools or git metadata
-const PUBLIC_DIRS = new Set(['', 'css', 'js', 'icons', 'assets']);
+const PUBLIC_DIRS = new Set(['', 'css', 'js', 'icons', 'assets', 'fonts']);
 
 function send(res, code, body, type) {
   res.writeHead(code, { 'Content-Type': type || 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });

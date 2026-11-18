@@ -322,6 +322,15 @@
 
     requestAnimationFrame(frame);
 
+    // the neon signs are baked into the map art: redo them once the site's own fonts have arrived
+    if (document.fonts && document.fonts.load) {
+      Promise.all([document.fonts.load('900 16px Orbitron'), document.fonts.load('400 20px Monoton')])
+        .then(() => {
+          if (G.state === 'menu') GW.MapArt.build();
+        })
+        .catch(() => {});
+    }
+
     // installable app + offline play (needs https, or localhost while developing)
     if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
