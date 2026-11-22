@@ -132,18 +132,20 @@
 
   <!-- ===================== TITLE SCREEN ===================== -->
   <div id="menu" class="screen">
+    <button id="btn-lang" class="lang-btn">عربي</button>
     <div class="title-wrap">
       <div class="title-sun"></div>
       <h1 class="title">GRAVEWAVE</h1>
       <div class="subtitle">LAST NIGHT AT LUMINA PIER</div>
     </div>
     <button id="btn-start" class="neon-btn">START SHIFT</button>
-    <button id="btn-coop" class="neon-btn coop">CO-OP · لعب جماعي</button>
+    <button id="btn-coop" class="neon-btn coop">CO-OP</button>
     <button id="btn-full" class="neon-btn alt hidden">FULL SCREEN</button>
     <div id="ios-tip" class="hidden">
-      <b>Full screen on iPhone · شاشة كاملة في الآيفون</b>
-      <span>Tap <i class="share-ico"></i> Share, then <b>Add to Home Screen</b>, and open GRAVEWAVE from its icon.</span>
-      <span dir="rtl">اضغط زر المشاركة <i class="share-ico"></i> ثم «إضافة إلى الشاشة الرئيسية»، وافتح اللعبة من الأيقونة.</span>
+      <b class="only-en">Full screen on iPhone</b>
+      <span class="only-en">Tap <i class="share-ico"></i> Share, then <b>Add to Home Screen</b>, and open GRAVEWAVE from its icon.</span>
+      <b class="only-ar">شاشة كاملة في الآيفون</b>
+      <span class="only-ar">اضغط زر المشاركة <i class="share-ico"></i> ثم «إضافة إلى الشاشة الرئيسية»، وافتح اللعبة من الأيقونة.</span>
     </div>
     <div class="touch-hint">Left thumb: move (push to the edge to sprint) · Right thumb: aim and shoot · USE appears when you can buy something</div>
     <div id="best"></div>
@@ -167,24 +169,24 @@
   <!-- ===================== CO-OP LOBBY ===================== -->
   <div id="lobby" class="screen hidden">
     <h2 class="screen-head">CO-OP</h2>
-    <div class="lobby-sub">Up to 4 players against the horde · لعب جماعي ضد الزومبي</div>
+    <div class="lobby-sub">Up to 4 players against the horde</div>
     <div id="lobby-pick">
-      <button id="btn-host" class="neon-btn">HOST A GAME · أنشئ لعبة</button>
+      <button id="btn-host" class="neon-btn">CREATE ROOM</button>
       <div class="join-row">
         <input id="join-code" maxlength="4" placeholder="CODE" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" inputmode="text">
-        <button id="btn-join" class="neon-btn alt">JOIN · انضم</button>
+        <button id="btn-join" class="neon-btn alt">JOIN</button>
       </div>
     </div>
     <div id="lobby-room" class="hidden">
-      <div class="room-label">ROOM CODE · كود الغرفة</div>
+      <div class="room-label">ROOM CODE</div>
       <div id="room-code">----</div>
       <div id="room-players"></div>
       <div id="room-hint" class="dim"></div>
-      <button id="btn-coop-start" class="neon-btn">START GAME · ابدأ</button>
+      <button id="btn-coop-start" class="neon-btn">START GAME</button>
       <div id="room-wait" class="dim"></div>
     </div>
     <div id="lobby-msg"></div>
-    <button id="btn-lobby-back" class="neon-btn alt small-btn">BACK · رجوع</button>
+    <button id="btn-lobby-back" class="neon-btn alt small-btn">BACK</button>
   </div>
 
   <!-- ===================== PAUSE ===================== -->
@@ -215,6 +217,7 @@
 
 <script src="js/utils.js"></script>
 <script src="js/config.js"></script>
+<script src="js/i18n.js"></script>
 <script src="js/art.js"></script>
 <script src="js/assets.js"></script>
 <script src="js/audio.js"></script>

@@ -182,8 +182,8 @@
     const lead = N.leader === N.myId;
     $('btn-coop-start').classList.toggle('hidden', !lead);
     $('room-wait').classList.toggle('hidden', lead);
-    $('room-wait').textContent = lead ? '' : 'Waiting for ' + N.label(N.leader) + ' to start… · بانتظار ' + N.label(N.leader);
-    $('room-hint').textContent = lead ? (N.lobby.length < 2 ? 'Tell your friends this code · أعط أصحابك الكود' : 'Ready when you are · جاهزين') : '';
+    $('room-wait').textContent = lead ? '' : 'Waiting for ' + N.label(N.leader) + ' to start…';
+    $('room-hint').textContent = lead ? (N.lobby.length < 2 ? 'Tell your friends this code' : 'Ready when you are') : '';
   }
   function openLobby() {
     $('menu').classList.add('hidden');
@@ -207,7 +207,7 @@
     $('btn-host').addEventListener('click', () => connect(() => send({ t: 'create' })));
     const join = () => {
       const code = $('join-code').value.toUpperCase().replace(/[^A-Z]/g, '');
-      if (code.length !== 4) return lobbyMsg('Enter the 4-letter code · اكتب الكود (4 حروف)');
+      if (code.length !== 4) return lobbyMsg('Enter the 4-letter code');
       $('join-code').blur();
       connect(() => send({ t: 'join', code }));
     };
@@ -284,7 +284,7 @@
         closeSocket();
         backToMenu();
         openLobby();
-        lobbyMsg('The host left the game · المضيف طلع');
+        lobbyMsg('Connection lost');
         return;
       case 'start':
         if (!N.serverMode) startGame(m.seed, m.players);
@@ -603,7 +603,7 @@
     FX.burst(P.x, P.y, 34, P.jacket || '#23aebf', 320);
     FX.flash = 0.4;
     A.play('gameOver');
-    GW.Game.announce("YOU'RE DOWN", 'Back next round if your team survives · ترجع الجولة الجاية', '#ff3b4e');
+    GW.Game.announce("YOU'RE DOWN", 'Back next round if your team survives', '#ff3b4e');
     sendState(true);
   };
 

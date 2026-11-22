@@ -1397,6 +1397,7 @@
   /* emissive pass (drawn after the darkness, so it always glows)       */
   /* ------------------------------------------------------------------ */
   function label(text, x, y, size, color, alpha) {
+    if (GW.L) text = GW.L.t(text);
     ctx.font = '900 ' + size + 'px ' + FONT;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
