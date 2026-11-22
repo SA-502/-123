@@ -1,6 +1,6 @@
 /*
  * GRAVEWAVE server: serves the game's static files. Runs behind the VPS's Traefik proxy, which
- * handles HTTPS. No dependencies (Node 18+). Also relays co-op games over WebSocket (/ws).
+ * handles HTTPS. No dependencies (Node 18+). Also hosts co-op games over WebSocket (/ws): see sim.js.
  *
  *   PORT=8080 node server/server.js
  */
@@ -75,22 +75,25 @@ const server = http.createServer((req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
-/* co-op: a tiny WebSocket relay (no dependencies)                    */
+/* co-op: rooms, a tiny WebSocket layer (no dependencies) and one     */
+/* server-side game per room                                          */
 /* ------------------------------------------------------------------ */
 /*
- * Rooms of up to 4 players. The first player hosts: their browser runs the zombies and rounds,
- * the others send their own moves and shots. This server only creates rooms and forwards
- * messages between the players in a room.
+ * Rooms of up to 4 players. The server itself runs each room's game (server/sim.js): rounds,
+ * spawns and every zombie. Phones send their own moves and shots and draw what the server sends.
+ * The first player in a room is its leader and starts the game; if they leave, the next one leads.
  *
- * client -> server   {t:'create'} | {t:'join', code} | {t:'ping'} | any game message with `to`
- *                    (omitted = everyone else in the room, 'host' = the host, a number = one player)
- * server -> client   {t:'created', code, id} | {t:'joined', code, id, players} | {t:'err', msg}
- *                    {t:'peer+', id} | {t:'peer-', id} | {t:'hostleft'} | game messages with `from`
+ * client -> server   {t:'create'} | {t:'join', code} | {t:'start'} | {t:'ping'} | game messages with `to`
+ *                    (omitted = everyone else in the room incl. the server game, 'host' = the server game,
+ *                    a number = one player)
+ * server -> client   {t:'created'|'joined', code, id, players, leader} | {t:'leader', id} | {t:'err', msg}
+ *                    {t:'peer+', id} | {t:'peer-', id} | {t:'start', seed, players} | game messages with `from`
  */
 const crypto = require('crypto');
+const { Sim } = require('./sim');
 const MAX_PLAYERS = 4;
 const MAX_FRAME = 256 * 1024;
-const rooms = new Map(); // code -> { code, host: client, clients: Map<id, client>, nextId, started }
+const rooms = new Map(); // code -> { code, clients: Map<id, client>, leader, nextId, sim }
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I / O: easy to read out loud
 
 function newCode() {
@@ -136,6 +139,11 @@ function wsControl(cl, op, payload) {
   }
 }
 
+function stopGame(room) {
+  if (room.sim) room.sim.stop();
+  room.sim = null;
+}
+
 function leave(cl) {
   if (cl.closed) return;
   cl.closed = true;
@@ -146,16 +154,51 @@ function leave(cl) {
   }
   const room = cl.room;
   if (!room) return;
+  cl.room = null;
   room.clients.delete(cl.id);
-  if (room.host === cl) {
-    for (const o of room.clients.values()) {
-      wsSend(o, { t: 'hostleft' });
-      o.room = null;
-    }
+  if (!room.clients.size) {
+    stopGame(room);
     rooms.delete(room.code);
-  } else {
-    for (const o of room.clients.values()) wsSend(o, { t: 'peer-', id: cl.id });
+    return;
   }
+  for (const o of room.clients.values()) wsSend(o, { t: 'peer-', id: cl.id });
+  if (room.sim) room.sim.receive({ t: 'peer-', id: cl.id });
+  if (room.leader === cl.id) {
+    room.leader = Math.min(...room.clients.keys());
+    for (const o of room.clients.values()) wsSend(o, { t: 'leader', id: room.leader });
+  }
+}
+
+/** Deliver a message from the room's game (player 0) to the players. */
+function fromGame(room, text) {
+  let m;
+  try {
+    m = JSON.parse(text);
+  } catch (e) {
+    return;
+  }
+  const to = m.to;
+  delete m.to;
+  m.from = 0;
+  const out = JSON.stringify(m);
+  if (typeof to === 'number') {
+    const o = room.clients.get(to);
+    if (o) wsSend(o, out);
+  } else for (const o of room.clients.values()) wsSend(o, out);
+}
+
+function startGame(room) {
+  stopGame(room);
+  const seed = 1 + crypto.randomInt(2147483000);
+  const players = [...room.clients.keys()].sort((a, b) => a - b);
+  try {
+    room.sim = new Sim(seed, players, (text) => fromGame(room, text));
+  } catch (e) {
+    console.error('[gravewave] could not start a game', e);
+    for (const o of room.clients.values()) wsSend(o, { t: 'err', msg: 'Server error, try again' });
+    return;
+  }
+  for (const o of room.clients.values()) wsSend(o, { t: 'start', seed, players });
 }
 
 function onMessage(cl, text) {
@@ -171,37 +214,43 @@ function onMessage(cl, text) {
     if (m.t === 'create') {
       const code = newCode();
       if (!code) return wsSend(cl, { t: 'err', msg: 'Server is full, try again later' });
-      const room = { code, host: cl, clients: new Map(), nextId: 2, started: false };
+      const room = { code, clients: new Map(), leader: 1, nextId: 2, sim: null };
       cl.id = 1;
       cl.room = room;
       room.clients.set(1, cl);
       rooms.set(code, room);
-      return wsSend(cl, { t: 'created', code, id: 1 });
+      return wsSend(cl, { t: 'created', code, id: 1, players: [], leader: 1 });
     }
     if (m.t === 'join') {
       const code = String(m.code || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
       const room = rooms.get(code);
       if (!room) return wsSend(cl, { t: 'err', msg: 'No game with code ' + (code || '?') });
       if (room.clients.size >= MAX_PLAYERS) return wsSend(cl, { t: 'err', msg: 'That game is full (4 players)' });
-      if (room.started) return wsSend(cl, { t: 'err', msg: 'That game has already started' });
-      cl.id = room.nextId++;
+      if (room.sim) return wsSend(cl, { t: 'err', msg: 'That game has already started' });
+      // reuse the lowest free number so colours stay P1..P4
+      let id = 1;
+      while (room.clients.has(id)) id++;
+      cl.id = id;
       cl.room = room;
       const players = [...room.clients.keys()];
       room.clients.set(cl.id, cl);
       for (const o of room.clients.values()) if (o !== cl) wsSend(o, { t: 'peer+', id: cl.id });
-      return wsSend(cl, { t: 'joined', code, id: cl.id, players });
+      return wsSend(cl, { t: 'joined', code, id: cl.id, players, leader: room.leader });
     }
     return;
   }
   const room = cl.room;
-  if (m.t === 'start' && room.host === cl) room.started = true;
-  if (m.t === 'lobby' && room.host === cl) room.started = false;
+  if (m.t === 'start') {
+    if (room.leader === cl.id && !room.sim) startGame(room);
+    return;
+  }
   const to = m.to;
   delete m.to;
   m.from = cl.id;
+  if (room.sim && (to === undefined || to === 'host')) room.sim.receive(m);
+  if (to === 'host') return;
   const out = JSON.stringify(m);
-  if (to === 'host') wsSend(room.host, out);
-  else if (typeof to === 'number') {
+  if (typeof to === 'number') {
     const o = room.clients.get(to);
     if (o) wsSend(o, out);
   } else for (const o of room.clients.values()) if (o !== cl) wsSend(o, out);
@@ -264,6 +313,11 @@ server.on('upgrade', (req, sock) => {
   sock.on('close', () => leave(cl));
   sock.on('error', () => leave(cl));
 });
+
+// run every room's game at 60 steps a second
+setInterval(() => {
+  for (const room of rooms.values()) if (room.sim && !room.sim.tick()) room.sim = null; // run over: back to the room
+}, 1000 / 60);
 
 // keep idle connections alive through the proxy, and drop the dead ones
 setInterval(() => {

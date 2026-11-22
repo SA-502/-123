@@ -38,7 +38,7 @@
   }
 
   B.spawn = function (round) {
-    const P = GW.Player;
+    const P = GW.Net && GW.Net.isHost && GW.Net.remotes.size ? GW.Net.focus() : GW.Player; // co-op: near a living player
     const pt = openSpot(P, 380, 760) || openSpot(P, 200, 1200);
     if (!pt) return null;
     const z = GW.Zombies.spawn('boss', { kind: 'point', x: pt.x, y: pt.y }, GW.Rounds.health(round) * CFG.hpMult, 'run');
@@ -117,7 +117,7 @@
   }
 
   function summon(z, b) {
-    const D = GW.Director, P = GW.Player;
+    const D = GW.Director, P = GW.Net && GW.Net.isHost && GW.Net.remotes.size ? GW.Net.focus() : GW.Player; // co-op: near a living player
     const kinds = b.phase >= 3 ? ['leaper', 'bloater', 'leaper', 'bloater'] : ['leaper', 'leaper', 'leaper', 'leaper'];
     for (const k of kinds) {
       if (GW.Zombies.list.length >= C.MAX_ALIVE) break;

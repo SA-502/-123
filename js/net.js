@@ -1,8 +1,9 @@
 /*
  * GRAVEWAVE — co-op for up to 4 players.
  *
- * The host's browser runs the real game: rounds, spawns and every zombie. Each player moves and
- * shoots their own character locally (so controls stay instant) and sends:
+ * The server runs the real game for each room (server/sim.js loads this same file with
+ * `serverMode` on): rounds, spawns and every zombie. That copy is "the host". Each player's phone
+ * moves and shoots its own character locally (so controls stay instant) and sends:
  *   - their position / aim / weapon 20 times a second ('p', to everyone),
  *   - the damage their bullets did ('hit', to the host, which applies it and pays out kills).
  * The host sends a snapshot of the horde 15 times a second ('s'), and world changes (doors,
@@ -24,6 +25,9 @@
     applying: false, // true while applying a change that came from the network (don't echo it)
     ws: null,
     ping: 0,
+    hostId: 0, // the server's game is player 0
+    leader: 0, // the player who can start the game
+    serverMode: false, // true inside the server's copy of the game
   });
 
   const COLORS = { 1: '#23aebf', 2: '#ff4fd8', 3: '#ffb629', 4: '#3dff8b' };
@@ -149,7 +153,13 @@
     ghosts.clear();
   }
 
-  setInterval(() => send({ t: 'ping', c: performance.now() }), 10000);
+  // keep-alive, and a ping reading every 2 s during a game
+  let pingT = 0;
+  setInterval(() => {
+    if (N.serverMode) return;
+    pingT++;
+    if (N.active || pingT % 5 === 0) send({ t: 'ping', c: performance.now() });
+  }, 2000);
 
   /* ------------------------------------------------------------------ */
   /* lobby UI                                                           */
@@ -167,12 +177,13 @@
     $('lobby-room').classList.remove('hidden');
     $('room-code').textContent = N.code;
     $('room-players').innerHTML = N.lobby
-      .map((id) => '<span style="color:' + N.color(id) + ';border-color:' + N.color(id) + '">' + N.label(id) + (id === N.myId ? ' (YOU)' : id === 1 ? ' HOST' : '') + '</span>')
+      .map((id) => '<span style="color:' + N.color(id) + ';border-color:' + N.color(id) + '">' + N.label(id) + (id === N.myId ? ' (YOU)' : '') + (id === N.leader ? ' ★' : '') + '</span>')
       .join('');
-    $('btn-coop-start').classList.toggle('hidden', !N.isHost);
-    $('room-wait').classList.toggle('hidden', N.isHost);
-    $('room-wait').textContent = N.isHost ? '' : 'Waiting for the host to start… · بانتظار المضيف';
-    $('room-hint').textContent = N.isHost ? (N.lobby.length < 2 ? 'Tell your friends this code · أعط أصحابك الكود' : 'Ready when you are · جاهزين') : '';
+    const lead = N.leader === N.myId;
+    $('btn-coop-start').classList.toggle('hidden', !lead);
+    $('room-wait').classList.toggle('hidden', lead);
+    $('room-wait').textContent = lead ? '' : 'Waiting for ' + N.label(N.leader) + ' to start… · بانتظار ' + N.label(N.leader);
+    $('room-hint').textContent = lead ? (N.lobby.length < 2 ? 'Tell your friends this code · أعط أصحابك الكود' : 'Ready when you are · جاهزين') : '';
   }
   function openLobby() {
     $('menu').classList.add('hidden');
@@ -215,10 +226,8 @@
       closeLobby();
     });
     $('btn-coop-start').addEventListener('click', () => {
-      if (!N.isHost) return;
-      const seed = 1 + Math.floor(Math.random() * 2147483000);
-      send({ t: 'start', seed, players: N.lobby });
-      startGame(seed);
+      if (N.leader !== N.myId) return;
+      send({ t: 'start' }); // the server builds the game and tells everyone to begin
     });
     // a link like https://game…/?room=ABCD opens straight into the join screen
     const q = new URLSearchParams(location.search).get('room');
@@ -231,26 +240,29 @@
   /* ------------------------------------------------------------------ */
   /* messages                                                           */
   /* ------------------------------------------------------------------ */
+  /** The server's copy of the game receives player messages through here. */
+  N.receive = function (m) {
+    onMsg(m);
+  };
+
   function onMsg(m) {
     switch (m.t) {
       case 'pong':
         if (m.c) N.ping = Math.round(performance.now() - m.c);
         return;
       case 'created':
-        N.code = m.code;
-        N.myId = m.id;
-        N.isHost = true;
-        N.isGuest = false;
-        N.lobby = [m.id];
-        renderRoom();
-        return;
       case 'joined':
         N.code = m.code;
         N.myId = m.id;
         N.isHost = false;
         N.isGuest = true;
-        N.lobby = m.players.concat([m.id]).sort();
+        N.leader = m.leader || m.id;
+        N.lobby = (m.players || []).concat([m.id]).sort();
         renderRoom();
+        return;
+      case 'leader':
+        N.leader = m.id;
+        if (!N.active) renderRoom();
         return;
       case 'err':
         lobbyMsg(m.msg);
@@ -275,14 +287,7 @@
         lobbyMsg('The host left the game · المضيف طلع');
         return;
       case 'start':
-        if (N.isGuest) startGame(m.seed, m.players);
-        return;
-      case 'lobby':
-        if (N.isGuest) {
-          N.active = false;
-          backToMenu();
-          openLobby();
-        }
+        if (!N.serverMode) startGame(m.seed, m.players);
         return;
     }
     if (!N.active) return;
@@ -292,7 +297,7 @@
         onPlayer(from, m);
         break;
       case 's':
-        if (N.isGuest && from === 1) onSnapshot(m);
+        if (N.isGuest && from === N.hostId) onSnapshot(m);
         break;
       case 'hit':
         if (N.isHost) onHits(from, m);
@@ -383,7 +388,13 @@
     kills.length = 0;
     snapT = sendT = 0;
     lastRound = 0;
-    for (const id of N.lobby) if (id !== N.myId) N.remotes.set(id, makeRemote(id));
+    for (const id of N.lobby) if (id !== N.myId && id !== N.hostId) N.remotes.set(id, makeRemote(id));
+    if (N.serverMode) {
+      // the server's game has no player of its own: park it off the map, out of the fight
+      P.alive = false;
+      P.x = P.y = -10000;
+      return;
+    }
     P.jacket = N.color(N.myId);
     const off = [[0, 0], [0, 0], [44, 0], [-44, 0], [0, 44]][N.myId] || [0, 0];
     P.x += off[0];
@@ -401,11 +412,10 @@
     backToMenu();
   };
 
-  /** After a game over: everyone goes back to the room; the host can start the next game. */
+  /** After a game over: back to the room, where the leader can start the next game. */
   N.again = function () {
     if (!N.ws) return N.leave();
     N.active = false;
-    if (N.isHost) send({ t: 'lobby' });
     backToMenu();
     openLobby();
   };
@@ -538,10 +548,10 @@
       rp.tier = m.tr;
       rp.w = weaponFor(m.w, m.tr) || rp.w;
     }
-    if (rp.shots >= 0 && m.sh > rp.shots) remoteShots(rp, Math.min(4, m.sh - rp.shots));
+    if (rp.shots >= 0 && m.sh > rp.shots && !N.serverMode) remoteShots(rp, Math.min(4, m.sh - rp.shots));
     rp.shots = m.sh;
     rp.seen = 0;
-    if (wasAlive && !rp.alive) {
+    if (wasAlive && !rp.alive && !N.serverMode) {
       FX.burst(rp.x, rp.y, 30, rp.jacket, 300);
       GW.Game.announce(rp.name + ' IS DOWN', 'Survive the round to bring them back', rp.jacket);
     }
@@ -600,7 +610,7 @@
   /** New round: anyone who went down comes back next to a living teammate. */
   N.onRoundStart = function () {
     const P = GW.Player;
-    if (P.alive || GW.Game.state !== 'playing') return;
+    if (N.serverMode || P.alive || GW.Game.state !== 'playing') return; // the server has no player to bring back
     let near = null;
     for (const rp of N.remotes.values()) if (rp.alive) near = rp;
     const pt = near ? M.randomFloorNear(near.x, near.y, 30, 90) : null;
@@ -697,6 +707,10 @@
   /* host: apply a guest's damage */
   function onHits(from, m) {
     const Zs = GW.Zombies;
+    for (const h of m.h || []) {
+      const z = findZ(h[0]);
+      if (z) z.lastBy = from; // burns and the like that finish it off still pay this player
+    }
     for (const s of m.st || []) {
       const z = findZ(s[0]);
       if (!z) continue;
@@ -950,7 +964,7 @@
   N.update = function (dt) {
     updateRemotes(dt);
     sendT += dt;
-    if (sendT >= 0.05) {
+    if (sendT >= 0.05 && !N.serverMode) {
       sendT = 0;
       sendState(false);
     }
@@ -972,6 +986,7 @@
       }
     }
     if (lastRound !== GW.Director.round) lastRound = GW.Director.round;
+    if (N.serverMode) return;
     teamT -= dt;
     if (teamT <= 0) {
       teamT = 0.25;
@@ -988,7 +1003,8 @@
       el.innerHTML = '';
       return;
     }
-    let html = '';
+    const pc = N.ping < 90 ? '#3dff8b' : N.ping < 160 ? '#ffe14d' : '#ff3b4e';
+    let html = N.ping ? '<div class="mate ping">PING <span style="color:' + pc + '">' + N.ping + ' ms</span></div>' : '';
     for (const rp of N.remotes.values()) {
       const f = rp.alive ? U.clamp(rp.hp / (rp.maxHp || 100), 0, 1) : 0;
       html += '<div class="mate' + (rp.alive ? '' : ' down') + '"><b style="color:' + rp.jacket + '">' + rp.name + '</b><i><s style="width:' + Math.round(f * 100) + '%;background:' + rp.jacket + '"></s></i><span>' + (rp.alive ? rp.pts : 'DOWN') + '</span></div>';

@@ -398,3 +398,4 @@ body.touch #fps { bottom: auto; top: 4px; }
 .share-ico::before { content: ''; position: absolute; left: 50%; top: -6px; width: 1.5px; height: 11px; background: var(--cyan); transform: translateX(-50%); }
 .share-ico::after { content: ''; position: absolute; left: 50%; top: -7px; width: 5px; height: 5px; border-left: 1.5px solid var(--cyan); border-top: 1.5px solid var(--cyan); transform: translateX(-50%) rotate(45deg); }
 body.touch #ios-tip { font-size: 11px; }
+.mate.ping { font-size: 10px; letter-spacing: 0.15em; color: #cdb8ea; }

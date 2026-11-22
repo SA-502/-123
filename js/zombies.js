@@ -571,9 +571,10 @@
     else if (z.type === 'boss') pts = Pt.boss;
     else if (info.trap) pts = Pt.trap;
     else if (info.ally) pts = Pt.ally;
-    if (info.by && GW.Net && GW.Net.active) {
+    const by = info.by || (GW.Net && GW.Net.serverMode ? z.lastBy : 0);
+    if (by && GW.Net && GW.Net.active) {
       // a teammate's shot: the points and the kill are theirs
-      if (!info.silent) GW.Net.creditKill(info.by, pts, z, info.crit);
+      if (!info.silent) GW.Net.creditKill(by, pts, z, info.crit);
     } else {
       if (!info.silent) GW.Game.addPoints(pts, z.x, z.y - z.r - 4, { crit: info.crit });
       P.stats.kills++;
