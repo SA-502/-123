@@ -272,6 +272,7 @@
   /** Bring one zone's generator online. */
   I.powerZone = function (z, quiet) {
     if (I.zonePower[z]) return;
+    if (GW.Net) GW.Net.emit('pow', { z });
     I.zonePower[z] = true;
     I.zoneT[z] = 0;
     I.powerOn = true;
@@ -314,6 +315,7 @@
       use(p) {
         if (f.taken) return;
         f.taken = true;
+        if (GW.Net) GW.Net.emit('fuse', { i: I.fuses.indexOf(f) });
         p.fuses++;
         A.play('fusePickup', { x: f.x, y: f.y });
         FX.burst(f.x, f.y, 14, '#ffe14d', 220);
@@ -325,6 +327,7 @@
 
   /** A fuse dropped by an enemy (e.g. the first Bloater). */
   I.dropFuse = function (x, y) {
+    if (GW.Net) GW.Net.emit('fuse+', { x: Math.round(x), y: Math.round(y) });
     const f = { x, y, tx: Math.floor(x / T), ty: Math.floor(y / T), taken: false, t: 0, dropped: true };
     I.fuses.push(f);
     addFuseItem(f);
@@ -335,10 +338,39 @@
   /* ------------------------------------------------------------------ */
   /* power-ups                                                          */
   /* ------------------------------------------------------------------ */
-  I.spawnPowerup = function (type, x, y) {
-    I.powerups.push({ type, x, y, life: C.POWERUP_LIFE, t: 0 });
+  let puId = 0;
+  I.spawnPowerup = function (type, x, y, id) {
+    id = id || ++puId;
+    if (GW.Net) GW.Net.emit('pu+', { k: type, x: Math.round(x), y: Math.round(y), id });
+    I.powerups.push({ type, x, y, life: C.POWERUP_LIFE, t: 0, id });
     A.play('powerupDrop', { x, y });
     FX.ring(x, y, 50, GW.POWERUPS[type].color, 0.5, 3);
+  };
+
+  /** Co-op: a teammate grabbed a power-up. Team power-ups work for everyone; the Pixel Pal goes to whoever took it. */
+  I.takePowerup = function (id, from) {
+    const i = I.powerups.findIndex((pu) => pu.id === id);
+    if (i < 0) return;
+    const pu = I.powerups.splice(i, 1)[0];
+    if (pu.type === 'pal') {
+      const def = GW.POWERUPS.pal;
+      A.play('powerup');
+      GW.Game.announce(def.name, 'Picked up by ' + (GW.Net ? GW.Net.label(from) : 'a teammate'), def.color);
+      return;
+    }
+    applyPowerup(pu.type, GW.Player);
+  };
+
+  /** Co-op: the Prize Crate moved on another player's screen. */
+  I.boxMovedTo = function (spot) {
+    const b = I.box;
+    if (spot === b.spot || !M.boxSpots[spot]) return;
+    if (b.state === 'rolling' || b.state === 'ready') return; // our own roll finishes first
+    b.spot = spot;
+    b.uses = 0;
+    b.state = 'idle';
+    const zn = M.zones[M.boxSpots[spot].zone];
+    GW.Game.announce('PRIZE CRATE RELOCATED', 'Look for the beam over ' + zn.name, '#ffe14d');
   };
 
   function applyPowerup(type, P) {
@@ -417,6 +449,7 @@
         b.spot = next;
         b.uses = 0;
         b.state = 'idle';
+        if (GW.Net) GW.Net.emit('box', { s: next });
         const zn = M.zones[M.boxSpots[next].zone];
         GW.Game.announce('PRIZE CRATE RELOCATED', 'Look for the beam over ' + zn.name, '#ffe14d');
       }
@@ -459,6 +492,7 @@
   function repair(w) {
     if (w.planks >= 6) return;
     w.planks++;
+    if (GW.Net && GW.Net.active && GW.Net.isGuest) GW.Net.send({ t: 'plank', to: 'host', i: M.windows.indexOf(w) });
     A.play('repair');
     FX.sparks(w.x + w.dx * 22, w.y + w.dy * 22, Math.atan2(w.dy, w.dx), 4, '#ffe14d', 120);
     const D = GW.Director;
@@ -502,6 +536,7 @@
       pu.t += dt;
       if (P.alive && U.dist(P.x, P.y, pu.x, pu.y) < P.r + 24) {
         I.powerups.splice(i, 1);
+        if (GW.Net) GW.Net.emit('pu-', { id: pu.id });
         applyPowerup(pu.type, P);
       } else if (pu.life <= 0) I.powerups.splice(i, 1);
     }

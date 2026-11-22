@@ -51,42 +51,63 @@
       D.spawnDelay = Math.max(0.35, 1.1 - D.specialCount * 0.12);
       D.maxAlive = 12;
       D.brutes = 0;
-      A.play('special');
-      GW.Game.announce('LIGHTS OUT', 'Shriekers are loose on the pier', '#35f0ff');
     } else if (D.boss) {
       D.total = 8 + Math.floor(r / 2);
       D.spawnDelay = 2.2;
       D.maxAlive = 12;
       D.brutes = 0;
-      A.play('special');
-      GW.Game.announce('BOSS ROUND', 'The Headliner takes the stage', '#ff3b4e');
     } else {
       D.total = GW.Rounds.count(r);
       D.spawnDelay = GW.Rounds.spawnDelay(r);
       D.maxAlive = C.MAX_ALIVE;
       D.brutes = r >= 8 ? Math.min(3, 1 + Math.floor((r - 8) / 5)) : 0;
-      A.play('roundStart');
-      if (D.brutes && r === 8) GW.Game.announce('ROUND ' + r, 'Something big is coming', '#ff3b4e');
+    }
+    // a bigger team faces a bigger horde
+    const team = GW.Net && GW.Net.active ? 1 + GW.Net.remotes.size : 1;
+    if (team > 1) {
+      D.total = Math.round(D.total * (1 + 0.5 * (team - 1)));
+      D.maxAlive = Math.min(C.MAX_ALIVE + 8, Math.round(D.maxAlive * (1 + 0.2 * (team - 1))));
+      D.spawnDelay *= 1 / (1 + 0.25 * (team - 1));
     }
     D.toSpawn = D.total;
     D.spawnT = 1.6;
-    GW.HUD.roundChange(r, D.special);
+    D.beginFx(r);
   }
+
+  /** Sounds and banners for a new round (co-op guests replay these from the host's snapshot). */
+  D.beginFx = function (r) {
+    if (D.special) {
+      A.play('special');
+      GW.Game.announce('LIGHTS OUT', 'Shriekers are loose on the pier', '#35f0ff');
+    } else if (D.boss) {
+      A.play('special');
+      GW.Game.announce('BOSS ROUND', 'The Headliner takes the stage', '#ff3b4e');
+    } else {
+      A.play('roundStart');
+      if (r === 8) GW.Game.announce('ROUND ' + r, 'Something big is coming', '#ff3b4e');
+    }
+    GW.HUD.roundChange(r, D.special);
+    if (GW.Net && GW.Net.active) GW.Net.onRoundStart(r);
+  };
 
   function end() {
     D.state = 'intermission';
     D.timer = 9;
+    D.endFx();
+  }
+
+  D.endFx = function () {
     const P = GW.Player;
     P.grenades = Math.min(C.PLAYER.grenadesMax, P.grenades + 2);
     if (P.tactical.type) P.tactical.count = Math.min(GW.TACTICALS[P.tactical.type].max, P.tactical.count + 1);
     P.stats.round = D.round;
     A.play('roundEnd');
     GW.HUD.roundOver();
-  }
+  };
 
   /** Choose where the next zombie comes from: open-zone windows and risers, biased toward the player. */
   D.pickSpawn = function () {
-    const P = GW.Player;
+    const P = GW.Net && GW.Net.isHost && GW.Net.remotes.size ? GW.Net.focus() : GW.Player;
     const cands = [];
     for (const w of M.windows) {
       if (!M.zones[w.zone].open || w.busy || GW.Gadgets.insideBubble(w.x, w.y, 40)) continue;
@@ -104,7 +125,7 @@
   };
 
   function spawnOne() {
-    const P = GW.Player;
+    const P = GW.Net && GW.Net.isHost && GW.Net.remotes.size ? GW.Net.focus() : GW.Player;
     if (D.special) {
       // shriekers crash down anywhere near the player
       let pt = M.randomFloorNear(P.x, P.y, 280, 640);

@@ -30,11 +30,13 @@
 
   /** A tactical grenade finished its flight. */
   G.land = function (g) {
+    // co-op: lures and bubbles change how the horde moves, so every player gets them
+    if (g.kind !== 'cryo' && !g.remote && GW.Net) GW.Net.emit('gad', { k: g.kind, x: Math.round(g.x), y: Math.round(g.y) });
     if (g.kind === 'cryo') cryoBlast(g.x, g.y);
     else if (g.kind === 'lure') {
       if (G.lure) detonateLure(G.lure); // only one lure at a time
       const goal = walkableNear(g.x, g.y);
-      G.lure = { x: g.x, y: g.y, gx: goal.x, gy: goal.y, t: C.LURE.life, max: C.LURE.life, beepT: 0, ver: -1, live: true };
+      G.lure = { x: g.x, y: g.y, gx: goal.x, gy: goal.y, t: C.LURE.life, max: C.LURE.life, beepT: 0, ver: -1, live: true, remote: !!g.remote };
       A.play('lure', { x: g.x, y: g.y });
       FX.ring(g.x, g.y, 80, '#ff4fd8', 0.5, 3);
     } else if (g.kind === 'bubble') {
@@ -100,6 +102,13 @@
   function detonateLure(l) {
     if (!l.live) return;
     l.live = false;
+    if (l.remote) {
+      // a teammate's lure: their game deals the damage, ours just shows the blast
+      FX.explosion(l.x, l.y, C.LURE.radius, '#ff4fd8');
+      A.play('explosion', { x: l.x, y: l.y });
+      if (G.lure === l) G.lure = null;
+      return;
+    }
     const dmg = Math.max(350, GW.Rounds.health(GW.Director.round || 1) * 0.9) * C.LURE.mult;
     GW.Weapons.explode(l.x, l.y, C.LURE.radius, dmg, dmg * 0.3, { color: '#ff4fd8', hurtPlayer: 60 });
     if (G.lure === l) G.lure = null;

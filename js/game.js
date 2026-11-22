@@ -82,21 +82,32 @@
     $(id).classList.toggle('hidden', !on);
   }
 
-  G.newGame = function () {
+  /** Start a run. `arg` is a co-op seed (a number) so every player builds the same park; button clicks pass an event. */
+  G.newGame = function (arg) {
+    const N = GW.Net;
+    const seed = typeof arg === 'number' ? arg : 0;
+    if (!seed && N && (N.active || N.code)) N.endSession(); // a solo run leaves any co-op room
     A.init();
-    M.build();
-    GW.MapArt.build();
-    FX.reset();
-    GW.Weapons.reset();
-    GW.Gadgets.reset();
-    GW.Allies.reset();
-    GW.Facilities.reset();
-    GW.Zombies.reset();
-    GW.Boss.reset();
-    GW.Player.reset();
-    GW.Interact.reset();
-    GW.Director.reset();
+    const rnd = Math.random;
+    if (seed) Math.random = N.seeded(seed);
+    try {
+      M.build();
+      GW.MapArt.build();
+      FX.reset();
+      GW.Weapons.reset();
+      GW.Gadgets.reset();
+      GW.Allies.reset();
+      GW.Facilities.reset();
+      GW.Zombies.reset();
+      GW.Boss.reset();
+      GW.Player.reset();
+      GW.Interact.reset();
+      GW.Director.reset();
+    } finally {
+      Math.random = rnd;
+    }
     GW.HUD.reset();
+    G.netPaused = false;
     GW.HUD.perksChanged();
     G.timers.double = 0;
     G.timers.instakill = 0;
@@ -112,11 +123,25 @@
     show('gameover', false);
     GW.HUD.show(true);
     $('game').classList.add('playing');
-    G.announce('LUMINA PIER', 'The park is closed. Something is still inside.', '#ff4fd8');
+    const coop = N && N.active;
+    $('btn-restart').textContent = coop ? 'LEAVE GAME' : 'RESTART';
+    $('btn-again').textContent = coop ? 'BACK TO ROOM' : 'PLAY AGAIN';
+    GW.Player.jacket = null;
+    if (coop) N.onNewGame();
+    else G.announce('LUMINA PIER', 'The park is closed. Something is still inside.', '#ff4fd8');
   };
 
   G.pause = function () {
     if (G.state !== 'playing') return;
+    if (GW.Net && GW.Net.active) {
+      // co-op: the menu opens but the world keeps running for everyone else
+      if (G.netPaused) return;
+      G.netPaused = true;
+      show('pause', true);
+      $('game').classList.remove('playing');
+      In.clear();
+      return;
+    }
     G.state = 'paused';
     show('pause', true);
     $('game').classList.remove('playing');
@@ -124,6 +149,13 @@
   };
 
   G.resume = function () {
+    if (G.netPaused) {
+      G.netPaused = false;
+      show('pause', false);
+      if (G.state === 'playing') $('game').classList.add('playing');
+      In.clear();
+      return;
+    }
     if (G.state !== 'paused') return;
     A.init();
     G.state = 'playing';
@@ -136,6 +168,8 @@
   G.gameOver = function () {
     if (G.state === 'gameover') return;
     G.state = 'gameover';
+    G.netPaused = false;
+    show('pause', false);
     const P = GW.Player, D = GW.Director;
     const survived = Math.max(0, D.round - 1);
     A.play('gameOver');
@@ -180,7 +214,8 @@
   /* simulation                                                         */
   /* ------------------------------------------------------------------ */
   G.update = function (dt) {
-    const P = GW.Player;
+    const P = GW.Player, N = GW.Net;
+    const guest = N && N.active && N.isGuest; // co-op guests get the horde from the host
     snapshotPositions();
     G.time += dt;
     if (G.timers.double > 0) G.timers.double = Math.max(0, G.timers.double - dt);
@@ -189,17 +224,23 @@
     P.update(dt);
     if (G.state !== 'playing') return; // player died this step
 
-    updateFlow();
-
-    GW.Director.update(dt);
-    GW.Zombies.update(dt);
-    GW.Boss.updateOrbs(dt);
+    if (guest) N.guestWorld(dt);
+    else {
+      updateFlow();
+      GW.Director.update(dt);
+      GW.Zombies.update(dt);
+      GW.Boss.updateOrbs(dt);
+    }
     GW.Weapons.update(dt);
     GW.Gadgets.update(dt);
     GW.Allies.update(dt);
     GW.Facilities.update(dt);
     GW.Interact.update(dt);
-    updateFlow(); // a door or shutter may have changed this step
+    if (!guest) updateFlow(); // a door or shutter may have changed this step
+    if (N && N.active) {
+      N.update(dt);
+      if (G.state !== 'playing') return; // the whole team went down
+    }
 
     // distant-horde ambience swells with the number of zombies nearby
     let nearby = 0;
@@ -212,6 +253,20 @@
 
   /** The horde's main flow field targets the player, or the panic-room shutter while it is sealed. */
   function updateFlow() {
+    const N = GW.Net;
+    if (N && N.isHost && N.remotes.size && !GW.Facilities.flowGoal()) {
+      // co-op: one field that leads every zombie to whichever living player is closest
+      const pts = N.players().filter((p) => p.alive);
+      if (!pts.length) pts.push(GW.Player);
+      let key = '';
+      for (const p of pts) key += Math.floor(p.x / GW.CFG.TILE) + ',' + Math.floor(p.y / GW.CFG.TILE) + ';';
+      if (M.flowDirty || key !== M.flowKey) {
+        M.computeFlowMulti(pts);
+        M.flowKey = key;
+      }
+      return;
+    }
+    M.flowKey = '';
     const goal = GW.Facilities.flowGoal() || GW.Player;
     const tx = Math.floor(goal.x / GW.CFG.TILE), ty = Math.floor(goal.y / GW.CFG.TILE);
     if (M.flowDirty || tx !== M.flowTx || ty !== M.flowTy) M.computeFlow(goal.x, goal.y);
@@ -235,6 +290,11 @@
       z.py = z.y;
       z.pa = z.angle;
     }
+    if (GW.Net && GW.Net.active)
+      for (const rp of GW.Net.remotes.values()) {
+        rp.px = rp.x;
+        rp.py = rp.y;
+      }
     const AL = GW.Allies;
     if (AL.pal) {
       AL.pal.px = AL.pal.x;
@@ -291,8 +351,9 @@
     showBest();
 
     $('btn-start').addEventListener('click', G.newGame);
-    $('btn-again').addEventListener('click', G.newGame);
-    $('btn-restart').addEventListener('click', G.newGame);
+    const coop = () => GW.Net && GW.Net.active;
+    $('btn-again').addEventListener('click', () => (coop() ? GW.Net.again() : G.newGame()));
+    $('btn-restart').addEventListener('click', () => (coop() ? GW.Net.leave() : G.newGame()));
     $('btn-resume').addEventListener('click', G.resume);
     $('vol-music').addEventListener('input', (e) => A.setMusicVol(e.target.value / 100));
     $('vol-sfx').addEventListener('input', (e) => A.setSfxVol(e.target.value / 100));
@@ -304,15 +365,16 @@
 
     In.onKey = function (code) {
       if (code === 'Escape' || code === 'KeyP') {
-        if (G.state === 'playing') G.pause();
-        else if (G.state === 'paused') G.resume();
+        if (G.netPaused || G.state === 'paused') G.resume();
+        else if (G.state === 'playing') G.pause();
       } else if (code === 'F3' || code === 'Backquote') {
         GW.Perf.toggle();
       } else if (code === 'KeyM') {
         const on = A.toggleMusic();
         if (G.state === 'playing') G.announce(on ? 'MUSIC ON' : 'MUSIC OFF', '', '#19f0ff');
-      } else if ((code === 'Enter' || code === 'Space') && (G.state === 'menu' || (G.state === 'gameover' && !$('gameover').classList.contains('hidden')))) {
-        G.newGame();
+      } else if ((code === 'Enter' || code === 'Space') && ((G.state === 'menu' && !$('menu').classList.contains('hidden')) || (G.state === 'gameover' && !$('gameover').classList.contains('hidden')))) {
+        if (G.state === 'gameover' && GW.Net && GW.Net.active) GW.Net.again();
+        else G.newGame();
       }
     };
     window.addEventListener('blur', () => G.pause());

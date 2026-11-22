@@ -212,7 +212,8 @@
     } else {
       P.hp = 0;
       P.alive = false;
-      GW.Game.gameOver();
+      if (GW.Net && GW.Net.active) GW.Net.localDown(); // co-op: spectate, back next round
+      else GW.Game.gameOver();
     }
   }
 

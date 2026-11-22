@@ -292,6 +292,15 @@
     }
     g.fillStyle = '#ff2b3c';
     for (const z of GW.Zombies.list) g.fillRect(z.x * s - 1, z.y * s - 1, z.type === 'boss' ? 6 : z.type === 'brute' ? 3 : 2, z.type === 'boss' ? 6 : z.type === 'brute' ? 3 : 2);
+    // co-op teammates
+    if (GW.Net && GW.Net.active)
+      for (const rp of GW.Net.remotes.values()) {
+        if (!rp.alive) continue;
+        g.fillStyle = rp.jacket;
+        g.beginPath();
+        g.arc(rp.x * s, rp.y * s, 3, 0, Math.PI * 2);
+        g.fill();
+      }
     // player arrow
     g.save();
     g.translate(P.x * s, P.y * s);

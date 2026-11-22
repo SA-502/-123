@@ -1,6 +1,6 @@
 /*
  * GRAVEWAVE server: serves the game's static files. Runs behind the VPS's Traefik proxy, which
- * handles HTTPS. No dependencies (Node 18+). Co-op signalling is added to this file in a later step.
+ * handles HTTPS. No dependencies (Node 18+). Also relays co-op games over WebSocket (/ws).
  *
  *   PORT=8080 node server/server.js
  */
@@ -73,5 +73,206 @@ const server = http.createServer((req, res) => {
     fs.createReadStream(file).pipe(res);
   });
 });
+
+/* ------------------------------------------------------------------ */
+/* co-op: a tiny WebSocket relay (no dependencies)                    */
+/* ------------------------------------------------------------------ */
+/*
+ * Rooms of up to 4 players. The first player hosts: their browser runs the zombies and rounds,
+ * the others send their own moves and shots. This server only creates rooms and forwards
+ * messages between the players in a room.
+ *
+ * client -> server   {t:'create'} | {t:'join', code} | {t:'ping'} | any game message with `to`
+ *                    (omitted = everyone else in the room, 'host' = the host, a number = one player)
+ * server -> client   {t:'created', code, id} | {t:'joined', code, id, players} | {t:'err', msg}
+ *                    {t:'peer+', id} | {t:'peer-', id} | {t:'hostleft'} | game messages with `from`
+ */
+const crypto = require('crypto');
+const MAX_PLAYERS = 4;
+const MAX_FRAME = 256 * 1024;
+const rooms = new Map(); // code -> { code, host: client, clients: Map<id, client>, nextId, started }
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I / O: easy to read out loud
+
+function newCode() {
+  for (let tries = 0; tries < 1000; tries++) {
+    let c = '';
+    for (let i = 0; i < 4; i++) c += CODE_CHARS[crypto.randomInt(CODE_CHARS.length)];
+    if (!rooms.has(c)) return c;
+  }
+  return null;
+}
+
+function wsSend(cl, obj) {
+  if (cl.closed) return;
+  const data = Buffer.from(typeof obj === 'string' ? obj : JSON.stringify(obj));
+  const n = data.length;
+  let head;
+  if (n < 126) head = Buffer.from([0x81, n]);
+  else if (n < 65536) {
+    head = Buffer.alloc(4);
+    head[0] = 0x81;
+    head[1] = 126;
+    head.writeUInt16BE(n, 2);
+  } else {
+    head = Buffer.alloc(10);
+    head[0] = 0x81;
+    head[1] = 127;
+    head.writeBigUInt64BE(BigInt(n), 2);
+  }
+  try {
+    cl.sock.write(Buffer.concat([head, data]));
+  } catch (e) {
+    /* socket already gone */
+  }
+}
+
+function wsControl(cl, op, payload) {
+  if (cl.closed) return;
+  const p = payload || Buffer.alloc(0);
+  try {
+    cl.sock.write(Buffer.concat([Buffer.from([0x80 | op, p.length]), p]));
+  } catch (e) {
+    /* ignore */
+  }
+}
+
+function leave(cl) {
+  if (cl.closed) return;
+  cl.closed = true;
+  try {
+    cl.sock.destroy();
+  } catch (e) {
+    /* ignore */
+  }
+  const room = cl.room;
+  if (!room) return;
+  room.clients.delete(cl.id);
+  if (room.host === cl) {
+    for (const o of room.clients.values()) {
+      wsSend(o, { t: 'hostleft' });
+      o.room = null;
+    }
+    rooms.delete(room.code);
+  } else {
+    for (const o of room.clients.values()) wsSend(o, { t: 'peer-', id: cl.id });
+  }
+}
+
+function onMessage(cl, text) {
+  let m;
+  try {
+    m = JSON.parse(text);
+  } catch (e) {
+    return;
+  }
+  if (!m || typeof m.t !== 'string') return;
+  if (m.t === 'ping') return wsSend(cl, { t: 'pong', c: m.c });
+  if (!cl.room) {
+    if (m.t === 'create') {
+      const code = newCode();
+      if (!code) return wsSend(cl, { t: 'err', msg: 'Server is full, try again later' });
+      const room = { code, host: cl, clients: new Map(), nextId: 2, started: false };
+      cl.id = 1;
+      cl.room = room;
+      room.clients.set(1, cl);
+      rooms.set(code, room);
+      return wsSend(cl, { t: 'created', code, id: 1 });
+    }
+    if (m.t === 'join') {
+      const code = String(m.code || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+      const room = rooms.get(code);
+      if (!room) return wsSend(cl, { t: 'err', msg: 'No game with code ' + (code || '?') });
+      if (room.clients.size >= MAX_PLAYERS) return wsSend(cl, { t: 'err', msg: 'That game is full (4 players)' });
+      if (room.started) return wsSend(cl, { t: 'err', msg: 'That game has already started' });
+      cl.id = room.nextId++;
+      cl.room = room;
+      const players = [...room.clients.keys()];
+      room.clients.set(cl.id, cl);
+      for (const o of room.clients.values()) if (o !== cl) wsSend(o, { t: 'peer+', id: cl.id });
+      return wsSend(cl, { t: 'joined', code, id: cl.id, players });
+    }
+    return;
+  }
+  const room = cl.room;
+  if (m.t === 'start' && room.host === cl) room.started = true;
+  if (m.t === 'lobby' && room.host === cl) room.started = false;
+  const to = m.to;
+  delete m.to;
+  m.from = cl.id;
+  const out = JSON.stringify(m);
+  if (to === 'host') wsSend(room.host, out);
+  else if (typeof to === 'number') {
+    const o = room.clients.get(to);
+    if (o) wsSend(o, out);
+  } else for (const o of room.clients.values()) if (o !== cl) wsSend(o, out);
+}
+
+function onData(cl, chunk) {
+  cl.buf = cl.buf.length ? Buffer.concat([cl.buf, chunk]) : chunk;
+  for (;;) {
+    const b = cl.buf;
+    if (b.length < 2) return;
+    const fin = (b[0] & 0x80) !== 0, op = b[0] & 0x0f, masked = (b[1] & 0x80) !== 0;
+    let len = b[1] & 0x7f, off = 2;
+    if (len === 126) {
+      if (b.length < 4) return;
+      len = b.readUInt16BE(2);
+      off = 4;
+    } else if (len === 127) {
+      if (b.length < 10) return;
+      const big = b.readBigUInt64BE(2);
+      if (big > BigInt(MAX_FRAME)) return leave(cl);
+      len = Number(big);
+      off = 10;
+    }
+    if (!masked || len > MAX_FRAME) return leave(cl); // browsers always mask
+    if (b.length < off + 4 + len) return;
+    const mask = b.subarray(off, off + 4);
+    const payload = Buffer.from(b.subarray(off + 4, off + 4 + len));
+    for (let i = 0; i < len; i++) payload[i] ^= mask[i & 3];
+    cl.buf = b.subarray(off + 4 + len);
+    cl.seen = Date.now();
+    if (op === 0x8) return leave(cl);
+    if (op === 0x9) {
+      wsControl(cl, 0xa, payload);
+      continue;
+    }
+    if (op === 0xa) continue;
+    if (op === 0x1 || op === 0x0) {
+      cl.frag = cl.frag ? Buffer.concat([cl.frag, payload]) : payload;
+      if (cl.frag.length > MAX_FRAME) return leave(cl);
+      if (fin) {
+        const text = cl.frag.toString('utf8');
+        cl.frag = null;
+        onMessage(cl, text);
+      }
+    }
+  }
+}
+
+server.on('upgrade', (req, sock) => {
+  const key = req.headers['sec-websocket-key'];
+  if (!req.url.startsWith('/ws') || !key || String(req.headers.upgrade).toLowerCase() !== 'websocket') {
+    sock.destroy();
+    return;
+  }
+  const accept = crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+  sock.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + accept + '\r\n\r\n');
+  sock.setNoDelay(true);
+  const cl = { sock, buf: Buffer.alloc(0), frag: null, room: null, id: 0, closed: false, seen: Date.now() };
+  sock.on('data', (c) => onData(cl, c));
+  sock.on('close', () => leave(cl));
+  sock.on('error', () => leave(cl));
+});
+
+// keep idle connections alive through the proxy, and drop the dead ones
+setInterval(() => {
+  const now = Date.now();
+  for (const room of rooms.values())
+    for (const cl of room.clients.values()) {
+      if (now - cl.seen > 45000) leave(cl);
+      else wsControl(cl, 0x9);
+    }
+}, 15000);
 
 server.listen(PORT, () => console.log('[gravewave] serving ' + ROOT + ' on :' + PORT));

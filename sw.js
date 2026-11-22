@@ -1,5 +1,5 @@
 /* GRAVEWAVE service worker: network first (so updates arrive immediately), cache as an offline fallback. */
-const CACHE = 'gravewave-v1';
+const CACHE = 'gravewave-v2';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();

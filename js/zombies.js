@@ -417,14 +417,22 @@
   }
 
   /** Bloater detonation: hurts the player and the horde (no points for the zombies it kills). */
-  function bloaterBlast(z, radius, dmg) {
-    const B = C.ZOMBIE.bloat, P = GW.Player;
+  function bloaterFx(z, radius) {
     FX.explosion(z.x, z.y, radius, '#c8ff3a');
     FX.blood(z.x, z.y, 0, 30, 380);
     GW.MapArt.decal(z.x, z.y, radius * 0.5, '#3a3a10', 0.5);
     A.play('bloaterPop', { x: z.x, y: z.y });
-    const d = U.dist(P.x, P.y, z.x, z.y);
-    if (d < radius && M.los(z.x, z.y, P.x, P.y, M.blocksBullet)) P.hurt(U.lerp(dmg * 0.4, dmg, 1 - d / radius));
+  }
+
+  function bloaterBlast(z, radius, dmg) {
+    const B = C.ZOMBIE.bloat;
+    bloaterFx(z, radius);
+    const players = GW.Net && GW.Net.isHost ? GW.Net.players() : [GW.Player];
+    for (const P of players) {
+      if (!P.alive) continue;
+      const d = U.dist(P.x, P.y, z.x, z.y);
+      if (d < radius && M.los(z.x, z.y, P.x, P.y, M.blocksBullet)) P.hurt(U.lerp(dmg * 0.4, dmg, 1 - d / radius));
+    }
     for (const o of Zs.list.slice()) {
       if (o === z || o.dead || o.type === 'boss') continue;
       const od = U.dist(o.x, o.y, z.x, z.y);
@@ -437,9 +445,11 @@
     const P = GW.Player;
     updateAcid(dt, P);
     const list = Zs.list;
+    // co-op host: every zombie hunts the nearest living player
+    const team = GW.Net && GW.Net.isHost && GW.Net.remotes.size ? GW.Net.players() : null;
     for (let i = list.length - 1; i >= 0; i--) {
       const z = list[i];
-      if (z && !z.dead) updateOne(z, dt, P);
+      if (z && !z.dead) updateOne(z, dt, team ? GW.Net.targetFor(z, team) : P);
     }
 
     // soft separation so the horde spreads out instead of stacking
@@ -492,6 +502,7 @@
    * Returns true if this killed the zombie.
    */
   Zs.damage = function (z, amount, info) {
+    if (GW.Net && GW.Net.isGuest) return GW.Net.guestDamage(z, amount, info); // the host owns the horde
     if (z.dead) return false;
     info = info || {};
     if (z.type === 'boss') amount = GW.Boss.adjustDamage(z, amount, info);
@@ -528,6 +539,7 @@
   };
 
   Zs.kill = function (z, info) {
+    if (GW.Net && GW.Net.isGuest) return GW.Net.guestKill(z, info);
     if (z.dead) return;
     info = info || {};
     z.dead = true;
@@ -559,10 +571,27 @@
     else if (z.type === 'boss') pts = Pt.boss;
     else if (info.trap) pts = Pt.trap;
     else if (info.ally) pts = Pt.ally;
-    if (!info.silent) GW.Game.addPoints(pts, z.x, z.y - z.r - 4, { crit: info.crit });
-    P.stats.kills++;
-    if (info.crit) P.stats.crits++;
+    if (info.by && GW.Net && GW.Net.active) {
+      // a teammate's shot: the points and the kill are theirs
+      if (!info.silent) GW.Net.creditKill(info.by, pts, z, info.crit);
+    } else {
+      if (!info.silent) GW.Game.addPoints(pts, z.x, z.y - z.r - 4, { crit: info.crit });
+      P.stats.kills++;
+      if (info.crit) P.stats.crits++;
+    }
+    if (GW.Net && GW.Net.active) GW.Net.onZombieKilled(z, info);
 
+    Zs.deathFx(z, info, true);
+    GW.Director.onKill(z, info, pos);
+  };
+
+  /** The visible part of a death (also used by co-op guests when the host reports a kill). */
+  Zs.deathFx = function (z, info, host) {
+    info = info || {};
+    if (!host && z.type === 'bloater') {
+      const B = C.ZOMBIE.bloat;
+      bloaterFx(z, info.burst ? B.radius : B.deathRadius);
+    }
     const dir = info.dir === undefined ? Math.random() * U.TAU : info.dir;
     FX.corpse(z);
     FX.blood(z.x, z.y, dir, info.crit ? 22 : 12, 300);
@@ -571,6 +600,5 @@
     if (info.shock) FX.burst(z.x, z.y, 10, '#8fd8ff', 260);
     if (info.nuke) FX.burst(z.x, z.y, 12, '#ff7a1a', 300);
     A.play('zdeath', { x: z.x, y: z.y });
-    GW.Director.onKill(z, info, pos);
   };
 })();

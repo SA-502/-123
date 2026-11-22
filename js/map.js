@@ -511,6 +511,8 @@
     M.zones[d.a].open = true;
     M.zones[d.b].open = true;
     M.markDirty();
+    const i = M.doors.indexOf(d);
+    if (i >= 0 && !d.power && GW.Net) GW.Net.emit('door', { i }); // co-op: open it for everyone
   };
 
   /** Walkability changed: every flow field must be rebuilt. */
@@ -568,6 +570,28 @@
     heap.length = 0;
     flow[idx(sx, sy)] = 0;
     hpush(idx(sx, sy)); // key = cost * 16384 + index (index < 16384)
+    relax(flow);
+  };
+
+  /** Co-op: path cost to the nearest of several points (every living player). */
+  M.computeFlowMulti = function (pts, arr) {
+    const flow = arr || M.flow;
+    flow.fill(65535);
+    if (flow === M.flow) {
+      M.flowTx = M.flowTy = -1;
+      M.flowDirty = false;
+    }
+    heap.length = 0;
+    for (const p of pts) {
+      const sx = Math.floor(p.x / T), sy = Math.floor(p.y / T);
+      if (!inb(sx, sy) || M.solidForZombie(sx, sy) || flow[idx(sx, sy)] === 0) continue;
+      flow[idx(sx, sy)] = 0;
+      hpush(idx(sx, sy));
+    }
+    relax(flow);
+  };
+
+  function relax(flow) {
     while (heap.length) {
       const key = hpop();
       const cost = Math.floor(key / 16384), i = key % 16384;

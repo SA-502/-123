@@ -356,3 +356,45 @@ body.touch #fps { bottom: auto; top: 4px; }
   #tb-sentry { right: 120px; bottom: 192px; }
   body.touch #minimap { width: 112px; height: 88px; }
 }
+
+/* ---------- co-op ---------- */
+.neon-btn.coop { border-color: var(--yellow); text-shadow: 0 0 10px var(--yellow); box-shadow: 0 0 14px rgba(255, 225, 77, 0.45), inset 0 0 12px rgba(255, 225, 77, 0.2); }
+.neon-btn.coop:hover { background: rgba(255, 225, 77, 0.2); }
+.neon-btn.small-btn { font-size: 12px; padding: 8px 22px; }
+.lobby-sub { font-size: 12px; letter-spacing: 0.12em; color: #cdb8ea; }
+#lobby-pick, #lobby-room { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+#lobby-pick.hidden, #lobby-room.hidden { display: none; }
+.join-row { display: flex; gap: 10px; align-items: center; }
+#join-code {
+  width: 150px; padding: 10px 12px; font: 900 22px var(--font); letter-spacing: 0.35em; text-align: center; text-transform: uppercase;
+  color: #fff; background: rgba(10, 5, 24, 0.85); border: 2px solid var(--cyan); border-radius: 6px; outline: none;
+  box-shadow: 0 0 12px rgba(25, 240, 255, 0.4); user-select: text; -webkit-user-select: text;
+}
+#join-code::placeholder { color: rgba(255, 255, 255, 0.3); }
+.room-label { font-size: 11px; letter-spacing: 0.3em; color: #cdb8ea; }
+#room-code { font: 900 48px var(--font); letter-spacing: 0.3em; color: var(--yellow); text-shadow: 0 0 12px var(--yellow), 0 0 40px rgba(255, 225, 77, 0.5); user-select: text; -webkit-user-select: text; }
+#room-players { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+#room-players span { padding: 6px 12px; border: 1px solid; border-radius: 4px; font-size: 13px; font-weight: 900; letter-spacing: 0.1em; background: rgba(10, 5, 24, 0.7); }
+#room-hint, #room-wait { font-size: 12px; letter-spacing: 0.08em; color: #cdb8ea; min-height: 14px; }
+#room-wait.hidden, #btn-coop-start.hidden { display: none; }
+#lobby-msg { min-height: 16px; font-size: 13px; color: var(--yellow); text-shadow: 0 0 8px rgba(255, 225, 77, 0.6); }
+
+#mates { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.mate { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; }
+.mate b { width: 22px; }
+.mate i { display: block; width: 70px; height: 6px; border-radius: 2px; background: rgba(10, 5, 24, 0.8); overflow: hidden; }
+.mate i s { display: block; height: 100%; }
+.mate span { color: #ffe14d; min-width: 40px; }
+.mate.down { opacity: 0.6; }
+.mate.down span { color: var(--red); }
+.mate.spec { color: var(--red); letter-spacing: 0.1em; animation: blink 1.2s steps(2) infinite; }
+
+/* iPhone: how to get full screen (Safari never allows it for a web page, only for a home-screen app) */
+#ios-tip { max-width: 520px; padding: 10px 14px; border: 1px solid rgba(25, 240, 255, 0.6); border-radius: 6px; background: rgba(10, 5, 24, 0.78);
+  font-size: 12px; line-height: 1.6; color: #e9d9ff; display: flex; flex-direction: column; gap: 4px; }
+#ios-tip.hidden { display: none; }
+#ios-tip b { color: var(--cyan); }
+.share-ico { display: inline-block; width: 12px; height: 14px; margin: 0 3px -2px; border: 1.5px solid var(--cyan); border-top: none; border-radius: 0 0 2px 2px; position: relative; }
+.share-ico::before { content: ''; position: absolute; left: 50%; top: -6px; width: 1.5px; height: 11px; background: var(--cyan); transform: translateX(-50%); }
+.share-ico::after { content: ''; position: absolute; left: 50%; top: -7px; width: 5px; height: 5px; border-left: 1.5px solid var(--cyan); border-top: 1.5px solid var(--cyan); transform: translateX(-50%) rotate(45deg); }
+body.touch #ios-tip { font-size: 11px; }

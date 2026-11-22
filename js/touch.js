@@ -162,6 +162,21 @@
           .catch(() => {});
       });
     }
+
+    // iPhone / iPad in Safari: there is no full-screen API for pages, so explain "Add to Home Screen".
+    // Opened from the home-screen icon (standalone) the game already fills the whole screen.
+    const tip = document.getElementById('ios-tip');
+    if (tip) {
+      const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      let standalone = navigator.standalone === true;
+      try {
+        standalone = standalone || window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches;
+      } catch (e) {
+        /* old browser */
+      }
+      tip.classList.toggle('hidden', !ios || standalone);
+      if (standalone) document.body.classList.add('standalone');
+    }
   };
 
   /** Called by the HUD each frame so contextual buttons only show when they do something. */

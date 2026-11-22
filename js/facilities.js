@@ -232,6 +232,7 @@
         use() {
           if (!I.powered(tr.zone) || tr.state !== 'idle' || !GW.Game.spend(C.TRAP.cost)) return;
           activateTrap(tr);
+          if (GW.Net) GW.Net.emit('trap', { i: M.traps.indexOf(tr) });
         },
       });
     }
@@ -260,6 +261,7 @@
       use(p) {
         if (S.state === 'sealed' || S.cd > 0 || !GW.Game.spend(C.SAFEROOM.cost)) return;
         seal(p);
+        if (GW.Net) GW.Net.emit('seal', {});
       },
     });
 
@@ -333,6 +335,19 @@
       }
       list.push(it);
     }
+  };
+
+  /** Co-op: a teammate switched a trap on. */
+  F.activateTrapAt = function (i) {
+    const tr = M.traps[i];
+    if (tr && tr.state === 'idle') activateTrap(tr);
+  };
+
+  /** Co-op: a teammate sealed the panic room (they are inside; we are not pulled in). */
+  F.sealRemote = function () {
+    const S = M.safeRoom;
+    if (S.state === 'sealed') return;
+    seal({ x: S.rx + S.rw / 2, y: S.ry + S.rh / 2, r: 1 });
   };
 
   F.update = function (dt) {

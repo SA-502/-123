@@ -74,8 +74,15 @@
     let tx, ty, k;
     if (inGame) {
       const P = GW.Player;
-      tx = P.x + (P.aimX - P.x) * 0.16;
-      ty = P.y + (P.aimY - P.y) * 0.16;
+      const spec = !P.alive && GW.Net && GW.Net.active ? GW.Net.spectateTarget() : null;
+      if (spec) {
+        // down in co-op: watch a teammate until the next round
+        tx = spec.x;
+        ty = spec.y;
+      } else {
+        tx = P.x + (P.aimX - P.x) * 0.16;
+        ty = P.y + (P.aimY - P.y) * 0.16;
+      }
       k = 1 - Math.exp(-dt * 9);
     } else {
       // attract mode: drift around the plaza
@@ -533,6 +540,57 @@
     ctx.restore();
   }
 
+  /** Co-op: names and health over teammates, and an arrow at the screen edge when they are off-screen. */
+  function drawTags() {
+    const z = R.cam.zoom;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    const fs = Math.round(11 * R.dpr);
+    ctx.font = '900 ' + fs + 'px ' + GW.FONT;
+    for (const rp of GW.Net.remotes.values()) {
+      if (!rp.alive) continue;
+      const sx = rp.x * z + R.ox, sy = rp.y * z + R.oy;
+      const m = 26 * R.dpr;
+      if (sx > -m && sx < R.vw + m && sy > -m && sy < R.vh + m) {
+        const y = sy - 26 * z;
+        ctx.globalAlpha = 0.95;
+        ctx.fillStyle = rp.jacket;
+        ctx.shadowColor = rp.jacket;
+        ctx.shadowBlur = 8;
+        ctx.fillText(rp.name, sx, y - 5 * R.dpr);
+        ctx.shadowBlur = 0;
+        const bw = 34 * R.dpr, bh = 3 * R.dpr;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(sx - bw / 2, y - 3 * R.dpr, bw, bh);
+        ctx.fillStyle = rp.jacket;
+        ctx.fillRect(sx - bw / 2, y - 3 * R.dpr, bw * U.clamp(rp.hp / (rp.maxHp || 100), 0, 1), bh);
+      } else {
+        // edge arrow pointing toward the teammate
+        const cx = R.vw / 2, cy = R.vh / 2, a = Math.atan2(sy - cy, sx - cx);
+        const pad = 22 * R.dpr;
+        const k = Math.min((cx - pad) / Math.abs(Math.cos(a) || 1e-6), (cy - pad) / Math.abs(Math.sin(a) || 1e-6));
+        const ax = cx + Math.cos(a) * k, ay = cy + Math.sin(a) * k;
+        ctx.save();
+        ctx.translate(ax, ay);
+        ctx.rotate(a);
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = rp.jacket;
+        ctx.beginPath();
+        ctx.moveTo(10 * R.dpr, 0);
+        ctx.lineTo(-6 * R.dpr, -7 * R.dpr);
+        ctx.lineTo(-6 * R.dpr, 7 * R.dpr);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = rp.jacket;
+        ctx.fillText(rp.name, ax - Math.cos(a) * 18 * R.dpr, ay - Math.sin(a) * 18 * R.dpr + fs / 2);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
   function drawPlayer(P) {
     const w = P.weapon();
     ctx.save();
@@ -603,8 +661,8 @@
         ctx.stroke();
       }
     }
-    // torso (jacket)
-    ctx.fillStyle = '#23aebf';
+    // torso (jacket): each co-op player wears their own colour
+    ctx.fillStyle = P.jacket || '#23aebf';
     ctx.beginPath();
     ctx.ellipse(-1, bob * 0.4, 8, 12.5, 0, 0, U.TAU);
     ctx.fill();
@@ -1280,6 +1338,7 @@
     }
     for (const f of FX.lights) carve(f.x, f.y, f.r, f.life / f.max);
     for (const pu of I.powerups) carve(pu.x, pu.y, 100, 0.7);
+    if (GW.Net && GW.Net.active) for (const rp of GW.Net.remotes.values()) if (rp.alive) carve(rp.x, rp.y, 170, 0.75);
     for (const wb of M.wallbuys) carve(wb.x, wb.y + wb.fy * 20, 95, 0.5);
     const bs = M.boxSpots[I.box.spot];
     if (I.box.state !== 'moving') carve(bs.x, bs.y, 150, 0.7);
@@ -1734,6 +1793,7 @@
       if (e.pa !== undefined) e.angle = e.pa + U.angDiff(e.pa, e.angle) * a;
     };
     take(GW.Player);
+    if (GW.Net && GW.Net.active) for (const rp of GW.Net.remotes.values()) take(rp);
     for (const z of GW.Zombies.list) take(z);
     take(GW.Allies.pal);
   }
@@ -1796,6 +1856,8 @@
     drawLure();
     for (const zb of Zs.list) if (inView(zb.x, zb.y, 40)) drawZombie(zb);
     if (inGame) drawAllies();
+    const N = GW.Net;
+    if (inGame && N && N.active) for (const rp of N.remotes.values()) if (rp.alive && inView(rp.x, rp.y, 40)) drawPlayer(rp);
     if (inGame && P.alive) drawPlayer(P);
     blit(MA.top, 1);
     drawDoors();
@@ -1817,6 +1879,7 @@
       ctx.fillStyle = 'rgba(40,200,230,' + 0.06 * R.lightsOut + ')';
       ctx.fillRect(0, 0, R.vw, R.vh);
     }
+    if (inGame && N && N.active) drawTags();
     if (G.state === 'playing' && P.alive && !GW.Input.touch.active) drawCrosshair();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
