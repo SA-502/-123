@@ -1,19 +1,44 @@
 /* GRAVEWAVE — touch controls: floating twin sticks, action buttons, aim assist and the touch layout switch */
 (function () {
   'use strict';
-  const GW = window.GW, U = GW.U, In = GW.Input;
+  const GW = window.GW, U = GW.U, C = GW.CFG, In = GW.Input;
   const TC = (GW.Touch = { enabled: false });
 
   /** Shared with player.js: analog move, aim direction, fire and sprint from the sticks. */
-  In.touch = { active: false, mx: 0, my: 0, aiming: false, ax: 1, ay: 0, fire: false, sprint: false };
+  In.touch = { active: false, mx: 0, my: 0, aiming: false, autoAim: false, ax: 1, ay: 0, fire: false, sprint: false };
 
   const DEAD = 0.14; // stick dead zone
-  const FIRE_AT = 0.3; // right stick fires once pushed this far
-  const SPRINT_AT = 0.93; // left stick sprints when pushed to the rim
+  const FIRE_AT = 0.3; // right stick fires once pushed this far ('drag' mode)
+  const SPRINT_OVER = 1.3; // left stick: sprint only when the thumb goes past the ring (the knob stays on the rim)
+  const AIM_KEY = 'gravewave.aim';
   let lastTouch = 0;
 
-  /** A floating stick: appears where the thumb lands inside its zone. */
-  function makeStick(zone, onChange) {
+  /** Fire mode: 'drag' = push the right stick to shoot (the original), 'tap' = touching fires at once, aimed for you. */
+  TC.aimMode = 'drag';
+  try {
+    if (localStorage.getItem(AIM_KEY) === 'tap') TC.aimMode = 'tap';
+  } catch (e) {
+    /* storage unavailable */
+  }
+  TC.setAimMode = function (mode) {
+    TC.aimMode = mode === 'tap' ? 'tap' : 'drag';
+    try {
+      localStorage.setItem(AIM_KEY, TC.aimMode);
+    } catch (e) {
+      /* storage unavailable */
+    }
+    document.querySelectorAll('.aim-toggle').forEach((b) => {
+      b.textContent = TC.aimMode === 'tap' ? 'FIRE: TAP TO SHOOT' : 'FIRE: DRAG TO SHOOT';
+    });
+  };
+
+  /**
+   * A floating stick: appears where the thumb lands inside its zone.
+   * fixed: the base stays where the thumb landed and the knob is held inside the ring
+   * (the left stick); otherwise the base trails a thumb that slides past the rim.
+   * onChange gets (x, y, m, held, over): over = thumb distance / ring radius, unclamped.
+   */
+  function makeStick(zone, onChange, fixed) {
     const base = zone.querySelector('.stick-base'), knob = zone.querySelector('.stick-knob');
     const st = { id: null, ox: 0, oy: 0 };
     const radius = () => base.offsetWidth / 2 || 60;
@@ -45,6 +70,13 @@
       const R = radius();
       let dx = e.clientX - st.ox, dy = e.clientY - st.oy;
       const d = Math.hypot(dx, dy);
+      if (fixed) {
+        const over = d / R;
+        const kx = d > R ? (dx / d) * R : dx, ky = d > R ? (dy / d) * R : dy;
+        show(st.ox, st.oy, st.ox + kx, st.oy + ky);
+        onChange(kx / R, ky / R, Math.min(1, over), true, over);
+        return;
+      }
       if (d > R) {
         // drag past the rim: the base follows the thumb so direction changes stay instant
         st.ox += (dx / d) * (d - R);
@@ -54,13 +86,13 @@
       }
       show(st.ox, st.oy, st.ox + dx, st.oy + dy);
       const m = Math.min(1, Math.hypot(dx, dy) / R);
-      onChange(dx / R, dy / R, m, true);
+      onChange(dx / R, dy / R, m, true, m);
     });
     const end = (e) => {
       if (e.pointerId !== st.id) return;
       st.id = null;
       base.style.display = knob.style.display = 'none';
-      onChange(0, 0, 0, false);
+      onChange(0, 0, 0, false, 0);
     };
     zone.addEventListener('pointerup', end);
     zone.addEventListener('pointercancel', end);
@@ -108,30 +140,52 @@
   TC.init = function () {
     const ov = document.getElementById('touch');
     if (!ov) return;
-    makeStick(document.getElementById('stick-l'), (x, y, m) => {
-      const t = In.touch;
-      if (m < DEAD) {
-        t.mx = t.my = 0;
-        t.sprint = false;
-        return;
-      }
-      t.mx = x;
-      t.my = y;
-      t.sprint = m >= SPRINT_AT;
-    });
+    const stickL = document.getElementById('stick-l');
+    makeStick(
+      stickL,
+      (x, y, m, held, over) => {
+        const t = In.touch;
+        const sprint = held && m >= DEAD && over >= SPRINT_OVER;
+        stickL.classList.toggle('sprint', sprint);
+        if (m < DEAD) {
+          t.mx = t.my = 0;
+          t.sprint = false;
+          return;
+        }
+        t.mx = x;
+        t.my = y;
+        t.sprint = sprint;
+      },
+      true
+    );
     makeStick(document.getElementById('stick-r'), (x, y, m, held) => {
       const t = In.touch;
       t.aiming = held && m >= DEAD;
+      t.autoAim = TC.aimMode === 'tap' && held && !t.aiming;
       if (t.aiming) {
         const d = Math.hypot(x, y) || 1;
         t.ax = x / d;
         t.ay = y / d;
       }
-      const fire = held && m >= FIRE_AT;
+      // 'tap': the touch itself pulls the trigger; 'drag': the stick has to be pushed out
+      const fire = held && (TC.aimMode === 'tap' || m >= FIRE_AT);
       if (fire && !t.fire) In.mouse.pressed = true;
       t.fire = fire;
       In.mouse.down = fire;
     });
+    // fire-mode buttons (title screen and pause menu)
+    document.querySelectorAll('.aim-toggle').forEach((b) =>
+      b.addEventListener('click', () => TC.setAimMode(TC.aimMode === 'tap' ? 'drag' : 'tap'))
+    );
+    TC.setAimMode(TC.aimMode);
+    // the minimap: tap it for the big map
+    const mapBtn = document.getElementById('tb-map');
+    if (mapBtn)
+      mapBtn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        GW.HUD.toggleBigMap();
+      });
     ov.querySelectorAll('[data-key]').forEach(bindButton);
     ov.addEventListener('contextmenu', (e) => e.preventDefault());
 
@@ -190,8 +244,29 @@
     if (tac) tac.classList.toggle('hidden', !P.tactical.type);
     const nade = document.getElementById('tb-nade');
     if (nade) nade.classList.toggle('empty', P.grenades <= 0);
+    const dash = document.getElementById('tb-dash');
+    if (dash) dash.classList.toggle('cool', P.dashCd > 0 || P.stamina < C.PLAYER.dash.stamina * 0.4);
     const swap = document.getElementById('tb-swap');
     if (swap) swap.classList.toggle('hidden', P.weapons.length < 2);
+  };
+
+  /** Tap-to-fire target: the nearest zombie in sight and in range (in front wins a close tie). */
+  TC.autoTarget = function (P) {
+    const w = P.weapon();
+    const range = Math.min(w ? w.s.range : 120, 760);
+    let best = null, bs = Infinity;
+    for (const z of GW.Zombies.list) {
+      if (z.dead || z.state === 'rise') continue;
+      const dx = z.x - P.x, dy = z.y - P.y, d = Math.hypot(dx, dy);
+      if (d > range + z.r) continue;
+      const score = d + Math.abs(U.angDiff(P.angle, Math.atan2(dy, dx))) * 40 + (z === TC.lastAuto ? -40 : 0);
+      if (score < bs && GW.Map.los(P.x, P.y, z.x, z.y, GW.Map.blocksBullet)) {
+        bs = score;
+        best = z;
+      }
+    }
+    TC.lastAuto = best;
+    return best;
   };
 
   /**

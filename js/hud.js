@@ -6,7 +6,9 @@
   const $ = (id) => document.getElementById(id);
   const el = {};
   let last = {};
-  let roundCtx, miniCtx, iconCtx, miniT = 0, denyTimer = 0;
+  let roundCtx, miniCtx, bigCtx, iconCtx, miniT = 0, denyTimer = 0;
+  H.bigMap = false;
+  const MINI_ZOOM = 1.75; // the corner map follows you, zoomed in; the big map shows the whole park
   const puNodes = {};
 
   H.init = function () {
@@ -18,6 +20,10 @@
     }
     roundCtx = el.round.getContext('2d');
     miniCtx = el.minimap.getContext('2d');
+    el.bigmap = $('bigmap');
+    if (el.bigmap) bigCtx = el.bigmap.getContext('2d');
+    // desktop: click the minimap for the big map
+    el.minimap.addEventListener('click', () => H.toggleBigMap());
     iconCtx = el['weapon-icon'].getContext('2d');
   };
 
@@ -27,6 +33,7 @@
 
   H.reset = function () {
     last = {};
+    H.toggleBigMap(false);
     el.perks.innerHTML = '';
     el['score-pops'].innerHTML = '';
     for (const k in puNodes) {
@@ -161,7 +168,7 @@
     g.clearRect(0, 0, 220, 64);
     if (!w) return;
     const col = w.up ? w.s.color : '#19f0ff';
-    const width = w.s.cls === 'pistol' ? 62 : 104;
+    const width = w.s.cls === 'pistol' ? 62 : w.s.type === 'melee' ? 120 : 104;
     g.save();
     g.shadowColor = col;
     g.shadowBlur = 10;
@@ -212,17 +219,51 @@
     }
   }
 
+  /** Show / hide the big map (tap the minimap, or Tab). It sits over the middle and never blocks the sticks. */
+  H.toggleBigMap = function (on) {
+    H.bigMap = on === undefined ? !H.bigMap : !!on;
+    if (el.bigmap) el.bigmap.parentNode.classList.toggle('hidden', !H.bigMap);
+    miniT = 0;
+  };
+
   /* ---------------- minimap ---------------- */
-  function drawMini() {
-    const g = miniCtx, P = GW.Player, I = GW.Interact;
+  function drawMini(g, big) {
+    const P = GW.Player, I = GW.Interact;
+    const CW = g.canvas.width, CH = g.canvas.height;
     const s = 3 / T;
     const blink = Math.sin(performance.now() / 160) > 0;
     g.setTransform(1, 0, 0, 1, 0, 0);
-    g.clearRect(0, 0, 192, 150);
-    // fit the whole park into the panel
-    const k = Math.min(192 / (M.W * 3), 150 / (M.H * 3));
-    g.setTransform(k, 0, 0, k, (192 - M.W * 3 * k) / 2, (150 - M.H * 3 * k) / 2);
+    g.clearRect(0, 0, CW, CH);
+    const fit = Math.min(CW / (M.W * 3), CH / (M.H * 3));
+    if (big) {
+      // the whole park
+      g.setTransform(fit, 0, 0, fit, (CW - M.W * 3 * fit) / 2, (CH - M.H * 3 * fit) / 2);
+    } else {
+      // zoomed in around the player, kept inside the park's edges
+      const k = fit * MINI_ZOOM;
+      const vw = CW / k, vh = CH / k;
+      const cx = U.clamp(P.x * s, vw / 2, M.W * 3 - vw / 2), cy = U.clamp(P.y * s, vh / 2, M.H * 3 - vh / 2);
+      g.setTransform(k, 0, 0, k, CW / 2 - cx * k, CH / 2 - cy * k);
+    }
+    g.imageSmoothingEnabled = false;
     g.drawImage(GW.MapArt.mini, 0, 0);
+    if (big) {
+      // zone names over each zone
+      if (!zoneCenters) zoneCenters = findZoneCenters();
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.font = '700 7px ' + GW.FONT;
+      for (const zc of zoneCenters) {
+        const zn = M.zones[zc.id];
+        g.globalAlpha = zn.open ? 0.95 : 0.45;
+        g.fillStyle = '#000';
+        const label = GW.L ? GW.L.t(zn.short) : zn.short;
+        g.fillText(label, zc.x * s + 0.6, zc.y * s + 0.6);
+        g.fillStyle = zn.color;
+        g.fillText(label, zc.x * s, zc.y * s);
+      }
+      g.globalAlpha = 1;
+    }
     for (const d of M.doors) {
       if (d.open) continue;
       g.fillStyle = d.power ? '#ff3b4e' : '#ffe14d';
@@ -316,6 +357,21 @@
     g.restore();
   }
 
+  let zoneCenters = null;
+  function findZoneCenters() {
+    const acc = M.zones.map((z) => ({ id: z.id, x: 0, y: 0, n: 0 }));
+    for (let ty = 0; ty < M.H; ty++)
+      for (let tx = 0; tx < M.W; tx++) {
+        if (M.tile(tx, ty) !== M.TT.FLOOR) continue;
+        const z = M.zoneAt((tx + 0.5) * T, (ty + 0.5) * T);
+        if (z < 0 || !acc[z]) continue;
+        acc[z].x += (tx + 0.5) * T;
+        acc[z].y += (ty + 0.5) * T;
+        acc[z].n++;
+      }
+    return acc.filter((a) => a.n > 0).map((a) => ({ id: a.id, x: a.x / a.n, y: a.y / a.n }));
+  }
+
   /* ---------------- per-frame sync ---------------- */
   H.update = function (dt) {
     const P = GW.Player, I = GW.Interact, FX = GW.FX;
@@ -326,11 +382,13 @@
     if (w) {
       set('wname', el['weapon-name'], w.s.name + (w.mod ? '  ·  ' + GW.MODS[w.mod].name.toUpperCase() : ''));
       cls('wup', el['weapon-name'], 'up', w.up);
-      set('clip', el.clip, String(w.clip));
-      set('res', el.reserve, String(w.reserve));
-      cls('cliplow', el.clip, 'low', w.clip <= Math.ceil(w.s.mag * 0.25));
+      const blade = w.s.type === 'melee';
+      set('clip', el.clip, blade ? '∞' : String(w.clip));
+      set('res', el.reserve, blade ? '∞' : String(w.reserve));
+      cls('cliplow', el.clip, 'low', !blade && w.clip <= Math.ceil(w.s.mag * 0.25));
       let hint = '';
-      if (w.reloadT > 0) hint = 'RELOADING';
+      if (blade) hint = '';
+      else if (w.reloadT > 0) hint = 'RELOADING';
       else if (w.clip === 0 && w.reserve === 0) hint = 'NO AMMO — FIND A WALL BUY';
       else if (w.clip <= Math.ceil(w.s.mag * 0.25) && w.reserve > 0) hint = 'PRESS R TO RELOAD';
       else if (w.reserve === 0) hint = 'LAST MAGAZINE';
@@ -428,7 +486,8 @@
     miniT -= dt;
     if (miniT <= 0) {
       miniT = 0.1;
-      drawMini();
+      drawMini(miniCtx, false);
+      if (H.bigMap && bigCtx) drawMini(bigCtx, true);
     }
   };
 })();

@@ -74,6 +74,13 @@ html, body {
   background: rgba(6, 3, 16, 0.72); border-radius: 4px;
 }
 #minimap-legend { font-size: 9px; color: var(--pink); opacity: 0.8; margin-top: 3px; }
+#minimap { cursor: pointer; pointer-events: auto; }
+#bigmap-wrap { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 3; }
+#bigmap-wrap.hidden { display: none; }
+#bigmap {
+  display: block; width: min(76vw, 92vh * 1.333); height: auto; aspect-ratio: 4 / 3; border: 2px solid rgba(255, 79, 216, 0.8); border-radius: 8px;
+  background: rgba(6, 3, 16, 0.86); box-shadow: 0 0 24px rgba(255, 79, 216, 0.5), inset 0 0 30px rgba(0, 0, 0, 0.8);
+}
 
 #powerups { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; }
 .pu-timer {
@@ -305,6 +312,18 @@ body.touch #game.playing #touch { display: block; }
 #tb-tac { right: 4px; bottom: 78px; }
 #tb-knife { right: 4px; bottom: 10px; }
 #tb-sentry { right: 140px; bottom: 236px; border-color: #19f0ff; }
+#tb-dash { right: 76px; bottom: 34px; border-color: rgba(255, 79, 216, 0.7); box-shadow: 0 0 10px rgba(255, 79, 216, 0.35); }
+#tb-dash.cool { opacity: 0.4; }
+/* an invisible button over the minimap: tap it for the big map */
+#tb-map { position: absolute; right: max(8px, env(safe-area-inset-right, 0px)); top: max(6px, env(safe-area-inset-top, 0px)); width: 124px; height: 97px;
+  margin: 0; padding: 0; border: 0; background: transparent; touch-action: none; -webkit-tap-highlight-color: transparent; }
+/* the left stick: a dashed outer ring marks where sprinting starts; it glows while you sprint */
+#stick-l .stick-base::after { content: ''; position: absolute; inset: -16%; border-radius: 50%; border: 2px dashed rgba(255, 225, 77, 0.35); }
+#stick-l.sprint .stick-base { border-color: var(--yellow); box-shadow: 0 0 22px rgba(255, 225, 77, 0.7) inset; }
+#stick-l.sprint .stick-base::after { border-style: solid; border-color: rgba(255, 225, 77, 0.9); box-shadow: 0 0 16px rgba(255, 225, 77, 0.7); }
+#stick-l.sprint .stick-knob { background: rgba(255, 225, 77, 0.6); box-shadow: 0 0 16px rgba(255, 225, 77, 0.9); }
+.aim-toggle { display: none; }
+body.touch .aim-toggle { display: inline-block; }
 .tbtn.small { width: 42px; height: 42px; font-size: 13px; }
 #tb-pause { right: calc(max(12px, env(safe-area-inset-right, 0px)) + 136px); top: max(10px, env(safe-area-inset-top, 0px)); }
 
@@ -354,7 +373,9 @@ body.touch #fps { bottom: auto; top: 4px; }
   #tb-swap { right: 62px; bottom: 192px; }
   #tb-use { right: 80px; bottom: 112px; }
   #tb-sentry { right: 120px; bottom: 192px; }
+  #tb-dash { right: 64px; bottom: 28px; }
   body.touch #minimap { width: 112px; height: 88px; }
+  #tb-map { width: 112px; height: 88px; }
 }
 
 /* ---------- co-op ---------- */

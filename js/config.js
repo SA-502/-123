@@ -24,6 +24,8 @@
       meleeRange: 60,
       meleeArc: 1.0,
       meleeCooldown: 0.6,
+      meleeAssist: 96, // the knife turns you toward any zombie this close, even one behind you
+      dash: { speed: 660, time: 0.3, cooldown: 1.0, stamina: 0.7 }, // slide: a quick burst you can shoot out of
       grenadesStart: 2,
       grenadesMax: 4,
     },
@@ -103,6 +105,7 @@
   /* ------------------------------------------------------------------ *
    * Weapons. `up` holds the overrides applied by the Overclocker.
    * type: 'bullet' (hitscan) | 'plasma' (explosive projectile) | 'arc' (chain lightning)
+   *       | 'melee' (a blade swing: dmg + frac of the target's max health, hits `cleave` zombies) | 'flame' (a short cone that sets fire)
    * box: mystery-crate weight (0 = never in the crate)
    * ------------------------------------------------------------------ */
   const DEF = { type: 'bullet', pellets: 1, pierce: 1, crit: 2, move: 1, kick: 2, len: 20, color: '#ffe7a3', cost: 0, box: 0 };
@@ -166,6 +169,37 @@
       name: 'Quasar Blaster', cls: 'energy', type: 'plasma', auto: false, dmg: 1200, splash: 700, splashR: 90, rpm: 190,
       mag: 20, reserve: 160, reload: 2.6, spread: 0.01, range: 1400, kick: 3, len: 20, wonder: true, box: 1, color: '#7dff5a',
       up: { name: 'Quasar Hypernova', dmg: 2600, splash: 1600, splashR: 110, mag: 40, reserve: 200, color: '#ff5ad1' },
+    },
+    // ---- crate-only extras: rare, and stronger than the wall guns ----
+    thumper: {
+      name: 'Thumper GL', cls: 'launcher', type: 'plasma', auto: false, dmg: 700, splash: 900, splashR: 125, speed: 720, rpm: 95,
+      mag: 6, reserve: 42, reload: 2.6, spread: 0.02, range: 950, kick: 6, len: 22, box: 1.4, color: '#ffb14d',
+      up: { name: 'Big Bertha', dmg: 1800, splash: 2400, splashR: 150, mag: 10, reserve: 70, rpm: 120, color: '#ff4fd8' },
+    },
+    ripper: {
+      name: 'Ripper Minigun', cls: 'minigun', auto: true, dmg: 78, rpm: 1500, mag: 200, reserve: 600, reload: 4.8,
+      spread: 0.075, range: 1100, pierce: 2, kick: 1.1, len: 30, move: 0.8, box: 0.8, color: '#ffd426',
+      up: { name: 'Deathroll', dmg: 175, mag: 300, reserve: 900, pierce: 3, color: '#ff4fd8' },
+    },
+    katana: {
+      name: 'Neon Katana', cls: 'katana', type: 'melee', auto: true, dmg: 450, frac: 0.34, reach: 96, arc: 1.25, cleave: 3, rpm: 160,
+      mag: 1, reserve: 0, reload: 0, spread: 0, range: 96, kick: 2, len: 30, box: 0.8, color: '#19f0ff',
+      up: { name: 'Moonlight Katana', dmg: 1100, frac: 0.6, reach: 108, cleave: 5, rpm: 190, color: '#ff4fd8' },
+    },
+    axe: {
+      name: 'Fire Axe', cls: 'axe', type: 'melee', auto: true, dmg: 700, frac: 0.5, reach: 86, arc: 1.6, cleave: 4, rpm: 100,
+      mag: 1, reserve: 0, reload: 0, spread: 0, range: 86, kick: 4, len: 26, box: 1, color: '#ff3b4e',
+      up: { name: 'Executioner', dmg: 1600, frac: 0.9, reach: 96, cleave: 6, rpm: 115, color: '#ffd426' },
+    },
+    dragon: {
+      name: "Dragon's Breath", cls: 'flame', type: 'flame', auto: true, dmg: 70, frac: 0.012, burn: 0.06, rpm: 600, mag: 120, reserve: 480,
+      reload: 2.8, spread: 0.32, range: 250, kick: 0.4, len: 26, move: 0.92, wonder: true, box: 0.6, color: '#ff7a1a',
+      up: { name: 'Hellfire Breath', dmg: 170, frac: 0.02, burn: 0.1, range: 300, mag: 200, reserve: 800, color: '#3dd6ff' },
+    },
+    photon: {
+      name: 'Photon Ray', cls: 'energy', type: 'plasma', auto: false, dmg: 1500, splash: 450, splashR: 70, speed: 1150, rpm: 280,
+      mag: 24, reserve: 192, reload: 2.0, spread: 0.008, range: 1500, kick: 2, len: 18, wonder: true, box: 0.6, color: '#ff3b4e',
+      up: { name: 'Photon Supernova', dmg: 3400, splash: 1300, splashR: 95, mag: 40, reserve: 280, rpm: 320, color: '#3dff8b' },
     },
     arccaster: {
       name: 'Arc Caster', cls: 'energy', type: 'arc', auto: false, dmg: 0, chain: 6, rpm: 55, mag: 3, reserve: 15,

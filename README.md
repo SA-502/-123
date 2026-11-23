@@ -18,7 +18,7 @@ then visit `http://localhost:8000`.
 
 ## Controls
 
-On touch screens the left thumb moves (push the stick to its rim to sprint) and the right thumb aims and fires, with a gentle aim assist. USE lights up when there is something to buy; hold it to rebuild a barricade. RELOAD, SWAP, NADE, TAC, KNIFE, SENTRY and pause are on-screen buttons.
+On touch screens the left thumb moves (the stick stays inside its ring; push your thumb past the dashed outer ring to sprint) and the right thumb aims and fires, with a gentle aim assist. A fire-mode button (title screen and pause menu) switches between **drag to shoot** and **tap to shoot**, where touching the right side fires straight away at the nearest zombie. DASH slides. Tap the minimap for the big map. USE lights up when there is something to buy; hold it to rebuild a barricade. RELOAD, SWAP, NADE, TAC, KNIFE, SENTRY and pause are on-screen buttons.
 
 
 | Input | Action |
@@ -29,7 +29,9 @@ On touch screens the left thumb moves (push the stick to its rim to sprint) and 
 | `R` | Reload |
 | `F` | Buy / interact (hold to rebuild barricades) |
 | `Q`, wheel, `1` `2` | Swap weapon |
-| `V` / `RMB` | Knife |
+| `V` / `RMB` | Knife (turns you toward the closest zombie in reach, even behind you) |
+| `Space` / `C` | Slide (dash) — you can shoot during it |
+| `Tab` | Big map |
 | `G` | Grenade (frag) |
 | `T` | Tactical grenade (Cryo / Lure / Bubble) |
 | `X` | Deploy a carried Hover Sentry |
@@ -41,7 +43,7 @@ On touch screens the left thumb moves (push the stick to its rim to sprint) and 
 - **Rounds** — horde size, zombie health and speed follow the classic survival curves: health +100 per round then ×1.1 compounding from round 10, a 24-base horde scaled by a round multiplier, spawn delay decaying 5% per round, and a rising speed roll that turns walkers into runners into sprinters. At most 24 are alive at once.
 - **Points** — 10 per hit, 60 per kill, 100 for a critical kill (put the shot through the centre of the target), 130 for a knife kill. Points buy everything.
 - **Map** — a central plaza plus seven locked zones (arcade, aquarium, speedway, substation, Starwheel Plaza with its Ferris wheel, the maze-like Nightmare Manor, and Pier Nine over open water) and the Overclock Stage, linked by eleven buyable doors that form loops. Zombies tear through barricaded windows you can rebuild, and climb ladders out of the water at the pier.
-- **Weapons** — 13 guns: a starting pistol, nine wall-buys, and crate-only weapons including two wonder weapons. The Prize Crate rolls a random weapon and will eventually relocate.
+- **Weapons** — 19 weapons: a starting pistol, nine wall-buys, and rare crate-only weapons: the Thumper grenade launcher, the Ripper minigun, two blades (Neon Katana and Fire Axe, which cut several zombies per swing and deal a share of their max health), and four wonder weapons (Quasar Blaster, Arc Caster, Photon Ray and the Dragon's Breath flamethrower). The Prize Crate rolls a random weapon and will eventually relocate.
 - **Power** — every zone has its own generator, and each needs a fuse. Nine fuses are hidden at random spots each game (the first Bloater you kill drops a spare). A powered zone gets its lights, neon, soundtrack, perk machine, traps and teleporters; the Substation generator also opens the Overclock Stage.
 - **Overclocker** — three tiers per weapon (5000, 10000, 15000): tier I applies the overclocked stats and laser tracers, tiers II and III multiply damage by 2 and 3.5. Each upgrade also loads an ammo mod. The four mods cycle above the machine and you take the one showing: Inferno (burns a share of max health), Arc (chains to neighbours), Frost (slows, then freezes) or Blast (small explosions).
 - **Perks** — Thick Skin (health), Quick Hands (reload), Afterburner (movement), Twin Trigger (fire rate), Second Wind (cheat death once, burns all perks).

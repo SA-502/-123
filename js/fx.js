@@ -13,6 +13,7 @@
     FX.lights = [];
     FX.popups = [];
     FX.corpses = [];
+    FX.slashes = [];
     FX.shakeAmt = 0;
     FX.hitmark = { t: 0, kill: false, crit: false };
     FX.flash = 0; // white screen flash 0..1
@@ -39,6 +40,22 @@
       const a = dir + U.rand(-sp, sp), s = U.rand(0.3, 1) * (speed || 260);
       part({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: U.rand(0.12, 0.4), max: 0.4, size: U.rand(1.2, 2.6), color: color || '#ffe7a3', drag: 4, glow: true });
     }
+  };
+
+  /** Flamethrower plume: soft, growing embers that drift out to `reach`. tint recolours an overclocked plume. */
+  FX.flame = function (x, y, dir, reach, spread, tint) {
+    const n = FX.maxParts < 500 ? 4 : 6;
+    for (let i = 0; i < n; i++) {
+      const a = dir + U.rand(-spread, spread) * 0.8, s = U.rand(0.75, 1.15) * reach * 2.6;
+      const r = Math.random();
+      const color = tint ? (r < 0.5 ? tint : '#ffffff') : r < 0.45 ? '#ff7a1a' : r < 0.8 ? '#ffb02e' : '#ffe14d';
+      part({ x: x + U.rand(-3, 3), y: y + U.rand(-3, 3), vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: U.rand(0.26, 0.4), max: 0.4, size: U.rand(3, 6), color, drag: 3.2, glow: true, flame: true });
+    }
+  };
+
+  /** A blade's swing: a bright arc in front of the player. side = 1 / -1 for the swing direction. */
+  FX.slash = function (x, y, dir, r, color, side) {
+    FX.slashes.push({ x, y, dir, r, color: color || '#dfe9f2', side: side || 1, life: 0.18, max: 0.18 });
   };
 
   FX.burst = function (x, y, n, color, speed) {
@@ -133,7 +150,7 @@
       p.x += p.vx * dt;
       p.y += p.vy * dt;
     }
-    for (const list of [FX.tracers, FX.bolts, FX.rings, FX.lights, FX.corpses]) {
+    for (const list of [FX.tracers, FX.bolts, FX.rings, FX.lights, FX.corpses, FX.slashes]) {
       for (let i = list.length - 1; i >= 0; i--) {
         list[i].life -= dt;
         if (list[i].life <= 0) list.splice(i, 1);

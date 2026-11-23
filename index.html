@@ -55,9 +55,11 @@
     </div>
 
     <div id="hud-tr">
-      <canvas id="minimap" width="192" height="150"></canvas>
-      <div id="minimap-legend">MAP</div>
+      <canvas id="minimap" width="288" height="225"></canvas>
+      <div id="minimap-legend">MAP · TAB</div>
     </div>
+
+    <div id="bigmap-wrap" class="hidden"><canvas id="bigmap" width="864" height="648"></canvas></div>
 
     <div id="powerups"></div>
 
@@ -125,8 +127,10 @@
       <button id="tb-tac" class="tbtn" data-key="KeyT">TAC</button>
       <button id="tb-knife" class="tbtn" data-key="KeyV">KNIFE</button>
       <button id="tb-sentry" class="tbtn hidden" data-key="KeyX">SENTRY</button>
+      <button id="tb-dash" class="tbtn" data-key="Space">DASH</button>
     </div>
     <button id="tb-pause" class="tbtn small" data-key="Escape">II</button>
+    <button id="tb-map" aria-label="map"></button>
   </div>
   <div id="rotate"><div>⟳</div><p>Turn your phone sideways to play</p></div>
 
@@ -147,7 +151,8 @@
       <b class="only-ar">شاشة كاملة في الآيفون</b>
       <span class="only-ar">اضغط زر المشاركة <i class="share-ico"></i> ثم «إضافة إلى الشاشة الرئيسية»، وافتح اللعبة من الأيقونة.</span>
     </div>
-    <div class="touch-hint">Left thumb: move (push to the edge to sprint) · Right thumb: aim and shoot · USE appears when you can buy something</div>
+    <button class="neon-btn alt small-btn aim-toggle">FIRE: DRAG TO SHOOT</button>
+    <div class="touch-hint">Left thumb: move (push past the ring to sprint) · Right thumb: aim and shoot · DASH slides · Tap the map to enlarge it</div>
     <div id="best"></div>
     <div class="controls">
       <div><b>W A S D</b> move</div>
@@ -157,6 +162,8 @@
       <div><b>F</b> buy / interact</div>
       <div><b>Q</b> / <b>WHEEL</b> swap weapon</div>
       <div><b>V</b> / <b>RMB</b> knife</div>
+      <div><b>SPACE</b> / <b>C</b> slide</div>
+      <div><b>TAB</b> big map</div>
       <div><b>G</b> grenade</div>
       <div><b>T</b> tactical</div>
       <div><b>X</b> deploy sentry</div>
@@ -197,6 +204,7 @@
       <label>SFX <input id="vol-sfx" type="range" min="0" max="100" value="85"></label>
     </div>
     <label class="opt"><input id="opt-fps" type="checkbox"> SHOW FPS <span class="dim">(F3)</span></label>
+    <button class="neon-btn alt small-btn aim-toggle">FIRE: DRAG TO SHOOT</button>
     <button id="btn-resume" class="neon-btn">RESUME</button>
     <button id="btn-restart" class="neon-btn alt">RESTART</button>
     <div class="controls small">

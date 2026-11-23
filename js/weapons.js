@@ -29,6 +29,7 @@
     s.mag = Math.round(s.mag * TR.mag[i]);
     s.reserve = Math.round(s.reserve * TR.mag[i]);
     if (s.chain) s.chain += i * 4;
+    if (s.frac) s.frac = Math.min(1, s.frac * (1 + 0.5 * i));
     s.name += TR.suffix[i];
     s.tier = w.tier;
     s.mod = w.mod;
@@ -75,6 +76,8 @@
 
   function fire(p, w) {
     const s = w.s;
+    if (s.type === 'melee') return swingFire(p, w);
+    if (s.type === 'flame') return flameFire(p, w);
     w.clip--;
     w.cd = (60 / s.rpm) * (p.perks.twin ? 0.75 : 1);
     p.stats.shots++;
@@ -92,8 +95,8 @@
     if (s.type === 'plasma') {
       const ang = a + U.rand(-spread, spread);
       Wp.projectiles.push({
-        x: mx, y: my, vx: Math.cos(ang) * PLASMA_SPEED, vy: Math.sin(ang) * PLASMA_SPEED,
-        life: s.range / PLASMA_SPEED, s, color: s.color, trail: 0,
+        x: mx, y: my, vx: Math.cos(ang) * (s.speed || PLASMA_SPEED), vy: Math.sin(ang) * (s.speed || PLASMA_SPEED),
+        life: s.range / (s.speed || PLASMA_SPEED), s, color: s.color, trail: 0,
       });
     } else if (s.type === 'arc') {
       arcFire(p, s, mx, my, ca, sa, shot);
@@ -115,6 +118,125 @@
       if (shot.crit) A.play('crit');
     }
   }
+
+  /* ---------------- blades: the knife, the katana and the axe ---------------- */
+
+  /**
+   * Who a swing hits. The swing turns the player toward the closest zombie in reach — even one
+   * behind them — so you can run and still cut down whatever is chasing you. Then every zombie
+   * inside the arc around that new heading is hit, nearest first, up to `max`.
+   */
+  Wp.meleeTargets = function (p, reach, arc, max) {
+    let best = null, bs = Infinity;
+    for (const z of GW.Zombies.list) {
+      if (z.dead || z.state === 'rise') continue;
+      const d = U.dist(p.x, p.y, z.x, z.y) - z.r;
+      if (d > reach) continue;
+      if (!M.los(p.x, p.y, z.x, z.y, M.blocksBullet)) continue;
+      // prefer what is in front, but anything in reach will do
+      const score = d + Math.abs(U.angDiff(p.angle, Math.atan2(z.y - p.y, z.x - p.x))) * 14;
+      if (score < bs) {
+        bs = score;
+        best = z;
+      }
+    }
+    if (!best) return [];
+    p.angle = Math.atan2(best.y - p.y, best.x - p.x);
+    p.faceT = 0.3; // hold the new heading for a moment so the swing reads
+    const out = [best];
+    if (max > 1) {
+      const more = [];
+      for (const z of GW.Zombies.list) {
+        if (z === best || z.dead || z.state === 'rise') continue;
+        const d = U.dist(p.x, p.y, z.x, z.y) - z.r;
+        if (d > reach) continue;
+        if (d > 8 && Math.abs(U.angDiff(p.angle, Math.atan2(z.y - p.y, z.x - p.x))) > arc) continue;
+        if (!M.los(p.x, p.y, z.x, z.y, M.blocksBullet)) continue;
+        more.push({ z, d });
+      }
+      more.sort((a, b) => a.d - b.d);
+      for (let i = 0; i < more.length && out.length < max; i++) out.push(more[i].z);
+    }
+    return out;
+  };
+
+  /** Blade damage: a flat amount plus a share of the zombie's max health, so blades stay useful in late rounds. */
+  Wp.bladeDamage = function (z, dmg, frac) {
+    if (!frac || z.type === 'boss') return dmg;
+    return dmg + z.maxHp * frac * (z.type === 'brute' ? 0.15 : 1);
+  };
+
+  function swingFire(p, w) {
+    const s = w.s;
+    w.cd = (60 / s.rpm) * (p.perks.twin ? 0.8 : 1);
+    p.stats.shots++;
+    p.swingT = p.swingDur = 0.24;
+    p.swingSide = -(p.swingSide || 1); // alternate forehand / backhand
+    const hits = Wp.meleeTargets(p, s.reach, s.arc, s.cleave);
+    const a = p.angle;
+    FX.slash(p.x, p.y, a, s.reach + p.r, s.color, p.swingSide);
+    A.play('slash', { heavy: s.cls === 'axe' });
+    if (!hits.length) return;
+    let kill = false;
+    for (const z of hits) {
+      const dir = Math.atan2(z.y - p.y, z.x - p.x);
+      const killed = GW.Zombies.damage(z, Wp.bladeDamage(z, s.dmg, s.frac), { melee: true, dir });
+      if (killed) kill = true;
+      else GW.Game.addPoints(C.POINTS.hit, z.x, z.y - z.r, { small: true });
+      if (s.mod) Wp.applyMod(z, s, dir);
+      FX.sparks(z.x, z.y, dir, 5, s.color, 260);
+    }
+    p.stats.hits++;
+    FX.hit(kill, false);
+    FX.shake(s.kick);
+    A.play('stab');
+  }
+
+  /* ---------------- flamethrower ---------------- */
+  function flameFire(p, w) {
+    const s = w.s;
+    w.clip--;
+    w.cd = (60 / s.rpm) * (p.perks.twin ? 0.75 : 1);
+    p.stats.shots++;
+    const a = p.angle, ca = Math.cos(a), sa = Math.sin(a);
+    const ml = p.r + s.len;
+    const mx = p.x + ca * ml, my = p.y + sa * ml;
+    // the flames stop at the first wall
+    const reach = Math.min(s.range, M.raycast(p.x, p.y, ca, sa, s.range, M.blocksBullet) + 10);
+    let any = false, kill = false, n = 0;
+    for (const z of GW.Zombies.list.slice()) {
+      if (z.dead || z.state === 'rise' || n >= 10) continue;
+      const dx = z.x - p.x, dy = z.y - p.y, d = Math.hypot(dx, dy) - z.r;
+      if (d > reach) continue;
+      const diff = Math.abs(U.angDiff(a, Math.atan2(dy, dx)));
+      if (d > 10 && diff > s.spread + Math.atan2(z.r, Math.max(1, d))) continue;
+      if (!M.los(p.x, p.y, z.x, z.y, M.blocksBullet)) continue;
+      n++;
+      const big = z.type === 'brute' || z.type === 'boss';
+      const dmg = s.dmg + (big ? 0 : z.maxHp * s.frac);
+      if (!z.dead && !big) {
+        // set them alight: the burn keeps working after the flames pass
+        z.burnT = Math.max(z.burnT || 0, 2.5);
+        z.burnDps = Math.max(z.burnDps || 0, z.maxHp * s.burn);
+        if (!(z.burnTick > 0)) z.burnTick = 0.25;
+      }
+      const killed = GW.Zombies.damage(z, dmg, { burn: true, dir: a });
+      any = true;
+      if (killed) kill = true;
+      else if (Math.random() < 0.25) GW.Game.addPoints(C.POINTS.hit, z.x, z.y - z.r, { small: true });
+    }
+    FX.flame(mx, my, a, reach, s.spread, w.up ? s.color : null);
+    FX.light(mx + ca * reach * 0.5, my + sa * reach * 0.5, reach * 1.2, w.up ? s.color : '#ff8a2a', 0.08);
+    p.muzzleT = 0.05;
+    A.play('flame');
+    if (any) {
+      p.stats.hits++;
+      FX.hit(kill, false);
+    }
+  }
+  Wp.flameFx = function (x, y, a, s, up) {
+    FX.flame(x, y, a, s.range, s.spread, up ? s.color : null);
+  };
 
   /** Set the ammo mod on an overclocked weapon. */
   Wp.setMod = function (w, mod) {

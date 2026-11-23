@@ -53,7 +53,9 @@
     canvas.height = Math.round(h * s);
     R.vw = canvas.width;
     R.vh = canvas.height;
-    R.cam.zoom = Math.max(R.vw / 1300, R.vh / 745);
+    // phones see a slightly closer view (about 15% bigger) so the player and the horde read better
+    const VW = R.touch ? 1130 : 1300, VH = R.touch ? 648 : 745;
+    R.cam.zoom = Math.max(R.vw / VW, R.vh / VH);
     lcan.width = Math.ceil(R.vw / 2);
     lcan.height = Math.ceil(R.vh / 2);
   };
@@ -606,9 +608,84 @@
     const rec = P.recoil * 3;
     const bob = P.moving ? Math.sin(P.walkT) * 1.2 : 0;
     ctx.lineCap = 'round';
-    if (w && P.meleeT <= 0) {
+    if (P.dashT > 0) {
+      // sliding: low and stretched along the slide, with a speed streak behind
+      ctx.rotate(U.angDiff(P.angle, P.dashA || P.angle));
+      ctx.globalAlpha *= 0.5;
+      ctx.fillStyle = P.jacket || '#23aebf';
+      ctx.fillRect(-34, -6, 26, 12);
+      ctx.globalAlpha /= 0.5;
+      ctx.rotate(-U.angDiff(P.angle, P.dashA || P.angle));
+      ctx.scale(1.12, 0.86);
+    }
+    if (w && P.meleeT <= 0 && w.s.type === 'melee') {
+      // katana / axe: held ready, swept across on a swing
+      const s = w.s, axe = s.cls === 'axe';
+      const sw = P.swingT > 0 ? 1 - P.swingT / (P.swingDur || 0.24) : -1;
+      const side = P.swingSide || 1;
+      const a = sw >= 0 ? (-1.35 + 2.7 * (1 - (1 - sw) * (1 - sw))) * side : 0.5;
+      const hx = Math.cos(a) * 13, hy = Math.sin(a) * 13;
+      ctx.strokeStyle = '#1d8f9e';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(1, 9);
+      ctx.lineTo(hx, hy);
+      ctx.moveTo(1, -9);
+      ctx.lineTo(hx * 0.8, hy * 0.8 - 2);
+      ctx.stroke();
+      const ca = Math.cos(a), sa = Math.sin(a);
+      const L = axe ? 24 : 32;
+      // handle
+      ctx.strokeStyle = axe ? '#6b4a2b' : '#231b33';
+      ctx.lineWidth = axe ? 3.4 : 3;
+      ctx.beginPath();
+      ctx.moveTo(hx - ca * 4, hy - sa * 4);
+      ctx.lineTo(hx + ca * (axe ? L : 7), hy + sa * (axe ? L : 7));
+      ctx.stroke();
+      if (axe) {
+        // axe head at the end of the haft
+        const ex = hx + ca * L, ey = hy + sa * L, nx = -sa * side, ny = ca * side;
+        ctx.fillStyle = '#c9ced8';
+        ctx.beginPath();
+        ctx.moveTo(ex - ca * 3, ey - sa * 3);
+        ctx.lineTo(ex - ca * 7 + nx * 11, ey - sa * 7 + ny * 11);
+        ctx.lineTo(ex + ca * 5 + nx * 12, ey + sa * 5 + ny * 12);
+        ctx.lineTo(ex + ca * 4, ey + sa * 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(ex - ca * 7 + nx * 11, ey - sa * 7 + ny * 11);
+        ctx.lineTo(ex + ca * 5 + nx * 12, ey + sa * 5 + ny * 12);
+        ctx.stroke();
+      } else {
+        // guard and a glowing blade
+        ctx.strokeStyle = '#ffd426';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(hx + ca * 7 - sa * 4, hy + sa * 7 + ca * 4);
+        ctx.lineTo(hx + ca * 7 + sa * 4, hy + sa * 7 - ca * 4);
+        ctx.stroke();
+        ctx.strokeStyle = s.color;
+        ctx.globalAlpha *= 0.45;
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(hx + ca * 8, hy + sa * 8);
+        ctx.lineTo(hx + ca * L, hy + sa * L);
+        ctx.stroke();
+        ctx.globalAlpha /= 0.45;
+        ctx.strokeStyle = '#eef6ff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#e0b890';
+      ctx.beginPath();
+      ctx.arc(hx, hy, 2.6, 0, U.TAU);
+      ctx.fill();
+    } else if (w && P.meleeT <= 0) {
       const s = w.s, len = s.len;
-      const thick = s.cls === 'lmg' || s.cls === 'shotgun' || s.cls === 'energy' ? 6.5 : s.cls === 'pistol' ? 4.5 : 5.2;
+      const thick = s.cls === 'minigun' || s.cls === 'launcher' ? 7.5 : s.cls === 'lmg' || s.cls === 'shotgun' || s.cls === 'energy' || s.cls === 'flame' ? 6.5 : s.cls === 'pistol' ? 4.5 : 5.2;
       const gx = (s.cls === 'pistol' ? 12 : 7) - rec;
       // arms reaching to the weapon
       ctx.strokeStyle = '#1d8f9e';
@@ -625,6 +702,23 @@
       ctx.fillStyle = '#2b2836';
       ctx.fillRect(gx, -thick / 2, (len + 4) * 0.45, thick);
       if (s.cls === 'sniper') ctx.fillRect(gx + 6, -thick / 2 - 2.5, 10, 2.5);
+      if (s.cls === 'minigun') {
+        // barrel cluster, spinning while it fires
+        ctx.fillStyle = '#3a3646';
+        const spin = P.recoil > 0 ? (R.time * 40) % 1 : 0;
+        for (let i = 0; i < 3; i++) ctx.fillRect(gx + len * 0.5, -3 + ((i + spin) % 3) * 2.2, len * 0.6, 1.3);
+      } else if (s.cls === 'flame') {
+        // fuel tank and a pilot light
+        ctx.fillStyle = '#7a2a12';
+        ctx.fillRect(gx + 3, thick / 2, 9, 4);
+        ctx.fillStyle = w.up ? s.color : '#ff9a2a';
+        ctx.beginPath();
+        ctx.arc(gx + len + 5, 0, 1.8 + Math.sin(R.time * 30) * 0.5, 0, U.TAU);
+        ctx.fill();
+      } else if (s.cls === 'launcher') {
+        ctx.fillStyle = '#3a3646';
+        ctx.fillRect(gx + len * 0.3, -thick / 2 - 1.5, len * 0.4, thick + 3);
+      }
       if (w.up || s.cls === 'energy') {
         ctx.fillStyle = s.color;
         ctx.fillRect(gx + 2, -0.9, len + 1, 1.8);
@@ -1659,20 +1753,40 @@
       ctx.arc(rg.x, rg.y, rg.r * (0.15 + 0.85 * k), 0, U.TAU);
       ctx.stroke();
     }
+    // blade swings
+    for (const sl of FX.slashes) {
+      const k = 1 - sl.life / sl.max;
+      const a0 = sl.dir - 1.3 * sl.side, a1 = sl.dir - 1.3 * sl.side + 2.6 * sl.side * Math.min(1, k * 1.6);
+      ctx.strokeStyle = sl.color;
+      ctx.lineCap = 'round';
+      for (const [w, al, rr] of [[9, 0.25, 1], [3.5, 0.9, 1], [2, 0.5, 0.72]]) {
+        ctx.globalAlpha = al * (1 - k);
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.arc(sl.x, sl.y, sl.r * rr, Math.min(a0, a1), Math.max(a0, a1));
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
     // glowing particles
     for (const p of FX.parts) {
       if (!p.glow || !inView(p.x, p.y, 10)) continue;
       const a = U.clamp(p.life / p.max, 0, 1);
       ctx.globalAlpha = a;
       ctx.fillStyle = p.color;
-      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+      if (p.flame) {
+        ctx.globalAlpha = a * 0.55;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * (2.6 - 1.6 * a), 0, U.TAU);
+        ctx.fill();
+      } else ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
     }
     ctx.globalAlpha = 1;
 
     // muzzle flash + laser sight
     if (inGame && P.alive) {
       const w = P.weapon();
-      if (w && P.meleeT <= 0) {
+      if (w && P.meleeT <= 0 && w.s.type !== 'melee') {
         const ca = Math.cos(P.angle), sa = Math.sin(P.angle);
         const ml = P.r + w.s.len;
         const mx = P.x + ca * ml, my = P.y + sa * ml;

@@ -237,7 +237,7 @@
   /* ------------------------------------------------------------------ */
   /* sound effect library                                               */
   /* ------------------------------------------------------------------ */
-  const THROTTLE = { hit: 0.035, groan: 0.3, plank: 0.1, casing: 0.05, zdeath: 0.05, explosion: 0.05, deny: 0.2, step: 0.05, zattack: 0.08 };
+  const THROTTLE = { hit: 0.035, groan: 0.3, plank: 0.1, casing: 0.05, zdeath: 0.05, explosion: 0.05, deny: 0.2, step: 0.05, zattack: 0.08, flame: 0.09, slash: 0.06 };
 
   const SHOTS = {
     pistol: (t, v, pan) => {
@@ -265,6 +265,23 @@
       noise({ t, dur: 0.45, vol: 0.8 * v, type: 'lowpass', f: 1300, f2: 120, pan, verb: 0.9 });
       tone({ t, type: 'sine', f: 160, f2: 32, dur: 0.34, vol: 0.55 * v, pan });
       noise({ t, dur: 0.04, vol: 0.4 * v, type: 'highpass', f: 5000, pan });
+    },
+    minigun: (t, v, pan) => {
+      noise({ t, dur: 0.06, vol: 0.38 * v, type: 'bandpass', f: 2200, f2: 700, q: 0.8, pan, verb: 0.2 });
+      tone({ t, type: 'square', f: 200, f2: 70, dur: 0.045, vol: 0.18 * v, pan });
+    },
+    launcher: (t, v, pan) => {
+      tone({ t, type: 'sine', f: 120, f2: 45, dur: 0.22, vol: 0.55 * v, pan });
+      noise({ t, dur: 0.18, vol: 0.35 * v, type: 'lowpass', f: 900, f2: 200, pan, verb: 0.4 });
+    },
+    flame: (t, v, pan) => {
+      noise({ t, dur: 0.16, vol: 0.32 * v, type: 'lowpass', f: 700, f2: 1400, pan, a: 0.02 });
+    },
+    katana: (t, v, pan) => {
+      noise({ t, dur: 0.14, vol: 0.3 * v, type: 'bandpass', f: 1800, f2: 4200, q: 1.4, pan });
+    },
+    axe: (t, v, pan) => {
+      noise({ t, dur: 0.2, vol: 0.32 * v, type: 'bandpass', f: 500, f2: 1600, q: 1.1, pan });
     },
     energy: (t, v, pan) => {
       tone({ t, type: 'sawtooth', f: 980, f2: 170, dur: 0.2, vol: 0.26 * v, pan, lp: 3000, lp2: 600, verb: 0.3 });
@@ -304,6 +321,23 @@
     },
     swap(t) {
       noise({ t, dur: 0.07, vol: 0.14, type: 'bandpass', f: 1200, f2: 2600, q: 1.5 });
+    },
+    slash(t, s, p) {
+      if (p.heavy) {
+        noise({ t, dur: 0.22, vol: 0.32, type: 'bandpass', f: 450, f2: 1500, q: 1.1 });
+        tone({ t: t + 0.02, type: 'sine', f: 140, f2: 80, dur: 0.12, vol: 0.12 });
+      } else {
+        noise({ t, dur: 0.15, vol: 0.28, type: 'bandpass', f: 1600, f2: 4800, q: 1.5 });
+        tone({ t, type: 'triangle', f: 2600, f2: 3400, dur: 0.12, vol: 0.05 });
+      }
+    },
+    flame(t) {
+      noise({ t, dur: 0.2, vol: 0.3, type: 'lowpass', f: 650, f2: 1300, a: 0.02 });
+      noise({ t, dur: 0.12, vol: 0.08, type: 'highpass', f: 3500 });
+    },
+    slide(t) {
+      noise({ t, dur: 0.3, vol: 0.26, type: 'bandpass', f: 900, f2: 300, q: 0.8 });
+      tone({ t, type: 'sine', f: 220, f2: 120, dur: 0.14, vol: 0.08 });
     },
     swing(t) {
       noise({ t, dur: 0.16, vol: 0.22, type: 'bandpass', f: 700, f2: 2600, q: 1.2 });

@@ -367,6 +367,8 @@
       if (code === 'Escape' || code === 'KeyP') {
         if (G.netPaused || G.state === 'paused') G.resume();
         else if (G.state === 'playing') G.pause();
+      } else if (code === 'Tab') {
+        if (G.state === 'playing') GW.HUD.toggleBigMap();
       } else if (code === 'F3' || code === 'Backquote') {
         GW.Perf.toggle();
       } else if (code === 'KeyM') {

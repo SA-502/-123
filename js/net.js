@@ -514,6 +514,7 @@
       w: w ? w.id : '', tr: w ? w.tier || 0 : 0,
       al: P.alive ? 1 : 0, hp: Math.round(P.hp), mh: P.maxHp,
       mv: P.moving ? 1 : 0, sh: P.stats.shots || 0, ml: P.meleeT > 0 ? 1 : 0, iv: P.invuln > 0 ? 1 : 0,
+      ds: P.dashT > 0 ? r2(P.dashA) : undefined,
       pt: P.points, f: force ? 1 : 0,
     });
   }
@@ -543,6 +544,10 @@
     rp.invuln = m.iv ? 0.2 : 0;
     rp.pts = m.pt;
     if (m.ml) rp.meleeT = 0.2;
+    if (m.ds !== undefined && m.ds !== null) {
+      rp.dashT = 0.15;
+      rp.dashA = m.ds;
+    }
     if (m.w && (m.w !== rp.wid || m.tr !== rp.tier)) {
       rp.wid = m.w;
       rp.tier = m.tr;
@@ -565,6 +570,19 @@
     const a = rp.ta;
     const ca = Math.cos(a), sa = Math.sin(a);
     const mx = rp.tx + ca * (rp.r + s.len), my = rp.ty + sa * (rp.r + s.len);
+    if (s.type === 'melee') {
+      rp.swingT = rp.swingDur = 0.24;
+      rp.swingSide = -(rp.swingSide || 1);
+      FX.slash(rp.tx, rp.ty, a, s.reach + rp.r, s.color, rp.swingSide);
+      A.play('slash', { heavy: s.cls === 'axe', x: rp.tx, y: rp.ty });
+      return;
+    }
+    if (s.type === 'flame') {
+      GW.Weapons.flameFx(mx, my, a, s, w.up);
+      rp.muzzleT = 0.05;
+      A.play('flame', { x: rp.tx, y: rp.ty });
+      return;
+    }
     for (let k = 0; k < n; k++) {
       const pellets = Math.min(s.pellets || 1, 4);
       for (let i = 0; i < pellets; i++) {
@@ -593,6 +611,8 @@
       if (rp.moving) rp.walkT += dt * 10;
       rp.recoil = Math.max(0, rp.recoil - dt * 9);
       if (rp.meleeT > 0) rp.meleeT -= dt;
+      if (rp.swingT > 0) rp.swingT -= dt;
+      if (rp.dashT > 0) rp.dashT -= dt;
       if (rp.invuln > 0) rp.invuln -= dt;
     }
   }

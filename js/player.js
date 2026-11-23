@@ -34,6 +34,13 @@
     P.moving = false;
     P.meleeCd = 0;
     P.meleeT = 0;
+    P.swingT = 0;
+    P.swingDur = 0.24;
+    P.swingSide = 1;
+    P.faceT = 0;
+    P.dashT = 0;
+    P.dashCd = 0;
+    P.dashA = 0;
     P.switchT = 0;
     P.invuln = 0;
     P.hitGrace = 0;
@@ -129,23 +136,19 @@
 
   /* ---------------- combat ---------------- */
   P.melee = function () {
-    if (P.meleeCd > 0 || !P.alive) return;
+    if (!P.alive) return;
+    // holding a katana or an axe: the knife button swings the blade instead
+    const w = P.weapon();
+    if (w && w.s.type === 'melee') {
+      if (P.switchT <= 0) Wp.tryFire(P, w, true);
+      return;
+    }
+    if (P.meleeCd > 0) return;
     const PC = C.PLAYER;
     P.meleeCd = PC.meleeCooldown;
     P.meleeT = 0.2;
-    let best = null, bd = Infinity;
-    for (const z of GW.Zombies.list) {
-      if (z.dead) continue;
-      const d = U.dist(P.x, P.y, z.x, z.y) - z.r;
-      if (d > PC.meleeRange) continue;
-      const a = Math.atan2(z.y - P.y, z.x - P.x);
-      if (d > 10 && Math.abs(U.angDiff(P.angle, a)) > PC.meleeArc) continue;
-      if (!M.los(P.x, P.y, z.x, z.y, M.blocksBullet)) continue;
-      if (d < bd) {
-        bd = d;
-        best = z;
-      }
-    }
+    // the knife finds its own target: it turns you toward the closest zombie in reach, even behind you
+    const best = Wp.meleeTargets(P, PC.meleeAssist, PC.meleeArc, 1)[0];
     if (best) {
       A.play('stab');
       const killed = GW.Zombies.damage(best, PC.meleeDamage, { melee: true, dir: P.angle });
@@ -217,6 +220,24 @@
     }
   }
 
+  /** Slide / dash: a quick burst along the stick (or where you face). You can shoot out of it. */
+  P.dash = function (ix, iy) {
+    const D = C.PLAYER.dash;
+    if (!P.alive || P.dashT > 0 || P.dashCd > 0 || P.stamina < D.stamina * 0.4) {
+      if (P.alive && P.dashT <= 0) A.play('deny');
+      return false;
+    }
+    P.dashA = ix || iy ? Math.atan2(iy, ix) : P.angle;
+    P.dashT = D.time;
+    P.dashCd = D.cooldown;
+    P.stamina = Math.max(0, P.stamina - D.stamina);
+    P.staminaDelay = C.PLAYER.staminaDelay;
+    P.hitGrace = Math.max(P.hitGrace, D.time + 0.1); // claws miss you mid-slide
+    A.play('slide');
+    FX.sparks(P.x, P.y, P.dashA + Math.PI, 8, '#cdb8ea', 220, 0.5);
+    return true;
+  };
+
   /* ---------------- per-frame update ---------------- */
   P.update = function (dt) {
     if (!P.alive) return;
@@ -242,16 +263,21 @@
     P.moving = il > 0;
 
     // aim: the cursor, or the right thumb stick (with gentle aim assist); thumbs-off faces where you walk
+    if (P.faceT > 0) P.faceT -= dt;
     if (TI.active) {
       if (TI.aiming) P.angle = GW.Touch.assist(P, Math.atan2(TI.ay, TI.ax));
-      else if (P.moving) P.angle += U.angDiff(P.angle, Math.atan2(iy, ix)) * Math.min(1, dt * 12);
+      else if (TI.autoAim) {
+        // tap-to-fire: lock onto the nearest zombie you can see
+        const tz = GW.Touch.autoTarget(P);
+        if (tz) P.angle = Math.atan2(tz.y - P.y, tz.x - P.x);
+      } else if (P.moving && P.faceT <= 0) P.angle += U.angDiff(P.angle, Math.atan2(iy, ix)) * Math.min(1, dt * 12);
       P.aimX = P.x + Math.cos(P.angle) * 260;
       P.aimY = P.y + Math.sin(P.angle) * 260;
     } else {
       const mw = GW.Render.screenToWorld(In.mouse.x, In.mouse.y);
       P.aimX = mw.x;
       P.aimY = mw.y;
-      if (U.dist(P.x, P.y, mw.x, mw.y) > 6) P.angle = Math.atan2(mw.y - P.y, mw.x - P.x);
+      if (U.dist(P.x, P.y, mw.x, mw.y) > 6 && P.faceT <= 0) P.angle = Math.atan2(mw.y - P.y, mw.x - P.x);
     }
 
     let w = P.weapon();
@@ -272,15 +298,31 @@
       if (P.exhausted && P.stamina > P.staminaMax * 0.25) P.exhausted = false;
     }
 
+    // slide: Space / C / Ctrl, or the DASH button
+    if (P.dashCd > 0) P.dashCd -= dt;
+    if (In.hit('Space') || In.hit('KeyC') || In.hit('ControlLeft')) P.dash(ix, iy);
+
     const speed = (P.sprinting ? PC.sprintSpeed : PC.walkSpeed) * (P.perks.burner ? 1.1 : 1) * (w ? w.s.move : 1);
-    const k = 1 - Math.exp(-dt * 16);
-    P.vx += (ix * speed * analog - P.vx) * k;
-    P.vy += (iy * speed * analog - P.vy) * k;
+    if (P.dashT > 0) {
+      // the slide carries you, fading out; the stick can still bend it a little
+      const D = PC.dash;
+      P.dashT -= dt;
+      if (il > 0) P.dashA += U.angDiff(P.dashA, Math.atan2(iy, ix)) * Math.min(1, dt * 5);
+      const f = D.speed * (0.4 + 0.6 * Math.max(0, P.dashT) / D.time);
+      P.vx = Math.cos(P.dashA) * f;
+      P.vy = Math.sin(P.dashA) * f;
+      if (Math.random() < 0.5) FX.sparks(P.x, P.y, P.dashA + Math.PI, 1, '#cdb8ea', 140, 0.4);
+    } else {
+      const k = 1 - Math.exp(-dt * 16);
+      P.vx += (ix * speed * analog - P.vx) * k;
+      P.vy += (iy * speed * analog - P.vy) * k;
+    }
     M.moveCircle(P, P.vx * dt, P.vy * dt, M.solidForPlayer);
     if (P.moving) P.walkT += dt * (P.sprinting ? 15 : 10);
 
-    // zombies body-block the player (mostly the player gives way)
+    // zombies body-block the player (mostly the player gives way); a slide squeezes past them
     for (const z of GW.Zombies.list) {
+      if (P.dashT > 0) break;
       if (z.state === 'breach' || z.dead) continue;
       const dx = P.x - z.x, dy = P.y - z.y;
       const min = P.r + z.r - 1;
@@ -300,6 +342,7 @@
     if (P.switchT > 0) P.switchT -= dt;
     if (P.meleeCd > 0) P.meleeCd -= dt;
     if (P.meleeT > 0) P.meleeT -= dt;
+    if (P.swingT > 0) P.swingT -= dt;
     if (P.muzzleT > 0) P.muzzleT -= dt;
     if (P.invuln > 0) P.invuln -= dt;
     if (P.hurtFlash > 0) P.hurtFlash = Math.max(0, P.hurtFlash - dt * 2.2);
