@@ -9,7 +9,7 @@
 
   const DEAD = 0.14; // stick dead zone
   const FIRE_AT = 0.3; // right stick fires once pushed this far ('drag' mode)
-  const SPRINT_OVER = 1.3; // left stick: sprint only when the thumb goes past the ring (the knob stays on the rim)
+  const SPRINT_OVER = 1.08; // left stick: sprint only when the thumb goes past the ring (the knob stays on the rim)
   const AIM_KEY = 'gravewave.aim';
   let lastTouch = 0;
 
@@ -128,6 +128,76 @@
     btn.addEventListener('pointerleave', up);
   }
 
+  /**
+   * Grenade buttons aim: hold the button and drag to place the landing spot (a marker shows it),
+   * let go to throw. A quick tap throws at the thickest crowd nearby.
+   */
+  const THROW_SCALE = 3.2; // world units per screen pixel of drag
+  In.touch.throw = null; // { dx, dy } while a grenade button is being dragged
+  In.touch.throwAt = null; // where the next grenade lands
+  function bindThrow(btn) {
+    const code = btn.dataset.key;
+    let id = null, ox = 0, oy = 0;
+    btn.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse') return;
+      e.preventDefault();
+      e.stopPropagation();
+      id = e.pointerId;
+      ox = e.clientX;
+      oy = e.clientY;
+      try {
+        btn.setPointerCapture(e.pointerId);
+      } catch (err) {
+        /* best-effort */
+      }
+      btn.classList.add('down');
+      In.touch.throw = { dx: 0, dy: 0 };
+    });
+    btn.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== id || !In.touch.throw) return;
+      e.preventDefault();
+      In.touch.throw.dx = e.clientX - ox;
+      In.touch.throw.dy = e.clientY - oy;
+    });
+    const up = (e, cancel) => {
+      if (e.pointerId !== id) return;
+      id = null;
+      btn.classList.remove('down');
+      if (!cancel && In.touch.throw) {
+        In.touch.throwAt = TC.throwTarget(GW.Player);
+        In.pressed[code] = true;
+      }
+      In.touch.throw = null;
+    };
+    btn.addEventListener('pointerup', (e) => up(e, false));
+    btn.addEventListener('pointercancel', (e) => up(e, true));
+  }
+
+  /** Where a grenade would land right now: along the drag, or the busiest spot nearby for a tap. */
+  TC.throwTarget = function (P) {
+    const t = In.touch.throw;
+    if (t && Math.hypot(t.dx, t.dy) > 14) {
+      const d = U.clamp(Math.hypot(t.dx, t.dy) * THROW_SCALE, 130, 540), a = Math.atan2(t.dy, t.dx);
+      return { x: P.x + Math.cos(a) * d, y: P.y + Math.sin(a) * d, aimed: true };
+    }
+    let best = null, bs = 0;
+    const list = GW.Zombies.list;
+    for (const z of list) {
+      if (z.dead || z.state === 'rise') continue;
+      const d = Math.hypot(z.x - P.x, z.y - P.y);
+      if (d > 520 || d < 90) continue;
+      let n = 0;
+      for (const o of list) if (!o.dead && Math.abs(o.x - z.x) < 120 && Math.abs(o.y - z.y) < 120) n++;
+      const score = n * 10 - d / 60;
+      if (score > bs) {
+        bs = score;
+        best = z;
+      }
+    }
+    if (best) return { x: best.x, y: best.y, aimed: false };
+    return { x: P.x + Math.cos(P.angle) * 260, y: P.y + Math.sin(P.angle) * 260, aimed: false };
+  };
+
   TC.enable = function (on) {
     if (TC.enabled === on) return;
     TC.enabled = on;
@@ -186,7 +256,7 @@
         e.stopPropagation();
         GW.HUD.toggleBigMap();
       });
-    ov.querySelectorAll('[data-key]').forEach(bindButton);
+    ov.querySelectorAll('[data-key]').forEach((b) => (b.dataset.throw ? bindThrow(b) : bindButton(b)));
     ov.addEventListener('contextmenu', (e) => e.preventDefault());
 
     // switch layouts by what the player actually uses

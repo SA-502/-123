@@ -473,9 +473,11 @@
 
   /** Throw any grenade kind toward (tx,ty). Frags explode; tactical kinds hand over to Gadgets on landing. */
   Wp.launch = function (p, tx, ty, kind, fuse) {
-    const ca = Math.cos(p.angle), sa = Math.sin(p.angle);
+    // thrown at the target spot, not just the way you happen to be facing
+    const ta = U.dist(p.x, p.y, tx, ty) > 4 ? Math.atan2(ty - p.y, tx - p.x) : p.angle;
+    const ca = Math.cos(ta), sa = Math.sin(ta);
     const d = U.clamp(U.dist(p.x, p.y, tx, ty), 130, 540);
-    const sp = d * 2.3;
+    const sp = (d * 2.2) / (1 - Math.exp(-2.2 * fuse)); // slows to a stop right on the spot when the fuse runs out
     let gx = p.x + ca * 16, gy = p.y + sa * 16;
     if (M.blocksGrenade(Math.floor(gx / C.TILE), Math.floor(gy / C.TILE))) {
       gx = p.x;

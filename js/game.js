@@ -87,6 +87,7 @@
     const N = GW.Net;
     const seed = typeof arg === 'number' ? arg : 0;
     if (!seed && N && (N.active || N.code)) N.endSession(); // a solo run leaves any co-op room
+    if (G.modPickOpen) G.closeModPick(null);
     A.init();
     const rnd = Math.random;
     if (seed) Math.random = N.seeded(seed);
@@ -129,6 +130,54 @@
     GW.Player.jacket = null;
     if (coop) N.onNewGame();
     else G.announce('LUMINA PIER', 'The park is closed. Something is still inside.', '#ff4fd8');
+  };
+
+  /**
+   * Overclocker: choose the ammo mod from a menu instead of catching it as it cycles.
+   * Solo: the world waits while the menu is open. Co-op: the world keeps going but you are shielded.
+   */
+  G.modPickOpen = false;
+  let modPickDone = null;
+  G.openModPick = function (done) {
+    if (G.modPickOpen || G.state !== 'playing') return;
+    modPickDone = done;
+    G.modPickOpen = true;
+    const box = $('modpick-list');
+    box.innerHTML = '';
+    for (const id of GW.MOD_ORDER) {
+      const md = GW.MODS[id];
+      const b = document.createElement('button');
+      b.className = 'mod-btn';
+      b.style.setProperty('--c', md.color);
+      const ic = document.createElement('canvas');
+      ic.width = ic.height = 80;
+      const g = ic.getContext('2d');
+      g.scale(2, 2);
+      if (md.icon === 'nuke') GW.Art.powerupIcon(g, 'nuke', 20, 20, 34);
+      else GW.Art.gadgetIcon(g, md.icon, 20, 20, 34, md.color);
+      b.appendChild(ic);
+      const t = document.createElement('b');
+      t.textContent = md.name;
+      const d = document.createElement('span');
+      d.textContent = md.desc;
+      b.appendChild(t);
+      b.appendChild(d);
+      b.addEventListener('click', () => G.closeModPick(id));
+      box.appendChild(b);
+    }
+    show('modpick', true);
+    In.clear();
+    if (!(GW.Net && GW.Net.active)) G.state = 'modpick';
+  };
+  G.closeModPick = function (id) {
+    if (!G.modPickOpen) return;
+    G.modPickOpen = false;
+    show('modpick', false);
+    if (G.state === 'modpick') G.state = 'playing';
+    In.clear();
+    const done = modPickDone;
+    modPickDone = null;
+    if (id && done) done(id);
   };
 
   G.pause = function () {
@@ -364,6 +413,13 @@
     window.addEventListener('pointerdown', () => A.init(), { passive: true });
 
     In.onKey = function (code) {
+      if (G.modPickOpen) {
+        // keys 1-4 pick a mod, Esc closes without choosing (the weapon waits in the machine)
+        const n = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3 }[code];
+        if (n !== undefined) G.closeModPick(GW.MOD_ORDER[n]);
+        else if (code === 'Escape') G.closeModPick(null);
+        return;
+      }
       if (code === 'Escape' || code === 'KeyP') {
         if (G.netPaused || G.state === 'paused') G.resume();
         else if (G.state === 'playing') G.pause();

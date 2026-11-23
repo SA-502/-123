@@ -351,6 +351,12 @@
       case 'box':
         GW.Interact.boxMovedTo(m.s);
         break;
+      case 'boxroll':
+        GW.Interact.boxRemoteRoll(m.s, m.f, m.j, from);
+        break;
+      case 'boxtake':
+        GW.Interact.boxRemoteTake(m.s, from);
+        break;
       case 'plank':
         if (N.isHost) {
           const w = M.windows[m.i];

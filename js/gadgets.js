@@ -10,7 +10,7 @@
   };
 
   /** Throw the carried tactical (T). */
-  G.throwTactical = function (p) {
+  G.throwTactical = function (p, tx, ty) {
     const tac = p.tactical;
     if (!tac.type || tac.count <= 0) {
       if (tac.type) A.play('empty');
@@ -18,7 +18,7 @@
     }
     tac.count--;
     const fuse = tac.type === 'cryo' ? 1.0 : tac.type === 'lure' ? 0.8 : 0.6;
-    GW.Weapons.launch(p, p.aimX, p.aimY, tac.type, fuse);
+    GW.Weapons.launch(p, tx === undefined ? p.aimX : tx, ty === undefined ? p.aimY : ty, tac.type, fuse);
     return true;
   };
 

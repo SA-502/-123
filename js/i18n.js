@@ -157,7 +157,9 @@
     Kills: 'القتلى', 'Critical kills': 'ضربات قاتلة', Accuracy: 'الدقة', 'Points earned': 'النقاط', 'Doors opened': 'الأبواب المفتوحة',
     'Second Winds used': 'مرات النفَس الثاني', 'Time survived': 'مدة الصمود',
     USE: 'استخدم', RELOAD: 'تعبئة', SWAP: 'تبديل', NADE: 'قنبلة', TAC: 'خاصة', KNIFE: 'سكين',
-    DASH: 'زحلقة', 'FIRE: DRAG TO SHOOT': 'الإطلاق: اسحب العصا', 'FIRE: TAP TO SHOOT': 'الإطلاق: بمجرد اللمس',
+    'NEEDS POWER': 'يحتاج كهرباء', 'CHOOSE AN AMMO MOD': 'اختر نوع الذخيرة', 'Your weapon is overclocked. Pick what its rounds do.': 'سلاحك تطوّر. اختر وش تسوي ذخيرته.',
+    LATER: 'بعدين', ' is spinning the Prize Crate': ' يفتح صندوق الجوائز', ' and choose its ammo mod': ' واختر نوع الذخيرة',
+        DASH: 'زحلقة', 'FIRE: DRAG TO SHOOT': 'الإطلاق: اسحب العصا', 'FIRE: TAP TO SHOOT': 'الإطلاق: بمجرد اللمس',
     'MAP · TAB': 'الخريطة', slide: 'زحلقة', 'big map': 'الخريطة الكبيرة',
     'Left thumb: move (push past the ring to sprint) · Right thumb: aim and shoot · DASH slides · Tap the map to enlarge it':
       'الإبهام اليسار: حركة (اطلع برا الدائرة عشان تركض) · الإبهام اليمين: صوّب واطلق · زر «زحلقة» للانزلاق · المس الخريطة عشان تكبر',

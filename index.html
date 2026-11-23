@@ -123,8 +123,8 @@
       <button id="tb-use" class="tbtn big" data-key="KeyF">USE</button>
       <button id="tb-reload" class="tbtn" data-key="KeyR">RELOAD</button>
       <button id="tb-swap" class="tbtn" data-key="KeyQ">SWAP</button>
-      <button id="tb-nade" class="tbtn" data-key="KeyG">NADE</button>
-      <button id="tb-tac" class="tbtn" data-key="KeyT">TAC</button>
+      <button id="tb-nade" class="tbtn" data-key="KeyG" data-throw="1">NADE</button>
+      <button id="tb-tac" class="tbtn" data-key="KeyT" data-throw="1">TAC</button>
       <button id="tb-knife" class="tbtn" data-key="KeyV">KNIFE</button>
       <button id="tb-sentry" class="tbtn hidden" data-key="KeyX">SENTRY</button>
       <button id="tb-dash" class="tbtn" data-key="Space">DASH</button>
@@ -212,6 +212,14 @@
       <div><b>V</b> knife</div><div><b>G</b> grenade</div><div><b>SHIFT</b> sprint</div>
       <div><b>T</b> tactical</div><div><b>X</b> deploy sentry</div><div><b>M</b> music</div>
     </div>
+  </div>
+
+  <!-- ===================== OVERCLOCKER: CHOOSE AN AMMO MOD ===================== -->
+  <div id="modpick" class="screen hidden">
+    <h2 class="screen-head">CHOOSE AN AMMO MOD</h2>
+    <div class="lobby-sub">Your weapon is overclocked. Pick what its rounds do.</div>
+    <div id="modpick-list"></div>
+    <button class="neon-btn alt small-btn" onclick="GW.Game.closeModPick(null)">LATER</button>
   </div>
 
   <!-- ===================== GAME OVER ===================== -->

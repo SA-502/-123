@@ -289,7 +289,7 @@ body.touch #game.playing #touch { display: block; }
 #stick-l { left: 0; width: 44%; }
 #stick-r { right: 0; width: 56%; }
 .stick-base, .stick-knob { position: absolute; display: none; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
-.stick-base { width: 124px; height: 124px; border: 2px solid rgba(25, 240, 255, 0.45); background: rgba(25, 240, 255, 0.07); box-shadow: 0 0 18px rgba(25, 240, 255, 0.25) inset; }
+.stick-base { width: 112px; height: 112px; border: 2px solid rgba(25, 240, 255, 0.45); background: rgba(25, 240, 255, 0.07); box-shadow: 0 0 18px rgba(25, 240, 255, 0.25) inset; }
 #stick-r .stick-base { border-color: rgba(255, 79, 216, 0.5); background: rgba(255, 79, 216, 0.07); box-shadow: 0 0 18px rgba(255, 79, 216, 0.25) inset; }
 .stick-knob { width: 54px; height: 54px; background: rgba(25, 240, 255, 0.45); box-shadow: 0 0 14px rgba(25, 240, 255, 0.7); }
 #stick-r .stick-knob { background: rgba(255, 79, 216, 0.5); box-shadow: 0 0 14px rgba(255, 79, 216, 0.8); }
@@ -318,7 +318,7 @@ body.touch #game.playing #touch { display: block; }
 #tb-map { position: absolute; right: max(8px, env(safe-area-inset-right, 0px)); top: max(6px, env(safe-area-inset-top, 0px)); width: 124px; height: 97px;
   margin: 0; padding: 0; border: 0; background: transparent; touch-action: none; -webkit-tap-highlight-color: transparent; }
 /* the left stick: a dashed outer ring marks where sprinting starts; it glows while you sprint */
-#stick-l .stick-base::after { content: ''; position: absolute; inset: -16%; border-radius: 50%; border: 2px dashed rgba(255, 225, 77, 0.35); }
+#stick-l .stick-base::after { content: ''; position: absolute; inset: -5%; border-radius: 50%; border: 2px dashed rgba(255, 225, 77, 0.35); }
 #stick-l.sprint .stick-base { border-color: var(--yellow); box-shadow: 0 0 22px rgba(255, 225, 77, 0.7) inset; }
 #stick-l.sprint .stick-base::after { border-style: solid; border-color: rgba(255, 225, 77, 0.9); box-shadow: 0 0 16px rgba(255, 225, 77, 0.7); }
 #stick-l.sprint .stick-knob { background: rgba(255, 225, 77, 0.6); box-shadow: 0 0 16px rgba(255, 225, 77, 0.9); }
@@ -440,3 +440,22 @@ html[lang="ar"] body.touch #prompt .key[data-k="F"]::after { content: "استخ�
 html[lang="ar"] body.touch #prompt .key[data-k="X"]::after { content: "البرج"; }
 html[lang="ar"] .controls div b { direction: ltr; unicode-bidi: isolate; }
 html[lang="ar"] #prompt .cost, html[lang="ar"] #prompt .key { direction: ltr; unicode-bidi: isolate; display: inline-block; }
+
+/* ---------- Overclocker: ammo mod picker ---------- */
+#modpick { background: rgba(7, 4, 15, 0.82); z-index: 6; }
+#modpick-list { display: grid; grid-template-columns: repeat(4, minmax(120px, 190px)); gap: 14px; }
+.mod-btn {
+  pointer-events: auto; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 10px;
+  font-family: var(--font); color: #fff; background: rgba(10, 5, 24, 0.85); border: 2px solid var(--c); border-radius: 10px;
+  box-shadow: 0 0 16px color-mix(in srgb, var(--c) 55%, transparent), inset 0 0 14px color-mix(in srgb, var(--c) 25%, transparent);
+  -webkit-tap-highlight-color: transparent;
+}
+.mod-btn canvas { width: 40px; height: 40px; }
+.mod-btn b { font-size: 16px; color: var(--c); text-shadow: 0 0 10px var(--c); letter-spacing: 0.1em; text-transform: uppercase; }
+.mod-btn span { font-size: 11px; color: #e9d9ff; line-height: 1.4; }
+.mod-btn:active { transform: scale(0.95); background: color-mix(in srgb, var(--c) 25%, rgba(10, 5, 24, 0.85)); }
+@media (max-height: 430px) {
+  #modpick-list { grid-template-columns: repeat(4, minmax(100px, 160px)); gap: 10px; }
+  .mod-btn { padding: 10px 8px; }
+}
+html[lang="ar"] .mod-btn span { direction: rtl; }

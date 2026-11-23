@@ -593,6 +593,49 @@
     ctx.globalAlpha = 1;
   }
 
+  /**
+   * Perk machines read as scenery to new players: give each one a floating sign with its icon,
+   * name and price (or what it still needs), and a pulsing glow when it is ready to sell.
+   */
+  const perkIcons = {};
+  function drawMachineTags() {
+    const z = R.cam.zoom, I = GW.Interact, P = GW.Player, L = GW.L;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const d = R.dpr;
+    for (const sp of M.perkSpots) {
+      if (sp.zone === undefined || !M.zones[sp.zone] || !M.zones[sp.zone].open) continue;
+      const sx = sp.x * z + R.ox, sy = sp.y * z + R.oy;
+      if (sx < -120 * d || sx > R.vw + 120 * d || sy < -120 * d || sy > R.vh + 120 * d) continue;
+      const perk = GW.PERKS[sp.perk];
+      const powered = I.powered(sp.zone), owned = !!P.perks[sp.perk];
+      const near = U.dist(P.x, P.y, sp.x, sp.y) < 260;
+      const bob = Math.sin(R.time * 2.2 + sp.tx) * 3 * d;
+      const y = sy - 64 * z + bob;
+      // glow on the machine itself
+      if (powered && !owned) Art.drawGlow(ctx, perk.color, sx, sy - 10 * z, 70 * z, 0.35 + 0.2 * Math.sin(R.time * 4 + sp.ty));
+      // sign: icon + name, and the price or what it needs
+      const ic = perkIcons[sp.perk] || (perkIcons[sp.perk] = Art.iconCanvas('perk', sp.perk, 40));
+      const isz = (near ? 30 : 24) * d;
+      ctx.globalAlpha = owned ? 0.45 : powered ? 1 : 0.7;
+      ctx.drawImage(ic, sx - isz / 2, y - isz / 2 - 12 * d, isz, isz);
+      const name = L ? L.t(perk.name) : perk.name;
+      ctx.font = '900 ' + Math.round((near ? 12 : 10) * d) + 'px ' + GW.FONT;
+      ctx.lineWidth = 3 * d;
+      ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+      ctx.strokeText(name, sx, y + 12 * d);
+      ctx.fillStyle = perk.color;
+      ctx.fillText(name, sx, y + 12 * d);
+      const sub = owned ? '✓' : !powered ? (L ? L.t('NEEDS POWER') : 'NEEDS POWER') : '$' + perk.cost;
+      ctx.font = '700 ' + Math.round(9 * d) + 'px ' + GW.FONT;
+      ctx.strokeText(sub, sx, y + 25 * d);
+      ctx.fillStyle = owned ? '#3dff8b' : powered ? '#ffe14d' : '#ff6b7a';
+      ctx.fillText(sub, sx, y + 25 * d);
+      ctx.globalAlpha = 1;
+    }
+  }
+
   function drawPlayer(P) {
     const w = P.weapon();
     ctx.save();
@@ -1783,6 +1826,32 @@
     }
     ctx.globalAlpha = 1;
 
+    // grenade aim: while a grenade button is dragged, show the throw line and where it will land
+    if (inGame && P.alive && GW.Input.touch.throw && GW.Touch) {
+      const tg = GW.Touch.throwTarget(P);
+      const pulse = 0.75 + 0.25 * Math.sin(R.time * 10);
+      ctx.strokeStyle = '#ffb14d';
+      ctx.globalAlpha = 0.8;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 8]);
+      ctx.beginPath();
+      ctx.moveTo(P.x, P.y);
+      const mx = (P.x + tg.x) / 2, my = (P.y + tg.y) / 2 - U.dist(P.x, P.y, tg.x, tg.y) * 0.25;
+      ctx.quadraticCurveTo(mx, my, tg.x, tg.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 0.9 * pulse;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(tg.x, tg.y, 165, 0, U.TAU);
+      ctx.stroke();
+      ctx.globalAlpha = 0.25 * pulse;
+      ctx.fillStyle = '#ffb14d';
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      Art.drawGlow(ctx, '#ffb14d', tg.x, tg.y, 30, 0.9);
+    }
+
     // muzzle flash + laser sight
     if (inGame && P.alive) {
       const w = P.weapon();
@@ -1994,6 +2063,7 @@
       ctx.fillStyle = 'rgba(40,200,230,' + 0.06 * R.lightsOut + ')';
       ctx.fillRect(0, 0, R.vw, R.vh);
     }
+    if (inGame) drawMachineTags();
     if (inGame && N && N.active) drawTags();
     if (G.state === 'playing' && P.alive && !GW.Input.touch.active) drawCrosshair();
     ctx.setTransform(1, 0, 0, 1, 0, 0);

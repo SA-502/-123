@@ -31,7 +31,7 @@
     I.prompt = null;
     I.holdT = 0;
     I.everUpgraded = false;
-    I.box = { spot: U.randInt(0, M.boxSpots.length - 1), state: 'idle', t: 0, uses: 0, final: null, display: null, cycleT: 0, jester: false, anim: 0 };
+    I.box = { spot: U.randInt(0, M.boxSpots.length - 1), state: 'idle', t: 0, uses: 0, final: null, display: null, cycleT: 0, jester: false, anim: 0, owner: 0 };
     I.pap = { state: 'idle', t: 0, weapon: null, anim: 0, modIdx: 0, modT: 0 };
     build();
     GW.Facilities.buildInteractables(I.list, I.ui);
@@ -167,27 +167,32 @@
         prompt(p) {
           const b = I.box;
           if (idx !== b.spot) return b.state === 'moving' ? null : info('The Prize Crate has moved on');
+          if (b.owner && (b.state === 'rolling' || b.state === 'ready')) return info(GW.Net.label(b.owner) + ' is spinning the Prize Crate');
           if (b.state === 'idle') return ok('Press ' + key('F') + ' to spin the Prize Crate ' + cost(C.COSTS.box));
           if (b.state === 'ready') return ok('Press ' + key('F') + ' to take ' + GW.WEAPONS[b.final].name);
           return null;
         },
         use(p) {
           const b = I.box;
-          if (idx !== b.spot) return;
+          if (idx !== b.spot || b.owner) return; // a teammate's spin: watch, don't touch
           if (b.state === 'idle') {
             if (!GW.Game.spend(C.COSTS.box)) return;
             b.state = 'rolling';
             b.t = 4.0;
             b.uses++;
             b.cycleT = 0;
+            b.owner = 0;
             b.final = pickBoxWeapon(p);
             // after a few spins the jester may show up and send the crate elsewhere
             b.jester = b.uses >= 4 && Math.random() < 0.3;
             A.play('boxRoll');
+            // co-op: everyone sees the spin and what comes out
+            if (GW.Net) GW.Net.emit('boxroll', { s: idx, f: b.final, j: b.jester ? 1 : 0 });
           } else if (b.state === 'ready') {
             p.giveWeapon(b.final);
             b.state = 'idle';
             FX.burst(s.x, s.y, 12, '#ffe14d', 220);
+            if (GW.Net) GW.Net.emit('boxtake', { s: idx });
           }
         },
       });
@@ -204,10 +209,7 @@
         prompt(p) {
           const k = I.pap;
           if (!I.powered(M.Z.VAULT)) return info('Overclocker — no power on the stage');
-          if (k.state === 'ready') {
-            const md = GW.MODS[GW.MOD_ORDER[k.modIdx]];
-            return ok('Press ' + key('F') + ' to take ' + k.weapon.s.name + ' with <span style="color:' + md.color + '">' + md.name + ' rounds</span> <span class="dim">' + md.desc + '</span>');
-          }
+          if (k.state === 'ready') return ok('Press ' + key('F') + ' to take ' + k.weapon.s.name + ' and choose its ammo mod');
           if (k.state !== 'idle') return null;
           const w = p.weapon();
           if (!w) return info('No weapon to overclock');
@@ -218,13 +220,17 @@
           const k = I.pap;
           if (!I.powered(M.Z.VAULT)) return;
           if (k.state === 'ready') {
-            GW.Weapons.setMod(k.weapon, GW.MOD_ORDER[k.modIdx]);
-            A.play('tierUp', { tier: k.weapon.tier });
-            p.giveInstance(k.weapon);
-            k.weapon = null;
-            k.state = 'idle';
-            I.everUpgraded = true;
-            FX.burst(pm.x, pm.y - 30, 16, '#ff4fd8', 260);
+            // pick the ammo mod in peace: a menu with all four, the world waits (solo) or you are shielded (co-op)
+            GW.Game.openModPick((mod) => {
+              if (k.state !== 'ready' || !k.weapon) return;
+              GW.Weapons.setMod(k.weapon, mod);
+              A.play('tierUp', { tier: k.weapon.tier });
+              p.giveInstance(k.weapon);
+              k.weapon = null;
+              k.state = 'idle';
+              I.everUpgraded = true;
+              FX.burst(pm.x, pm.y - 30, 16, '#ff4fd8', 260);
+            });
             return;
           }
           if (k.state !== 'idle') return;
@@ -365,12 +371,38 @@
   I.boxMovedTo = function (spot) {
     const b = I.box;
     if (spot === b.spot || !M.boxSpots[spot]) return;
-    if (b.state === 'rolling' || b.state === 'ready') return; // our own roll finishes first
+    if (!b.owner && (b.state === 'rolling' || b.state === 'ready')) return; // our own roll finishes first
     b.spot = spot;
     b.uses = 0;
+    b.owner = 0;
     b.state = 'idle';
     const zn = M.zones[M.boxSpots[spot].zone];
     GW.Game.announce('PRIZE CRATE RELOCATED', 'Look for the beam over ' + zn.name, '#ffe14d');
+  };
+
+  /** Co-op: a teammate spun the crate. Play the same spin here so everyone watches it together. */
+  I.boxRemoteRoll = function (spot, final, jester, from) {
+    const b = I.box;
+    if (!M.boxSpots[spot] || !GW.WEAPONS[final]) return;
+    if (!b.owner && (b.state === 'rolling' || b.state === 'ready')) return; // ours is already spinning
+    b.spot = spot;
+    b.state = 'rolling';
+    b.t = 4.0;
+    b.cycleT = 0;
+    b.uses++;
+    b.final = final;
+    b.jester = !!jester;
+    b.owner = from;
+    A.play('boxRoll', { x: M.boxSpots[spot].x, y: M.boxSpots[spot].y });
+  };
+  /** Co-op: the teammate took their weapon. */
+  I.boxRemoteTake = function (spot, from) {
+    const b = I.box;
+    if (b.owner !== from || b.spot !== spot) return;
+    b.state = 'idle';
+    b.owner = 0;
+    const bs = M.boxSpots[spot];
+    FX.burst(bs.x, bs.y, 12, '#ffe14d', 220);
   };
 
   function applyPowerup(type, P) {
@@ -422,7 +454,7 @@
           b.state = 'jester';
           b.t = 2.4;
           b.display = null;
-          GW.Game.refund(C.COSTS.box);
+          if (!b.owner) GW.Game.refund(C.COSTS.box);
           A.play('boxJester');
           GW.Game.announce('THE JESTER LAUGHS', 'Points refunded — the Prize Crate is moving', '#ff3b4e');
         } else {
@@ -434,7 +466,10 @@
       }
     } else if (b.state === 'ready') {
       b.t -= dt;
-      if (b.t <= 0) b.state = 'idle';
+      if (b.t <= 0) {
+        b.state = 'idle';
+        b.owner = 0;
+      }
     } else if (b.state === 'jester') {
       b.t -= dt;
       if (b.t <= 0) {
@@ -443,7 +478,13 @@
       }
     } else if (b.state === 'moving') {
       b.t -= dt;
-      if (b.t <= 0) {
+      if (b.owner) {
+        // the teammate's game picks the new spot and tells us; give up waiting after a while
+        if (b.t <= -6) {
+          b.state = 'idle';
+          b.owner = 0;
+        }
+      } else if (b.t <= 0) {
         let next = b.spot;
         while (next === b.spot) next = U.randInt(0, M.boxSpots.length - 1);
         b.spot = next;
@@ -472,7 +513,7 @@
         FX.light(M.pap.x, M.pap.y, 300, '#ff4fd8', 0.5);
       }
     } else if (k.state === 'ready') {
-      k.t -= dt;
+      if (!GW.Game.modPickOpen) k.t -= dt; // the clock stops while you choose
       // the ammo mod on offer cycles: grab the weapon while the one you want is showing
       k.modT -= dt;
       if (k.modT <= 0) {

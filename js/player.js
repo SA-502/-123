@@ -241,6 +241,12 @@
   /* ---------------- per-frame update ---------------- */
   P.update = function (dt) {
     if (!P.alive) return;
+    if (GW.Game.modPickOpen) {
+      // choosing an ammo mod at the Overclocker (co-op): shielded and standing still
+      P.invuln = Math.max(P.invuln, 0.3);
+      P.vx = P.vy = 0;
+      return;
+    }
     const PC = C.PLAYER;
     P.stats.time += dt;
 
@@ -374,8 +380,11 @@
       }
     }
 
-    if (In.hit('KeyG')) Wp.throwGrenade(P, P.aimX, P.aimY);
-    if (In.hit('KeyT')) GW.Gadgets.throwTactical(P);
+    // touch grenades land where the button was dragged to (or on the nearest crowd)
+    const ta = TI.active && TI.throwAt;
+    if (In.hit('KeyG')) Wp.throwGrenade(P, ta ? ta.x : P.aimX, ta ? ta.y : P.aimY);
+    if (In.hit('KeyT')) GW.Gadgets.throwTactical(P, ta ? ta.x : undefined, ta ? ta.y : undefined);
+    if (In.hit('KeyG') || In.hit('KeyT')) TI.throwAt = null;
     if (In.hit('KeyX')) GW.Allies.deploySentry(P);
     if (In.hit('KeyV') || In.mouse.rpressed) P.melee();
 
