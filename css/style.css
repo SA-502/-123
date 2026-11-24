@@ -495,3 +495,34 @@ html[lang="ar"] .mod-btn span { direction: rtl; }
 body.touch #map-pick { margin: 0; }
 body.touch #menu.screen { gap: 8px; }
 body.touch .logo-img { width: min(820px, 86vw, calc(var(--gh, 100vh) * 0.72)); }
+
+/* ---------- phones: custom button layout (touch.js) ---------- */
+.touch-only { display: none; }
+body.touch .touch-only { display: inline-block; }
+.touch-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+/* a saved layout: buttons sit where the player put them (centre as % of the screen) at their own size */
+#touch.custom .tbtns { left: 0; top: 0; right: 0; bottom: 0; width: auto; height: auto; pointer-events: none; }
+#touch.custom .tbtn { pointer-events: auto; right: auto; bottom: auto; transform: translate(-50%, -50%) scale(var(--s, 1)); }
+#touch.custom .tbtn.down { transform: translate(-50%, -50%) scale(calc(var(--s, 1) * 0.94)); }
+#touch.custom .tbtns, #touch.custom #tb-pause { opacity: var(--tb-a, 1); }
+/* the editor: every button shows (even ones that only appear sometimes), drag to move */
+#tb-editor { display: none; }
+#touch.editing { display: block !important; z-index: 60; background: rgba(4, 2, 12, 0.6); }
+#touch.editing .tbtn.hidden { display: block !important; }
+#touch.editing .tbtn { animation: none; cursor: grab; }
+#touch.editing .tbtn.empty, #touch.editing .tbtn.cool { opacity: 1; }
+#touch.editing .tbtn.ed-sel { border-color: var(--yellow); box-shadow: 0 0 20px var(--yellow); color: #fff; }
+#touch.editing .stick-zone, #touch.editing #tb-map { pointer-events: none; }
+#touch.editing #tb-editor {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; position: absolute; left: 50%; top: 8px; transform: translateX(-50%);
+  padding: 10px 14px; border: 1px solid rgba(25, 240, 255, 0.5); border-radius: 10px; background: rgba(8, 4, 20, 0.9); z-index: 2;
+}
+#ed-name { font: 700 11px var(--font); letter-spacing: 0.14em; color: var(--yellow); text-transform: uppercase; }
+.ed-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: center; }
+.ed-label { font: 700 10px var(--font); letter-spacing: 0.12em; color: #cdb8ea; margin-left: 4px; }
+.ed-btn {
+  min-width: 38px; height: 34px; padding: 0 10px; font: 900 16px var(--font); color: #fff; cursor: pointer; touch-action: manipulation;
+  background: rgba(25, 240, 255, 0.1); border: 2px solid rgba(25, 240, 255, 0.55); border-radius: 8px; -webkit-tap-highlight-color: transparent;
+}
+.ed-btn.wide { font-size: 11px; letter-spacing: 0.12em; }
+.ed-btn.on { border-color: var(--yellow); background: rgba(255, 225, 77, 0.18); }

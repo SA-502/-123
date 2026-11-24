@@ -51,7 +51,7 @@
       knob.style.top = ky - r.top + 'px';
     };
     zone.addEventListener('pointerdown', (e) => {
-      if (e.pointerType === 'mouse' || st.id !== null) return;
+      if (e.pointerType === 'mouse' || st.id !== null || TC.editing) return;
       e.preventDefault();
       st.id = e.pointerId;
       const p0 = U.pt(e);
@@ -107,7 +107,7 @@
     const code = btn.dataset.key;
     let id = null;
     btn.addEventListener('pointerdown', (e) => {
-      if (e.pointerType === 'mouse') return;
+      if (e.pointerType === 'mouse' || TC.editing) return;
       e.preventDefault();
       e.stopPropagation();
       id = e.pointerId;
@@ -141,7 +141,7 @@
     const code = btn.dataset.key;
     let id = null, ox = 0, oy = 0;
     btn.addEventListener('pointerdown', (e) => {
-      if (e.pointerType === 'mouse') return;
+      if (e.pointerType === 'mouse' || TC.editing) return;
       e.preventDefault();
       e.stopPropagation();
       id = e.pointerId;
@@ -201,6 +201,166 @@
     if (best) return { x: best.x, y: best.y, aimed: false };
     return { x: P.x + Math.cos(P.angle) * 260, y: P.y + Math.sin(P.angle) * 260, aimed: false };
   };
+
+  /* ------------------------------------------------------------------ *
+   * Custom button layout: players drag the on-screen buttons where their
+   * thumbs want them and pick their size and see-through. Saved per device.
+   * ------------------------------------------------------------------ */
+  const LAYOUT_KEY = 'gravewave.buttons';
+  const EDITABLE = ['tb-use', 'tb-reload', 'tb-swap', 'tb-nade', 'tb-tac', 'tb-knife', 'tb-sentry', 'tb-dash', 'tb-pause'];
+  const NAMES = { 'tb-use': 'USE', 'tb-reload': 'RELOAD', 'tb-swap': 'SWAP', 'tb-nade': 'NADE', 'tb-tac': 'TAC', 'tb-knife': 'KNIFE', 'tb-sentry': 'SENTRY', 'tb-dash': 'DASH', 'tb-pause': 'PAUSE' };
+  /** { a: see-through 0.25..1, b: { id: { x, y, s } } }: x, y = the button's centre as a fraction of the screen. null = default layout. */
+  TC.layout = null;
+  TC.editing = false;
+  let edSel = null, edClose = null;
+  const byId = (id) => document.getElementById(id);
+
+  function loadLayout() {
+    try {
+      const v = JSON.parse(localStorage.getItem(LAYOUT_KEY) || 'null');
+      if (v && v.b) TC.layout = v;
+    } catch (e) {
+      /* storage unavailable or bad data: default layout */
+    }
+  }
+  function saveLayout() {
+    try {
+      if (TC.layout) localStorage.setItem(LAYOUT_KEY, JSON.stringify(TC.layout));
+      else localStorage.removeItem(LAYOUT_KEY);
+    } catch (e) {
+      /* storage unavailable */
+    }
+  }
+  function applyLayout() {
+    const ov = byId('touch'), L = TC.layout;
+    if (!ov) return;
+    ov.classList.toggle('custom', !!L);
+    ov.style.setProperty('--tb-a', L ? L.a : 1);
+    for (const id of EDITABLE) {
+      const b = byId(id);
+      if (!b) continue;
+      const p = L && L.b[id];
+      if (p) {
+        b.style.left = (p.x * 100).toFixed(2) + '%';
+        b.style.top = (p.y * 100).toFixed(2) + '%';
+        b.style.setProperty('--s', p.s);
+      } else {
+        b.style.left = b.style.top = '';
+        b.style.removeProperty('--s');
+      }
+    }
+  }
+  /** Where the buttons are right now (the default layout), as a starting point for editing. */
+  function captureLayout() {
+    const R = U.rect(byId('touch'));
+    const b = {};
+    for (const id of EDITABLE) {
+      const el = byId(id);
+      if (!el) continue;
+      const r = U.rect(el);
+      b[id] = { x: U.clamp((r.left + r.width / 2 - R.left) / R.width, 0.03, 0.97), y: U.clamp((r.top + r.height / 2 - R.top) / R.height, 0.04, 0.96), s: 1 };
+    }
+    return { a: 1, b };
+  }
+  function edSelect(id) {
+    edSel = id;
+    for (const k of EDITABLE) {
+      const el = byId(k);
+      if (el) el.classList.toggle('ed-sel', k === id);
+    }
+    byId('ed-name').textContent = id ? NAMES[id] : 'Drag a button to move it';
+  }
+  /** Bigger / smaller: the picked button, or all of them when none is picked. */
+  function edSize(f) {
+    const L = TC.layout;
+    for (const id of edSel ? [edSel] : EDITABLE) if (L.b[id]) L.b[id].s = U.clamp(Math.round(L.b[id].s * f * 100) / 100, 0.6, 1.8);
+    applyLayout();
+  }
+
+  /** Open the layout editor (title screen or pause menu); onClose runs after DONE. */
+  TC.openEditor = function (onClose) {
+    const ov = byId('touch');
+    if (!ov) return;
+    edClose = onClose || null;
+    TC.editing = true;
+    ov.classList.add('editing');
+    if (!TC.layout) {
+      TC.layout = captureLayout(); // measured with every button showing, before switching to the custom layout
+      applyLayout();
+    }
+    edSelect(null);
+  };
+  TC.closeEditor = function () {
+    const ov = byId('touch');
+    TC.editing = false;
+    ov.classList.remove('editing');
+    edSelect(null);
+    saveLayout();
+    if (edClose) edClose();
+    edClose = null;
+  };
+
+  function initEditor() {
+    const ov = byId('touch');
+    loadLayout();
+    applyLayout();
+    // drag buttons around (capture phase: runs before, and instead of, the buttons' own handlers)
+    let drag = null;
+    ov.addEventListener(
+      'pointerdown',
+      (e) => {
+        if (!TC.editing) return;
+        const btn = e.target.closest && e.target.closest('.tbtn');
+        if (!btn || EDITABLE.indexOf(btn.id) < 0) {
+          if (!(e.target.closest && e.target.closest('#tb-editor'))) edSelect(null);
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        edSelect(btn.id);
+        const p = TC.layout.b[btn.id];
+        drag = { id: btn.id, pid: e.pointerId, start: U.pt(e), x: p.x, y: p.y };
+        try {
+          ov.setPointerCapture(e.pointerId);
+        } catch (err) {
+          /* best-effort */
+        }
+      },
+      true
+    );
+    ov.addEventListener('pointermove', (e) => {
+      if (!drag || e.pointerId !== drag.pid) return;
+      e.preventDefault();
+      const pt = U.pt(e), W = U.viewW(), H = U.viewH();
+      const p = TC.layout.b[drag.id];
+      p.x = U.clamp(drag.x + (pt.x - drag.start.x) / W, 0.03, 0.97);
+      p.y = U.clamp(drag.y + (pt.y - drag.start.y) / H, 0.04, 0.96);
+      applyLayout();
+    });
+    const end = (e) => {
+      if (drag && e.pointerId === drag.pid) drag = null;
+    };
+    ov.addEventListener('pointerup', end);
+    ov.addEventListener('pointercancel', end);
+    byId('ed-small').addEventListener('click', () => edSize(1 / 1.12));
+    byId('ed-big').addEventListener('click', () => edSize(1.12));
+    byId('ed-fade').addEventListener('click', () => {
+      TC.layout.a = U.clamp(Math.round((TC.layout.a - 0.15) * 100) / 100, 0.25, 1);
+      applyLayout();
+    });
+    byId('ed-solid').addEventListener('click', () => {
+      TC.layout.a = U.clamp(Math.round((TC.layout.a + 0.15) * 100) / 100, 0.25, 1);
+      applyLayout();
+    });
+    byId('ed-reset').addEventListener('click', () => {
+      TC.layout = null;
+      applyLayout();
+      TC.layout = captureLayout();
+      applyLayout();
+      edSelect(null);
+    });
+    byId('ed-done').addEventListener('click', TC.closeEditor);
+  }
 
   TC.enable = function (on) {
     if (TC.enabled === on) return;
@@ -286,6 +446,7 @@
       b.addEventListener('click', () => TC.setAimMode(TC.aimMode === 'tap' ? 'drag' : 'tap'))
     );
     TC.setAimMode(TC.aimMode);
+    initEditor();
     // the minimap: tap it for the big map
     const mapBtn = document.getElementById('tb-map');
     if (mapBtn)

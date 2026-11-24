@@ -131,6 +131,16 @@
     </div>
     <button id="tb-pause" class="tbtn small" data-key="Escape">II</button>
     <button id="tb-map" aria-label="map"></button>
+    <!-- button layout editor (phones): drag buttons, change their size and see-through -->
+    <div id="tb-editor">
+      <div id="ed-name">Drag a button to move it</div>
+      <div class="ed-row">
+        <span class="ed-label">SIZE</span><button id="ed-small" class="ed-btn">−</button><button id="ed-big" class="ed-btn">+</button>
+        <span class="ed-label">SEE-THROUGH</span><button id="ed-fade" class="ed-btn">−</button><button id="ed-solid" class="ed-btn">+</button>
+        <button id="ed-reset" class="ed-btn wide">RESET</button>
+        <button id="ed-done" class="ed-btn wide on">DONE</button>
+      </div>
+    </div>
   </div>
   <div id="rotate"><div>⟳</div><p>Turn your phone sideways to play</p></div>
 
@@ -155,7 +165,10 @@
       <b class="only-ar">شاشة كاملة في الآيفون</b>
       <span class="only-ar">اضغط زر المشاركة <i class="share-ico"></i> ثم «إضافة إلى الشاشة الرئيسية»، وافتح اللعبة من الأيقونة.</span>
     </div>
-    <button class="neon-btn alt small-btn aim-toggle">FIRE: DRAG TO SHOOT</button>
+    <div class="touch-row">
+      <button class="neon-btn alt small-btn aim-toggle">FIRE: DRAG TO SHOOT</button>
+      <button class="neon-btn alt small-btn touch-only btn-layout">BUTTONS</button>
+    </div>
     <div class="touch-hint">Left thumb: move (push past the ring to sprint) · Right thumb: aim and shoot · DASH slides · Tap the map to enlarge it</div>
     <div id="best"></div>
     <div class="controls">
@@ -219,7 +232,10 @@
       <label>SFX <input id="vol-sfx" type="range" min="0" max="100" value="85"></label>
     </div>
     <label class="opt"><input id="opt-fps" type="checkbox"> SHOW FPS <span class="dim">(F3)</span></label>
-    <button class="neon-btn alt small-btn aim-toggle">FIRE: DRAG TO SHOOT</button>
+    <div class="touch-row">
+      <button class="neon-btn alt small-btn aim-toggle">FIRE: DRAG TO SHOOT</button>
+      <button class="neon-btn alt small-btn touch-only btn-layout">BUTTONS</button>
+    </div>
     <button id="btn-resume" class="neon-btn">RESUME</button>
     <button id="btn-restart" class="neon-btn alt">RESTART</button>
     <div class="controls small">

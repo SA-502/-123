@@ -423,6 +423,15 @@
     $('btn-again').addEventListener('click', () => (coop() ? GW.Net.again() : G.newGame()));
     $('btn-restart').addEventListener('click', () => (coop() ? GW.Net.leave() : G.newGame()));
     $('btn-resume').addEventListener('click', G.resume);
+    // phones: move / resize the on-screen buttons (from the title screen or the pause menu)
+    document.querySelectorAll('.btn-layout').forEach((b) =>
+      b.addEventListener('click', () => {
+        const fromPause = !$('pause').classList.contains('hidden');
+        if (fromPause) show('pause', false);
+        else $('menu').classList.add('hidden');
+        GW.Touch.openEditor(() => (fromPause ? show('pause', true) : $('menu').classList.remove('hidden')));
+      })
+    );
     $('vol-music').addEventListener('input', (e) => A.setMusicVol(e.target.value / 100));
     $('vol-sfx').addEventListener('input', (e) => A.setSfxVol(e.target.value / 100));
     $('opt-fps').checked = GW.Perf.show;

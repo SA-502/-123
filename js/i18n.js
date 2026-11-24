@@ -192,6 +192,8 @@
     'No game with code ': 'ما فيه لعبة بالكود ', 'That game is full (4 players)': 'اللعبة مليانة (4 لاعبين)',
     'That game has already started': 'اللعبة بدأت خلاص', 'Server is full, try again later': 'السيرفر مليان، جرّب بعدين',
     'Server error, try again': 'صار خطأ في السيرفر، جرّب مرة ثانية',
+    BUTTONS: 'الأزرار', 'Drag a button to move it': 'اسحب أي زر وحطه وين ما تبي', SIZE: 'الحجم', 'SEE-THROUGH': 'الشفافية',
+    RESET: 'الافتراضي', DONE: 'تم', PAUSE: 'إيقاف',
     'ONLINE · FROM ANYWHERE': 'أونلاين · من أي مكان', 'HOME · SAME WI-FI': 'محلي · نفس الواي فاي', GO: 'اتصل',
     'Play together from anywhere, over the internet': 'العبوا مع بعض من أي مكان عن طريق الإنترنت',
     'Opening the online server…': 'جاري فتح سيرفر الأونلاين…',
