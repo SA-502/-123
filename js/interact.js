@@ -35,6 +35,7 @@
     I.pap = { state: 'idle', t: 0, weapon: null, anim: 0, modIdx: 0, modT: 0 };
     build();
     GW.Facilities.buildInteractables(I.list, I.ui);
+    if (GW.Quest) GW.Quest.reset(I.list, I.ui); // map side quests (js/quest_frostfall.js)
   };
 
   /* ------------------------------------------------------------------ */
@@ -116,7 +117,7 @@
         dist: wallDist(g),
         prompt(p) {
           if (I.zonePower[g.zone]) return null;
-          if (p.fuses > 0) return ok('Press ' + key('F') + ' to insert a fuse and power ' + zn.name + (g.zone === M.Z.SUB ? ' <span class="dim">opens the Overclock Stage</span>' : ''));
+          if (p.fuses > 0) return ok('Press ' + key('F') + ' to insert a fuse and power ' + zn.name + (g.zone === M.Z.SUB ? ' <span class="dim">opens the ' + M.gate.name + '</span>' : ''));
           return info(zn.name + ' generator — needs a fuse');
         },
         use(p) {
@@ -292,7 +293,7 @@
     FX.flash = Math.max(FX.flash, 0.25);
     FX.shake(7);
     const n = I.poweredCount(), total = M.generators.length;
-    GW.Game.announce(M.zones[z].short + ' POWERED', n + ' / ' + total + ' generators online' + (z === M.Z.SUB ? ' · Overclock Stage unlocked' : ''), M.zones[z].color);
+    GW.Game.announce(M.zones[z].short + ' POWERED', n + ' / ' + total + ' generators online' + (z === M.Z.SUB ? ' · ' + M.gate.name + ' unlocked' : ''), M.zones[z].color);
   };
 
   /** Debug / test helper: everything on. */
@@ -633,6 +634,8 @@
 
   /** One-line current objective for the HUD. */
   I.objective = function () {
+    const q = GW.Quest && GW.Quest.objective ? GW.Quest.objective() : null; // a map's own wording / side quest
+    if (q) return q;
     const z = M.zones, P = GW.Player;
     const n = I.poweredCount(), total = M.generators.length;
     if (P.fuses > 0) return 'Insert your fuse into a zone generator (' + n + '/' + total + ' online)';

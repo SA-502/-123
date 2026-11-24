@@ -284,8 +284,11 @@
     GW.Weapons.update(dt);
     GW.Gadgets.update(dt);
     GW.Allies.update(dt);
+    const MP = GW.Maps && GW.Maps[M.activeMap];
+    if (MP && MP.update) MP.update(dt); // per-map moving parts (Frostfall's sliding trap)
     GW.Facilities.update(dt);
     GW.Interact.update(dt);
+    if (GW.Quest) GW.Quest.update(dt); // map side quests (js/quest_frostfall.js)
     if (!guest) updateFlow(); // a door or shutter may have changed this step
     if (N && N.active) {
       N.update(dt);
@@ -409,11 +412,10 @@
     showBest();
 
     function syncMapBtns() {
-      const bL = $('map-lumina'), bG = $('map-gemini');
-      if (bL) bL.classList.toggle('on', M.activeMap !== 'gemini');
-      if (bG) bG.classList.toggle('on', M.activeMap === 'gemini');
+      const known = M.activeMap === 'lumina' || (GW.Maps && GW.Maps[M.activeMap]) ? M.activeMap : 'lumina';
+      for (const id of ['lumina', 'gemini', 'frostfall']) if ($('map-' + id)) $('map-' + id).classList.toggle('on', known === id);
       const sub = document.querySelector('#menu .subtitle');
-      if (sub) sub.textContent = M.activeMap === 'gemini' ? 'DUSTLINE OUTPOST · DESERT COMPOUND' : 'LAST NIGHT AT LUMINA PIER';
+      if (sub) sub.textContent = known === 'gemini' ? 'DUSTLINE OUTPOST · DESERT COMPOUND' : known === 'frostfall' ? 'FROSTFALL JUNCTION · SNOWBOUND RAIL' : 'LAST NIGHT AT LUMINA PIER';
     }
     function pickMap(id) {
       M.activeMap = id;
@@ -425,6 +427,7 @@
     }
     if ($('map-lumina')) $('map-lumina').addEventListener('click', () => pickMap('lumina'));
     if ($('map-gemini')) $('map-gemini').addEventListener('click', () => pickMap('gemini'));
+    if ($('map-frostfall')) $('map-frostfall').addEventListener('click', () => pickMap('frostfall'));
     syncMapBtns();
     $('btn-start').addEventListener('click', G.newGame);
     const coop = () => GW.Net && GW.Net.active;

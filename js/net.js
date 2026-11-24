@@ -455,6 +455,9 @@
       case 'lock': // Overclocker lockdown (facilities.js)
         applying(() => GW.Facilities.lockRemote(m));
         break;
+      case 'quest': // map side quests (quest_frostfall.js)
+        if (GW.Quest) applying(() => GW.Quest.remote(m));
+        break;
       case 'gad':
         applying(() => GW.Gadgets.land({ kind: m.k, x: m.x, y: m.y, remote: true }));
         break;

@@ -193,7 +193,7 @@ function fromGame(room, text) {
 }
 
 /** Maps a room can be played on (js/map.js is 'lumina', js/map_gemini.js is 'gemini'). */
-const MAPS = ['lumina', 'gemini'];
+const MAPS = ['lumina', 'gemini', 'frostfall'];
 
 /** An arena match: the leader picked the mode, everyone's characters come with it. */
 function startArena(room, m) {

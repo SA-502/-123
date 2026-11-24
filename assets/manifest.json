@@ -87,6 +87,17 @@
     "gemini_concrete": { "file": "gemini_map/concrete.webp", "w": 384, "h": 384, "tile": true },
     "gemini_asphalt": { "file": "gemini_map/asphalt.webp", "w": 384, "h": 384, "tile": true },
     "gemini_wall_top": { "file": "gemini_map/wall_top.webp", "w": 384, "h": 384, "tile": true },
-    "gemini_oasis": { "file": "gemini_map/oasis.webp", "w": 384, "h": 384, "tile": true }
+    "gemini_oasis": { "file": "gemini_map/oasis.webp", "w": 384, "h": 384, "tile": true },
+
+    "ff_concourse": { "file": "frostfall/concourse.webp", "w": 384, "h": 384, "tile": true },
+    "ff_platform": { "file": "frostfall/platform.webp", "w": 768, "h": 768, "tile": true },
+    "ff_ballast": { "file": "frostfall/ballast.webp", "w": 384, "h": 384, "tile": true },
+    "ff_cobble": { "file": "frostfall/cobble.webp", "w": 768, "h": 768, "tile": true },
+    "ff_yard": { "file": "frostfall/yard.webp", "w": 384, "h": 384, "tile": true },
+    "ff_boiler": { "file": "frostfall/boiler.webp", "w": 768, "h": 768, "tile": true },
+    "ff_shed": { "file": "frostfall/shed.webp", "w": 768, "h": 768, "tile": true },
+    "ff_snow": { "file": "frostfall/snow.webp", "w": 384, "h": 384, "tile": true },
+    "ff_ice": { "file": "frostfall/ice.webp", "w": 384, "h": 384, "tile": true },
+    "ff_roof": { "file": "frostfall/roof.webp", "w": 768, "h": 768, "tile": true }
   }
 }
