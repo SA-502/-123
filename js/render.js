@@ -97,9 +97,9 @@
     let tx, ty, k;
     if (inGame) {
       const P = GW.Player;
-      const spec = !P.alive && GW.Net && GW.Net.active ? GW.Net.spectateTarget() : null;
+      const spec = !P.alive && !P.downed && GW.Net && GW.Net.active ? GW.Net.spectateTarget() : null;
       if (spec) {
-        // down in co-op: watch a teammate until the next round
+        // out in co-op (bled out): watch a teammate until the next round
         tx = spec.x;
         ty = spec.y;
       } else {
@@ -718,7 +718,7 @@
     const fs = Math.round(11 * R.dpr);
     ctx.font = '900 ' + fs + 'px ' + GW.FONT;
     for (const rp of GW.Net.remotes.values()) {
-      if (!rp.alive) continue;
+      if (!rp.alive && !rp.downed) continue;
       const sx = rp.x * z + R.ox, sy = rp.y * z + R.oy;
       const m = 26 * R.dpr;
       if (sx > -m && sx < R.vw + m && sy > -m && sy < R.vh + m) {
@@ -734,8 +734,9 @@
         const bw = 34 * R.dpr, bh = 3 * R.dpr;
         ctx.fillStyle = 'rgba(0,0,0,0.6)';
         ctx.fillRect(sx - bw / 2, y - 3 * R.dpr, bw, bh);
-        ctx.fillStyle = rp.jacket;
-        ctx.fillRect(sx - bw / 2, y - 3 * R.dpr, bw * U.clamp(rp.hp / (rp.maxHp || 100), 0, 1), bh);
+        // downed: the bar is their bleed-out clock
+        ctx.fillStyle = rp.downed ? '#ff3b4e' : rp.jacket;
+        ctx.fillRect(sx - bw / 2, y - 3 * R.dpr, bw * U.clamp(rp.downed ? rp.bleedT / C.REVIVE.bleed : rp.hp / (rp.maxHp || 100), 0, 1), bh);
       } else {
         // edge arrow pointing toward the teammate
         const cx = R.vw / 2, cy = R.vh / 2, a = Math.atan2(sy - cy, sx - cx);
@@ -746,7 +747,8 @@
         ctx.translate(ax, ay);
         ctx.rotate(a);
         ctx.globalAlpha = 0.9;
-        ctx.fillStyle = rp.jacket;
+        ctx.fillStyle = rp.downed && Math.sin(R.time * 10) > 0 ? '#ff3b4e' : rp.jacket; // downed: a flashing arrow
+        if (rp.downed) ctx.scale(1.4, 1.4);
         ctx.beginPath();
         ctx.moveTo(10 * R.dpr, 0);
         ctx.lineTo(-6 * R.dpr, -7 * R.dpr);
@@ -802,6 +804,116 @@
       ctx.fillStyle = owned ? '#3dff8b' : powered ? '#ffe14d' : '#ff6b7a';
       ctx.fillText(sub, sx, y + 25 * d);
       ctx.globalAlpha = 1;
+    }
+  }
+
+  /** Co-op: a downed player lying in a pool of blood, arms reaching forward (they can crawl). */
+  function drawDowned(p) {
+    const cr = p.moving ? Math.sin(p.walkT) : 0;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = '#5a0a14';
+    ctx.beginPath();
+    ctx.ellipse(-Math.cos(p.angle) * 5, -Math.sin(p.angle) * 5 + 2, 22, 15, p.angle, 0, U.TAU);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.rotate(p.angle);
+    ctx.lineCap = 'round';
+    // legs trailing behind
+    ctx.strokeStyle = '#231b33';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(-10, -3);
+    ctx.lineTo(-25, -6 + cr * 2.5);
+    ctx.moveTo(-10, 3);
+    ctx.lineTo(-25, 6 - cr * 2.5);
+    ctx.stroke();
+    // arms clawing forward
+    ctx.strokeStyle = '#1d8f9e';
+    ctx.lineWidth = 4.5;
+    ctx.beginPath();
+    ctx.moveTo(3, -6);
+    ctx.lineTo(17 + cr * 4, -10);
+    ctx.moveTo(3, 6);
+    ctx.lineTo(15 - cr * 4, 10);
+    ctx.stroke();
+    ctx.fillStyle = '#e0b890';
+    ctx.beginPath();
+    ctx.arc(17 + cr * 4, -10, 2.6, 0, U.TAU);
+    ctx.arc(15 - cr * 4, 10, 2.6, 0, U.TAU);
+    ctx.fill();
+    // torso flat on the ground, then the head (cap up)
+    ctx.fillStyle = p.jacket || '#23aebf';
+    ctx.beginPath();
+    ctx.ellipse(-3, 0, 13, 8.5, 0, 0, U.TAU);
+    ctx.fill();
+    ctx.fillStyle = '#ff4fd8';
+    ctx.fillRect(-15, -1.5, 22, 3);
+    ctx.fillStyle = '#231b33';
+    ctx.beginPath();
+    ctx.arc(10, 0, 6.4, 0, U.TAU);
+    ctx.fill();
+    ctx.fillStyle = '#ffe14d';
+    ctx.fillRect(14, -4, 1.6, 8);
+    ctx.restore();
+  }
+
+  /**
+   * Co-op, over every downed player: the bleed-out clock (red ring, shrinking), the revive progress
+   * (green ring, filling) and the seconds left. Drawn after the darkness so it is never hidden.
+   */
+  function drawReviveMarks() {
+    const N = GW.Net, P = GW.Player, RV = C.REVIVE;
+    const list = [];
+    if (P.downed) list.push([P, N.myId]);
+    for (const rp of N.remotes.values()) if (rp.downed && inView(rp.x, rp.y, 80)) list.push([rp, rp.id]);
+    for (const [p, id] of list) {
+      const prog = N.reviveProgress(id);
+      const bleed = U.clamp(p.bleedT / RV.bleed, 0, 1);
+      const pulse = 0.5 + 0.5 * Math.sin(R.time * (bleed < 0.3 ? 12 : 6));
+      const r = 30, a0 = -Math.PI / 2;
+      ctx.lineCap = 'round';
+      // how close a teammate has to stand
+      ctx.globalAlpha = 0.22 + 0.12 * pulse;
+      ctx.strokeStyle = prog > 0 ? '#3dff8b' : '#ff3b4e';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 7]);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, RV.range, 0, U.TAU);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // ring track
+      ctx.globalAlpha = 0.7;
+      ctx.strokeStyle = 'rgba(8,4,20,0.9)';
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, U.TAU);
+      ctx.stroke();
+      // bleed-out clock
+      ctx.globalAlpha = prog > 0 ? 0.45 : 0.65 + 0.35 * pulse;
+      ctx.strokeStyle = '#ff3b4e';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, a0, a0 + U.TAU * bleed);
+      ctx.stroke();
+      // revive progress
+      if (prog > 0) {
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = '#3dff8b';
+        ctx.shadowColor = '#3dff8b';
+        ctx.shadowBlur = 12;
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, a0, a0 + U.TAU * prog);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+      ctx.globalAlpha = 1;
+      ctx.lineCap = 'butt';
+      // under the ring: the name tag sits above it
+      if (prog > 0) label('REVIVING', p.x, p.y + r + 13, 11, '#3dff8b');
+      else label(Math.ceil(p.bleedT) + 's', p.x, p.y + r + 13, 12, '#ff3b4e', 0.75 + 0.25 * pulse);
     }
   }
 
@@ -1644,7 +1756,7 @@
     }
     for (const f of FX.lights) carve(f.x, f.y, f.r, f.life / f.max);
     for (const pu of I.powerups) carve(pu.x, pu.y, 100, 0.7);
-    if (GW.Net && GW.Net.active) for (const rp of GW.Net.remotes.values()) if (rp.alive) carve(rp.x, rp.y, 170, 0.75);
+    if (GW.Net && GW.Net.active) for (const rp of GW.Net.remotes.values()) if (rp.alive || rp.downed) carve(rp.x, rp.y, 170, 0.75);
     for (const wb of M.wallbuys) carve(wb.x, wb.y + wb.fy * 20, 95, 0.5);
     const bs = M.boxSpots[I.box.spot];
     if (I.box.state !== 'moving') carve(bs.x, bs.y, 150, 0.7);
@@ -1665,7 +1777,7 @@
     for (const v of M.vendors) carve(v.x, v.y + v.fy * 20, 75, 0.4);
     for (const pr of M.pads) for (const e of [pr.a, pr.b]) if (lv(e.zone) > 0.1) carve(e.x, e.y, 80, 0.5 * lv(e.zone));
 
-    if (inGame && P.alive) {
+    if (inGame && (P.alive || P.downed)) {
       lctx.globalAlpha = 1;
       // personal glow: you can always see what is right next to you
       let gr = lctx.createRadialGradient(P.x, P.y, 0, P.x, P.y, 200);
@@ -2212,8 +2324,14 @@
     for (const zb of Zs.list) if (inView(zb.x, zb.y, 40)) drawZombie(zb);
     if (inGame) drawAllies();
     const N = GW.Net;
-    if (inGame && N && N.active) for (const rp of N.remotes.values()) if (rp.alive && inView(rp.x, rp.y, 40)) drawPlayer(rp);
+    if (inGame && N && N.active)
+      for (const rp of N.remotes.values()) {
+        if (!inView(rp.x, rp.y, 40)) continue;
+        if (rp.alive) drawPlayer(rp);
+        else if (rp.downed) drawDowned(rp);
+      }
     if (inGame && P.alive) drawPlayer(P);
+    else if (inGame && P.downed) drawDowned(P);
     blitTiles(MA.top, layerMask(masks, 'top', MA.top), 0, 0, 1); // wall tops + props: about a third of it is empty
     drawDoors();
     drawShutter();
@@ -2227,6 +2345,8 @@
 
     ctx.setTransform(z, 0, 0, z, R.ox, R.oy);
     drawEmissive(inGame, power);
+    ctx.globalCompositeOperation = 'source-over';
+    if (inGame && N && N.active) drawReviveMarks();
 
     // cold tint during special rounds
     if (R.lightsOut > 0.02) {

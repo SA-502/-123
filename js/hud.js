@@ -118,7 +118,8 @@
 
   /* ---------------- messages ---------------- */
   H.setPrompt = function (html) {
-    if (GW.Touch) GW.Touch.sync(GW.Player, !!html && html.indexOf('<span class="dim">') !== 0);
+    // (a downed player's bleed-out line is not something USE can do)
+    if (GW.Touch) GW.Touch.sync(GW.Player, !!html && GW.Player.alive && html.indexOf('<span class="dim">') !== 0);
     if (last.prompt === html) return;
     last.prompt = html;
     if (html) el.prompt.innerHTML = html;
@@ -336,8 +337,8 @@
     // co-op teammates
     if (GW.Net && GW.Net.active)
       for (const rp of GW.Net.remotes.values()) {
-        if (!rp.alive) continue;
-        g.fillStyle = rp.jacket;
+        if (!rp.alive && !rp.downed) continue;
+        g.fillStyle = rp.downed && blink ? '#ff3b4e' : rp.jacket; // downed: blinks red so you can find them
         g.beginPath();
         g.arc(rp.x * s, rp.y * s, 3, 0, Math.PI * 2);
         g.fill();

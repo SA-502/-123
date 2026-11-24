@@ -8,6 +8,11 @@
  *   - the damage their bullets did ('hit', to the host, which applies it and pays out kills).
  * The host sends a snapshot of the horde 15 times a second ('s'), and world changes (doors,
  * power, fuses, power-ups, traps) are announced by whoever caused them.
+ *
+ * Revive: a player at 0 health goes down ('p' carries dn = seconds of bleed-out left; alive stays
+ * false, so the server's zombies ignore them). A teammate holding USE next to them sends rv / rp
+ * (who they are reviving, progress 0..1) in their own 'p', and {t:'revive', to: id} when done; the
+ * downed player's phone gets back up. If the clock runs out they are out until the next round.
  */
 (function () {
   'use strict';
@@ -28,6 +33,7 @@
     hostId: 0, // the server's game is player 0
     leader: 0, // the player who can start the game
     serverMode: false, // true inside the server's copy of the game
+    rev: { id: 0, t: 0, tick: 0, skip: 0, skipT: 0 }, // the teammate this player is reviving, and for how long USE has been held
   });
 
   const COLORS = { 1: '#23aebf', 2: '#ff4fd8', 3: '#ffb629', 4: '#3dff8b' };
@@ -159,6 +165,7 @@
     N.remotes.clear();
     hits.length = 0;
     ghosts.clear();
+    N.rev.id = N.rev.t = 0;
   }
 
   // keep-alive, and a ping reading every 2 s during a game
@@ -375,6 +382,9 @@
       case 'hit':
         if (N.isHost) onHits(from, m);
         break;
+      case 'revive':
+        if (GW.Player.downed) N.localRevive(from);
+        break;
       case 'dmg':
         GW.Player.hurt(m.n, !!m.m);
         if (m.m) A.play('bite', { x: GW.Player.x, y: GW.Player.y });
@@ -469,6 +479,7 @@
     kills.length = 0;
     snapT = sendT = 0;
     lastRound = 0;
+    N.rev.id = N.rev.t = 0;
     for (const id of N.lobby) if (id !== N.myId && id !== N.hostId) N.remotes.set(id, makeRemote(id));
     if (N.serverMode) {
       // the server's game has no player of its own: park it off the map, out of the fight
@@ -519,6 +530,7 @@
     A.setHorde(0);
     A.setPower(false);
     GW.Player.alive = false;
+    GW.Player.downed = false;
     GW.Zombies.list.length = 0;
   }
 
@@ -541,7 +553,7 @@
     const rp = {
       id, remote: true, name: N.label(id), jacket: N.color(id),
       x: M.spawn.x, y: M.spawn.y, tx: M.spawn.x, ty: M.spawn.y, ta: 0, angle: -Math.PI / 2,
-      vx: 0, vy: 0, r: C.PLAYER.radius, alive: true, hp: 100, maxHp: 100,
+      vx: 0, vy: 0, r: C.PLAYER.radius, alive: true, hp: 100, maxHp: 100, downed: false, bleedT: 0, rv: 0, rvp: 0,
       moving: false, walkT: 0, recoil: 0, meleeT: 0, invuln: 0, muzzleT: 0,
       wid: 'stinger', tier: 0, w: weaponFor('stinger', 0), shots: -1, seen: 0, pts: 0,
       perks: {}, stats: {},
@@ -596,6 +608,8 @@
       al: P.alive ? 1 : 0, hp: Math.round(P.hp), mh: P.maxHp,
       mv: P.moving ? 1 : 0, sh: P.stats.shots || 0, ml: P.meleeT > 0 ? 1 : 0, iv: P.invuln > 0 ? 1 : 0,
       ds: P.dashT > 0 ? r2(P.dashA) : undefined,
+      dn: P.downed ? Math.max(0.1, r1(P.bleedT)) : undefined, // down: seconds left to bleed out
+      rv: N.rev.id || undefined, rp: N.rev.id ? r2(N.rev.t / C.REVIVE.time) : undefined, // reviving a teammate
       pt: P.points, f: force ? 1 : 0,
     });
   }
@@ -607,7 +621,7 @@
       rp = makeRemote(id);
       N.remotes.set(id, rp);
     }
-    const wasAlive = rp.alive;
+    const wasAlive = rp.alive, wasDown = rp.downed;
     rp.tx = m.x;
     rp.ty = m.y;
     rp.ta = m.a;
@@ -619,6 +633,10 @@
       rp.angle = m.a;
     }
     rp.alive = !!m.al;
+    rp.downed = !rp.alive && m.dn > 0;
+    rp.bleedT = rp.downed ? m.dn : 0;
+    rp.rv = rp.alive ? m.rv || 0 : 0;
+    rp.rvp = rp.rv ? U.clamp(m.rp || 0, 0, 1) : 0;
     rp.hp = m.hp;
     rp.maxHp = m.mh;
     rp.moving = !!m.mv;
@@ -637,9 +655,18 @@
     if (rp.shots >= 0 && m.sh > rp.shots && !N.serverMode) remoteShots(rp, Math.min(4, m.sh - rp.shots));
     rp.shots = m.sh;
     rp.seen = 0;
-    if (wasAlive && !rp.alive && !N.serverMode) {
+    if (N.serverMode) return;
+    if (wasAlive && !rp.alive) {
       FX.burst(rp.x, rp.y, 30, rp.jacket, 300);
-      GW.Game.announce(rp.name + ' IS DOWN', 'Survive the round to bring them back', rp.jacket);
+      if (rp.downed) {
+        A.play('ui');
+        GW.Game.announce(rp.name + ' IS DOWN', 'Revive them before they bleed out', rp.jacket);
+      } else GW.Game.announce(rp.name + ' IS DOWN', 'Survive the round to bring them back', rp.jacket);
+    } else if (wasDown && !rp.downed && !rp.alive) {
+      GW.Game.announce(rp.name + ' BLED OUT', 'Survive the round to bring them back', rp.jacket);
+    } else if (wasDown && rp.alive) {
+      FX.ring(rp.x, rp.y, 80, rp.jacket, 0.5, 4);
+      FX.burst(rp.x, rp.y, 16, '#3dff8b', 220);
     }
   }
 
@@ -698,20 +725,152 @@
     }
   }
 
-  /** Local player went down in co-op: spectate until the next round instead of ending the game. */
+  /*
+   * Revive rules (C.REVIVE): at 0 health a co-op player goes down for `bleed` seconds, crawling. A
+   * teammate within `range` px holding USE for `time` seconds gets them up with `hpFrac` health,
+   * `invuln` seconds of safety, weapons and perks kept. Bleeding out = out until the next round,
+   * perks lost (as before). The clock pauses while someone is reviving you.
+   */
+
+  /** Local player went down in co-op: on the ground, bleeding out, until a teammate revives them. */
   N.localDown = function () {
     const P = GW.Player;
+    P.downed = true;
+    P.bleedT = C.REVIVE.bleed;
+    P.vx = P.vy = 0;
+    P.dashT = 0;
+    P.sprinting = false;
+    N.rev.id = N.rev.t = 0;
     FX.burst(P.x, P.y, 34, P.jacket || '#23aebf', 320);
     FX.flash = 0.4;
-    A.play('gameOver');
-    GW.Game.announce("YOU'RE DOWN", 'Back next round if your team survives', '#ff3b4e');
+    GW.Game.announce("YOU'RE DOWN", 'Crawl to a teammate — they can revive you', '#ff3b4e');
     sendState(true);
   };
 
-  /** New round: anyone who went down comes back next to a living teammate. */
+  /** How far along a revive of player `id` is (0..1), from this player or any teammate. */
+  N.reviveProgress = function (id) {
+    let best = N.rev.id === id ? N.rev.t / C.REVIVE.time : 0;
+    for (const rp of N.remotes.values()) if (rp.rv === id && rp.seen < 0.4) best = Math.max(best, rp.rvp);
+    return U.clamp(best, 0, 1);
+  };
+
+  /** Each step while the local player is down: the bleed-out clock (paused while being revived). */
+  N.downedStep = function (dt) {
+    const P = GW.Player;
+    if (!P.downed) return;
+    if (N.reviveProgress(N.myId) > 0) return;
+    P.bleedT -= dt;
+    if (P.bleedT <= 0) N.bleedOut();
+  };
+
+  /** The clock ran out: out until the next round, as before revives existed. */
+  N.bleedOut = function () {
+    const P = GW.Player;
+    if (!P.downed) return;
+    P.downed = false;
+    P.bleedT = 0;
+    P.hp = 0;
+    FX.burst(P.x, P.y, 34, P.jacket || '#23aebf', 320);
+    FX.flash = 0.4;
+    A.play('gameOver');
+    GW.Game.announce('YOU BLED OUT', 'Back next round if your team survives', '#ff3b4e');
+    sendState(true);
+  };
+
+  /**
+   * A teammate (`by`) finished reviving us: back up with half health, a moment of safety, weapons and
+   * perks kept. by = 0: a new round started while we were down, so full health.
+   */
+  N.localRevive = function (by) {
+    const P = GW.Player, RV = C.REVIVE;
+    if (!P.downed || GW.Game.state !== 'playing') return;
+    P.downed = false;
+    P.bleedT = 0;
+    P.alive = true;
+    P.hp = by ? Math.max(1, Math.round(P.maxHp * RV.hpFrac)) : P.maxHp;
+    P.invuln = RV.invuln;
+    P.sinceHurt = 0;
+    P.vx = P.vy = 0;
+    FX.ring(P.x, P.y, 90, P.jacket, 0.5, 4);
+    FX.burst(P.x, P.y, 20, '#3dff8b', 240);
+    A.play('secondWind');
+    if (by) GW.Game.announce("YOU'RE UP", 'Revived by ' + N.label(by), P.jacket);
+    else GW.Game.announce('BACK IN THE FIGHT', '', P.jacket);
+    sendState(true);
+  };
+
+  /**
+   * Teammate side, each step (from Interact.update): find a downed teammate in reach and count the
+   * USE hold. Returns the prompt to show, or null when nobody needs reviving here (USE then buys
+   * things as usual). While it returns a prompt, USE does nothing else.
+   */
+  N.reviveStep = function (dt, held) {
+    const P = GW.Player, RV = C.REVIVE, rev = N.rev;
+    if (P.downed) {
+      // the downed player's own prompt: the clock, or who is getting them up
+      let by = 0;
+      for (const rp of N.remotes.values()) if (rp.rv === N.myId && rp.seen < 0.4) by = rp.id;
+      rev.id = rev.t = 0;
+      if (by) return { html: N.label(by) + ' is reviving you', ok: false };
+      return { html: '<span class="bleed">BLEEDING OUT ' + Math.ceil(P.bleedT) + 's</span> · a teammate can revive you', ok: false };
+    }
+    if (!P.alive || GW.Game.state !== 'playing') {
+      rev.id = rev.t = 0;
+      return null;
+    }
+    // the teammate being revived stays the target while in reach; otherwise the nearest one
+    if (rev.skipT > 0) rev.skipT -= dt;
+    let target = null, bd = RV.range;
+    for (const rp of N.remotes.values()) {
+      if (!rp.downed || (rp.id === rev.skip && rev.skipT > 0)) continue; // just revived: their 'up' is on its way
+      const d = Math.hypot(rp.x - P.x, rp.y - P.y);
+      if (rp.id === rev.id && d <= RV.range) {
+        target = rp;
+        break;
+      }
+      if (d <= bd) {
+        bd = d;
+        target = rp;
+      }
+    }
+    if (!target) {
+      rev.id = rev.t = 0;
+      return null;
+    }
+    if (rev.id !== target.id) rev.t = 0;
+    rev.id = target.id;
+    if (!held) {
+      // let go: the revive starts over
+      rev.t = 0;
+      rev.id = 0;
+      return { html: 'Hold ' + GW.Interact.ui.key('F') + ' to revive ' + target.name, ok: true, target };
+    }
+    rev.t += dt;
+    rev.tick -= dt;
+    if (rev.tick <= 0) {
+      rev.tick = 0.5;
+      A.play('repair');
+    }
+    if (rev.t >= RV.time) {
+      send({ t: 'revive', to: target.id });
+      A.play('perk', { id: 'wind' });
+      rev.id = rev.t = 0;
+      rev.skip = target.id;
+      rev.skipT = 1;
+      return null;
+    }
+    return { html: 'Reviving ' + target.name + '…', ok: true, target };
+  };
+
+  /** New round: anyone who went down or bled out comes back next to a living teammate. */
   N.onRoundStart = function () {
     const P = GW.Player;
     if (N.serverMode || P.alive || GW.Game.state !== 'playing') return; // the server has no player to bring back
+    if (P.downed) {
+      // still on the ground when the round turned over: up where they lie, perks kept
+      N.localRevive(0);
+      return;
+    }
     let near = null;
     for (const rp of N.remotes.values()) if (rp.alive) near = rp;
     const pt = near ? M.randomFloorNear(near.x, near.y, 30, 90) : null;
@@ -1108,10 +1267,13 @@
     const pc = N.ping < 90 ? '#3dff8b' : N.ping < 160 ? '#ffe14d' : '#ff3b4e';
     let html = N.ping ? '<div class="mate ping">PING <span style="color:' + pc + '">' + N.ping + ' ms</span></div>' : '';
     for (const rp of N.remotes.values()) {
-      const f = rp.alive ? U.clamp(rp.hp / (rp.maxHp || 100), 0, 1) : 0;
-      html += '<div class="mate' + (rp.alive ? '' : ' down') + '"><b style="color:' + rp.jacket + '">' + rp.name + '</b><i><s style="width:' + Math.round(f * 100) + '%;background:' + rp.jacket + '"></s></i><span>' + (rp.alive ? rp.pts : 'DOWN') + '</span></div>';
+      // downed: the bar shows the bleed-out clock in red
+      const f = rp.alive ? U.clamp(rp.hp / (rp.maxHp || 100), 0, 1) : rp.downed ? U.clamp(rp.bleedT / C.REVIVE.bleed, 0, 1) : 0;
+      const bar = rp.downed ? '#ff3b4e' : rp.jacket;
+      const txt = rp.alive ? rp.pts : rp.downed ? 'DOWN ' + Math.ceil(rp.bleedT) + 's' : 'OUT';
+      html += '<div class="mate' + (rp.alive ? '' : rp.downed ? ' downed' : ' down') + '"><b style="color:' + rp.jacket + '">' + rp.name + '</b><i><s style="width:' + Math.round(f * 100) + '%;background:' + bar + '"></s></i><span>' + txt + '</span></div>';
     }
-    if (!GW.Player.alive) html += '<div class="mate spec">SPECTATING — back next round</div>';
+    if (!GW.Player.alive && !GW.Player.downed) html += '<div class="mate spec">SPECTATING — back next round</div>';
     el.innerHTML = html;
   }
 

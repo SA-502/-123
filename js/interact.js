@@ -582,6 +582,17 @@
       } else if (pu.life <= 0) I.powerups.splice(i, 1);
     }
 
+    // co-op: a downed teammate in reach takes USE over anything for sale nearby (and a downed
+    // player sees their bleed-out clock here)
+    const rv = GW.Net && GW.Net.active ? GW.Net.reviveStep(dt, In.down('KeyF') || In.down('KeyE')) : null;
+    if (rv) {
+      I.current = null;
+      I.prompt = rv;
+      I.holdT = 0;
+      GW.HUD.setPrompt(rv.html);
+      return;
+    }
+
     // nearest usable thing
     let best = null, bd = RANGE, bp = null;
     if (P.alive) {

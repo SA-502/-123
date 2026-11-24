@@ -45,6 +45,8 @@
     P.invuln = 0;
     P.hitGrace = 0;
     P.alive = true;
+    P.downed = false; // co-op: on the ground, waiting for a revive (alive stays false so zombies ignore you)
+    P.bleedT = 0;
     P.recoil = 0;
     P.muzzleT = 0;
     P.fireBuffer = 0;
@@ -215,7 +217,7 @@
     } else {
       P.hp = 0;
       P.alive = false;
-      if (GW.Net && GW.Net.active) GW.Net.localDown(); // co-op: spectate, back next round
+      if (GW.Net && GW.Net.active) GW.Net.localDown(); // co-op: down, a teammate can revive you
       else GW.Game.gameOver();
     }
   }
@@ -238,21 +240,10 @@
     return true;
   };
 
-  /* ---------------- per-frame update ---------------- */
-  P.update = function (dt) {
-    if (!P.alive) return;
-    if (GW.Game.modPickOpen) {
-      // choosing an ammo mod at the Overclocker (co-op): shielded and standing still
-      P.invuln = Math.max(P.invuln, 0.3);
-      P.vx = P.vy = 0;
-      return;
-    }
-    const PC = C.PLAYER;
-    P.stats.time += dt;
-
+  /** Movement input: keys, or the left thumb stick (analog). Direction is normalised. */
+  const mv = { ix: 0, iy: 0, il: 0, analog: 1 };
+  function readMove() {
     const TI = In.touch;
-
-    // movement input: keys, or the left thumb stick (analog)
     let ix = (In.down('KeyD') || In.down('ArrowRight') ? 1 : 0) - (In.down('KeyA') || In.down('ArrowLeft') ? 1 : 0);
     let iy = (In.down('KeyS') || In.down('ArrowDown') ? 1 : 0) - (In.down('KeyW') || In.down('ArrowUp') ? 1 : 0);
     let il = Math.hypot(ix, iy), analog = 1;
@@ -266,6 +257,66 @@
       ix /= il;
       iy /= il;
     }
+    mv.ix = ix;
+    mv.iy = iy;
+    mv.il = il;
+    mv.analog = analog;
+    return mv;
+  }
+
+  /**
+   * Co-op, downed: crawl slowly toward a teammate. No shooting: zombies ignore a downed player,
+   * so a downed gun would be a free turret. The bleed-out clock runs in GW.Net.
+   */
+  function crawl(dt) {
+    const m = readMove();
+    P.stats.time += dt;
+    P.moving = m.il > 0;
+    P.sprinting = false;
+    P.dashT = 0;
+    P.meleeT = P.muzzleT = P.recoil = 0;
+    const sp = C.REVIVE.crawl * m.analog;
+    const k = 1 - Math.exp(-dt * 10);
+    P.vx += (m.ix * sp - P.vx) * k;
+    P.vy += (m.iy * sp - P.vy) * k;
+    M.moveCircle(P, P.vx * dt, P.vy * dt, M.solidForPlayer);
+    M.resolveCircle(P, P.r, M.solidForPlayer);
+    if (P.moving) {
+      P.walkT += dt * 5;
+      P.angle += U.angDiff(P.angle, Math.atan2(m.iy, m.ix)) * Math.min(1, dt * 6);
+    }
+    P.aimX = P.x + Math.cos(P.angle) * 40;
+    P.aimY = P.y + Math.sin(P.angle) * 40;
+    if (P.invuln > 0) P.invuln -= dt;
+    if (P.hurtFlash > 0) P.hurtFlash = Math.max(0, P.hurtFlash - dt * 2.2);
+    P.heartT -= dt;
+    if (P.heartT <= 0) {
+      A.play('heartbeat');
+      P.heartT = 0.85;
+    }
+    A.listener.x = P.x;
+    A.listener.y = P.y;
+    GW.Net.downedStep(dt);
+  }
+
+  /* ---------------- per-frame update ---------------- */
+  P.update = function (dt) {
+    if (!P.alive) {
+      if (P.downed && GW.Net && GW.Net.active) crawl(dt);
+      return;
+    }
+    if (GW.Game.modPickOpen) {
+      // choosing an ammo mod at the Overclocker (co-op): shielded and standing still
+      P.invuln = Math.max(P.invuln, 0.3);
+      P.vx = P.vy = 0;
+      return;
+    }
+    const PC = C.PLAYER;
+    P.stats.time += dt;
+
+    const TI = In.touch;
+
+    const { ix, iy, il, analog } = readMove();
     P.moving = il > 0;
 
     // aim: the cursor, or the right thumb stick (with gentle aim assist); thumbs-off faces where you walk

@@ -428,6 +428,8 @@ body.sideways #game { inset: auto; top: 0; transform: rotate(90deg); transform-o
 .mate.down { opacity: 0.6; }
 .mate.down span { color: var(--red); }
 .mate.spec { color: var(--red); letter-spacing: 0.1em; animation: blink 1.2s steps(2) infinite; }
+.mate.downed span { color: var(--red); animation: blink 0.8s steps(2) infinite; }
+#prompt .bleed { color: var(--red); text-shadow: 0 0 8px var(--red); }
 
 /* iPhone: how to get full screen (Safari never allows it for a web page, only for a home-screen app) */
 #ios-tip { max-width: 520px; padding: 10px 14px; border: 1px solid rgba(25, 240, 255, 0.6); border-radius: 6px; background: rgba(10, 5, 24, 0.78);
