@@ -526,3 +526,6 @@ body.touch .touch-only { display: inline-block; }
 }
 .ed-btn.wide { font-size: 11px; letter-spacing: 0.12em; }
 .ed-btn.on { border-color: var(--yellow); background: rgba(255, 225, 77, 0.18); }
+
+/* the PvP arena link sits with the map picker */
+#map-arena { text-decoration: none; border-color: var(--yellow); color: #fff; box-shadow: 0 0 10px rgba(255, 225, 77, 0.35); }

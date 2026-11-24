@@ -94,6 +94,8 @@ const server = http.createServer((req, res) => {
  */
 const crypto = require('crypto');
 const { Sim } = require('./sim');
+const { ArenaSim } = require('../js/arena/sim.js'); // the PvP arena (arena.html)
+const MAX_ARENA = 10;
 const MAX_PLAYERS = 4;
 const MAX_FRAME = 256 * 1024;
 const rooms = new Map(); // code -> { code, clients: Map<id, client>, leader, nextId, sim }
@@ -193,6 +195,22 @@ function fromGame(room, text) {
 /** Maps a room can be played on (js/map.js is 'lumina', js/map_gemini.js is 'gemini'). */
 const MAPS = ['lumina', 'gemini'];
 
+/** An arena match: the leader picked the mode, everyone's characters come with it. */
+function startArena(room, m) {
+  stopGame(room);
+  const mode = m.mode === 'ffa' ? 'ffa' : 'team';
+  const players = [...room.clients.keys()].sort((a, b) => a - b);
+  if (mode === 'team' && players.length > 6) return wsSend(room.clients.get(room.leader), { t: 'err', msg: 'Too many players for 3 v 3 (6 at most)' });
+  const picks = {};
+  for (const id of players) if (m.picks && typeof m.picks[id] === 'string') picks[id] = m.picks[id].slice(0, 12);
+  try {
+    room.sim = new ArenaSim(1 + crypto.randomInt(2147483000), players, (text) => fromGame(room, text), { mode, picks });
+  } catch (e) {
+    console.error('[gravewave] could not start an arena match', e);
+    for (const o of room.clients.values()) wsSend(o, { t: 'err', msg: 'Server error, try again' });
+  }
+}
+
 function startGame(room) {
   stopGame(room);
   const seed = 1 + crypto.randomInt(2147483000);
@@ -220,7 +238,7 @@ function onMessage(cl, text) {
     if (m.t === 'create') {
       const code = newCode();
       if (!code) return wsSend(cl, { t: 'err', msg: 'Server is full, try again later' });
-      const room = { code, clients: new Map(), leader: 1, nextId: 2, sim: null };
+      const room = { code, clients: new Map(), leader: 1, nextId: 2, sim: null, game: m.game === 'arena' ? 'arena' : 'zombies' };
       cl.id = 1;
       cl.room = room;
       room.clients.set(1, cl);
@@ -230,8 +248,10 @@ function onMessage(cl, text) {
     if (m.t === 'join') {
       const code = String(m.code || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
       const room = rooms.get(code);
-      if (!room) return wsSend(cl, { t: 'err', msg: 'No game with code ' + (code || '?') });
-      if (room.clients.size >= MAX_PLAYERS) return wsSend(cl, { t: 'err', msg: 'That game is full (4 players)' });
+      // a zombie room code typed into the arena (or the other way round) finds nothing
+      if (!room || room.game !== (m.game === 'arena' ? 'arena' : 'zombies')) return wsSend(cl, { t: 'err', msg: 'No game with code ' + (code || '?') });
+      const max = room.game === 'arena' ? MAX_ARENA : MAX_PLAYERS;
+      if (room.clients.size >= max) return wsSend(cl, { t: 'err', msg: room.game === 'arena' ? 'That room is full (10 players)' : 'That game is full (4 players)' });
       if (room.sim) return wsSend(cl, { t: 'err', msg: 'That game has already started' });
       // reuse the lowest free number so colours stay P1..P4
       let id = 1;
@@ -248,6 +268,7 @@ function onMessage(cl, text) {
   const room = cl.room;
   if (m.t === 'start') {
     if (room.leader === cl.id && !room.sim) {
+      if (room.game === 'arena') return startArena(room, m);
       room.map = MAPS.includes(m.map) ? m.map : 'lumina';
       startGame(room);
     }

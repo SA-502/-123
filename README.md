@@ -101,6 +101,15 @@ Tactical grenades refill by one each round, and Full Reload restocks them.
 
 `server/server.js` is a dependency-free Node server that serves only the public game files. `server/docker-compose.yml` runs it as the `gravewave` Docker project on the VPS, behind the existing Traefik proxy, which provides HTTPS for `game.srv2082532.hstgr.cloud`. The container clones the latest commit of the branch on every start, so **restarting the project deploys the newest version**.
 
+## Arena (player vs player)
+
+`arena.html` (the ARENA · PVP button on the title screen) is a separate mode in the spirit of Brawl Stars: six characters (Guard, Sniper, Engineer, Medic, Bomber, Ninja), each with an attack, three ammo bars and a super that charges as you land hits; bushes hide you, health comes back when you stay out of the fight.
+
+- **3 v 3** on Neon Yard: first team to 15 knockouts (or the most after 3 minutes) wins; respawn after 4 s.
+- **10 · everyone for themselves** on Dust Bowl: last one standing wins; break boxes for power cubes (+8 % health and damage each); the gas closes in.
+
+Bots fill every empty place, so it plays solo, online (rooms of up to 10 on the same server as co-op) or on the home server. Code: `js/arena/core.js` (characters, maps, physics: shared), `js/arena/sim.js` (the match and the bots: runs on the server, or in the page for bot games), `js/arena/client.js`, `draw.js`, `controls.js`, `ui.js`. Phones: left thumb moves, right thumb drags to aim and fires on release (a tap fires at the nearest enemy), same for the SUPER button.
+
 ## Maps
 
 Pick the map on the title screen: **Lumina Pier** (`js/map.js` + `js/mapart.js`) or **Dustline Outpost**, a desert compound made by Gemini (`js/map_gemini.js` + `assets/gemini_map/`, notes in `docs/GEMINI_MAP_NOTES.md`). In co-op everyone plays the room leader's map: it travels with the start message and the server's copy of the game builds the same one.

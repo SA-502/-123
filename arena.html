@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#07040f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Gravewave Arena">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/ui/icon_192.png">
+<link rel="icon" href="assets/ui/icon_192.png">
+<title>GRAVEWAVE ARENA</title>
+<link rel="stylesheet" href="css/arena.css">
+</head>
+<body>
+<script>
+/* If the arena can't start, say so on screen. Errors from other sites' scripts (an app's own browser, extensions) are ignored. */
+(function () {
+  var shown = false;
+  function show(msg) {
+    if (shown || !document.body) return;
+    shown = true;
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99;padding:12px 16px;background:#7a0a1c;color:#fff;font:13px/1.5 monospace;white-space:pre-wrap';
+    d.textContent = 'ARENA could not start\n' + msg;
+    document.body.appendChild(d);
+  }
+  window.addEventListener('error', function (e) {
+    var t = e.target;
+    if (t && t !== window) { if (t.tagName === 'SCRIPT') show('Failed to load: ' + t.src); }
+    else if (e.filename && e.filename.indexOf(location.host) >= 0 && !(window.GW && GW.AC && GW.AC.ready)) show((e.message || 'error') + '\n' + e.filename + ':' + e.lineno);
+  }, true);
+})();
+</script>
+<div id="game">
+  <canvas id="view"></canvas>
+
+  <!-- in-match HUD -->
+  <div id="a-hud" class="hidden">
+    <button id="a-leave" class="a-icon">✕</button>
+    <div id="a-top"></div>
+    <div id="a-feed"></div>
+    <div id="a-msg" class="hidden"></div>
+  </div>
+
+  <!-- end of match -->
+  <div id="a-over" class="a-screen hidden">
+    <h2 id="a-over-title" class="a-head">VICTORY</h2>
+    <div id="a-over-sub"></div>
+    <div id="a-over-list"></div>
+    <div class="a-row">
+      <button id="a-again" class="a-btn">PLAY AGAIN</button>
+      <button id="a-menu-btn" class="a-btn alt">MENU</button>
+    </div>
+  </div>
+
+  <!-- title / character select / rooms -->
+  <div id="a-menu" class="a-screen">
+    <button id="btn-lang" class="a-lang">عربي</button>
+    <a id="a-back" class="a-lang a-left" href="index.html">‹ ZOMBIES</a>
+    <h1 class="a-title">ARENA</h1>
+    <div class="a-row" id="a-modes">
+      <button class="a-mode on" data-mode="team">3 V 3</button>
+      <button class="a-mode" data-mode="ffa">10 · EVERYONE FOR THEMSELVES</button>
+    </div>
+    <div id="a-mode-note" class="a-note"></div>
+    <div id="a-chars"></div>
+    <div id="a-char-info" class="a-note"></div>
+    <div class="a-row" id="a-play-row">
+      <button id="a-solo" class="a-btn">PLAY WITH BOTS</button>
+      <button id="a-online" class="a-btn alt">ONLINE ROOM</button>
+    </div>
+    <div id="a-room" class="hidden">
+      <div id="a-room-pick" class="a-row">
+        <button id="a-create" class="a-btn small">CREATE ROOM</button>
+        <input id="a-code" maxlength="4" placeholder="CODE" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false">
+        <button id="a-join" class="a-btn small alt">JOIN</button>
+      </div>
+      <div id="a-room-in" class="hidden">
+        <div class="a-note">ROOM CODE</div>
+        <div id="a-room-code">----</div>
+        <div id="a-room-players"></div>
+        <div class="a-row">
+          <button id="a-start" class="a-btn">START MATCH</button>
+          <button id="a-room-leave" class="a-btn small alt">LEAVE</button>
+        </div>
+        <div id="a-room-wait" class="a-note"></div>
+      </div>
+      <div id="a-room-msg" class="a-note"></div>
+    </div>
+  </div>
+</div>
+
+<script src="js/utils.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/arena/core.js"></script>
+<script src="js/arena/sim.js"></script>
+<script src="js/arena/controls.js"></script>
+<script src="js/arena/draw.js"></script>
+<script src="js/arena/client.js"></script>
+<script src="js/arena/ui.js"></script>
+</body>
+</html>
