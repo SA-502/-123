@@ -202,7 +202,7 @@
    * (Overkill, Double Score) twice in one round or while it is still running. Purge and Overkill
    * are the rarest. A pity counter guarantees one every `pity` kills if luck runs dry.
    */
-  const DROP_TABLE = [['ammo', 1], ['double', 0.8], ['carpenter', 0.6], ['instakill', 0.45], ['nuke', 0.3], ['pal', 0.35]];
+  const DROP_TABLE = [['ammo', 1], ['double', 0.8], ['carpenter', 0.6], ['instakill', 0.35], ['nuke', 0.3], ['pal', 0.35]];
 
   D.dropWeight = function (id, w) {
     const T = GW.Game.timers || {};
