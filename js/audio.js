@@ -1,4 +1,5 @@
-/* GRAVEWAVE — fully procedural Web Audio: SFX synthesis + a sequenced synthwave soundtrack */
+/* GRAVEWAVE — Web Audio: recorded CC0 sample SFX (assets/sfx, with synthesised fallbacks), voice limiting,
+   a master limiter, and a sequenced synthwave soundtrack */
 (function () {
   'use strict';
   const GW = window.GW, U = GW.U;
@@ -56,15 +57,24 @@
       return;
     }
     unlock();
+    // master: gentle bus compressor, then a hard limiter so a crowd of sounds can never clip the output
     master = ctx.createGain();
-    master.gain.value = 0.9;
+    master.gain.value = 0.85;
     const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -16;
-    comp.ratio.value = 6;
-    comp.attack.value = 0.003;
-    comp.release.value = 0.2;
+    comp.threshold.value = -18;
+    comp.knee.value = 8;
+    comp.ratio.value = 4;
+    comp.attack.value = 0.004;
+    comp.release.value = 0.25;
+    const lim = ctx.createDynamicsCompressor();
+    lim.threshold.value = -3;
+    lim.knee.value = 0;
+    lim.ratio.value = 20;
+    lim.attack.value = 0.001;
+    lim.release.value = 0.12;
     master.connect(comp);
-    comp.connect(ctx.destination);
+    comp.connect(lim);
+    lim.connect(ctx.destination);
 
     sfxBus = ctx.createGain();
     sfxBus.gain.value = A.sfxVol;
@@ -119,6 +129,7 @@
     }
     A.ready = true;
     startMusic();
+    loadSamples();
   };
 
   A.setMusicVol = function (v) {
@@ -138,19 +149,31 @@
   /* ------------------------------------------------------------------ */
   /* synthesis primitives                                               */
   /* ------------------------------------------------------------------ */
-  // Per-sound distance muffling: A.play() sets curLP to a lowpass for positional sounds while
-  // the sound's builder runs, and route() sends that sound's dry (and reverb) signal through it.
-  let curLP = null, curLPv = null;
+  // Every A.play() call builds one "voice": all of that sound's nodes feed the voice's own output
+  // gain (and, if it uses reverb, its own send), so the voice limiter can fade it out, stop its
+  // sources and disconnect the whole sub-graph in one go. `cur` is the voice being built.
+  let cur = null;
+  /** Register a scheduled source with the voice being built (so it can be stopped early) + its end. */
+  function track(src, end) {
+    if (!cur) return;
+    cur.srcs.push(src);
+    if (end > cur.end) cur.end = end;
+  }
   function verbIn() {
-    if (!curLP) return verb;
-    if (!curLPv) {
-      curLPv = ctx.createBiquadFilter();
-      curLPv.type = 'lowpass';
-      curLPv.frequency.value = curLP.frequency.value;
-      curLPv.Q.value = 0.6;
-      curLPv.connect(verb);
+    if (!cur) return verb;
+    if (!cur.send) {
+      cur.send = ctx.createGain();
+      if (cur.lp) {
+        // far sounds: muffle the reverb send too
+        cur.lpv = ctx.createBiquadFilter();
+        cur.lpv.type = 'lowpass';
+        cur.lpv.frequency.value = cur.lp.frequency.value;
+        cur.lpv.Q.value = 0.6;
+        cur.send.connect(cur.lpv);
+        cur.lpv.connect(verb);
+      } else cur.send.connect(verb);
     }
-    return curLPv;
+    return cur.send;
   }
 
   function route(node, o) {
@@ -161,7 +184,7 @@
       n.connect(p);
       n = p;
     }
-    n.connect(o.dest || curLP || sfxBus);
+    n.connect(o.dest || (cur ? cur.out : sfxBus));
     if (o.verb) {
       const s = ctx.createGain();
       s.gain.value = o.verb;
@@ -208,6 +231,7 @@
       lg.connect(osc.frequency);
       lfo.start(t);
       lfo.stop(t + dur + 0.05);
+      if (!o.dest) track(lfo, t + dur + 0.05);
     }
     const g = ctx.createGain();
     envelope(g, t, o, dur, vol);
@@ -225,6 +249,7 @@
     route(g, o);
     osc.start(t);
     osc.stop(t + dur + 0.05);
+    if (!o.dest) track(osc, t + dur + 0.05);
   }
 
   function noise(o) {
@@ -247,6 +272,7 @@
     route(g, o);
     src.start(t, Math.random() * 1.5);
     src.stop(t + dur + 0.05);
+    if (!o.dest) track(src, t + dur + 0.05);
   }
 
   /**
@@ -855,13 +881,16 @@
 
     osc.start(t);
     osc.stop(end + 0.05);
+    track(osc, end + 0.05);
     if (nz) {
       nz.start(t, Math.random() * 1.5);
       nz.stop(end + 0.05);
+      track(nz, end + 0.05);
     }
     if (lfo) {
       lfo.start(t);
       lfo.stop(end + 0.05);
+      track(lfo, end + 0.05);
     }
   }
 
@@ -1000,6 +1029,7 @@
     route(g, { pan: s.pan });
     src.start(t, Math.random() * 1.5);
     src.stop(t + span + dc * 8 + 0.05);
+    track(src, t + span + dc * 8 + 0.05);
   }
   /** n wet bubble blips (rising sine chirps) from ONE oscillator. */
   function bubbles(t, s, n, span, vol, lo, hi) {
@@ -1020,6 +1050,7 @@
     route(g, { pan: s.pan });
     osc.start(t);
     osc.stop(t + span + 0.15);
+    track(osc, t + span + 0.15);
   }
 
   /* ---------------- creature voices, special zombies, boss, facilities, mods ---------------- */
@@ -1229,7 +1260,7 @@
   /* ------------------------------------------------------------------ */
   /* horde ambience: distant overlapping moans + breathing bed          */
   /* ------------------------------------------------------------------ */
-  const horde = { target: 0, applied: -1, next: 0, bus: null };
+  const horde = { target: 0, applied: -1, next: 0, bus: null, muf: null, live: [] };
 
   /** 0..1 — called every frame by the game, so it only stores the target. */
   A.setHorde = function (level) {
@@ -1241,6 +1272,12 @@
     const bus = (horde.bus = ctx.createGain());
     bus.gain.value = 0;
     bus.connect(sfxBus);
+    // one shared "far away" filter for the sampled distant moans
+    horde.muf = ctx.createBiquadFilter();
+    horde.muf.type = 'lowpass';
+    horde.muf.frequency.value = 850;
+    horde.muf.Q.value = 0.5;
+    horde.muf.connect(bus);
     const vs = ctx.createGain();
     vs.gain.value = 0.5;
     bus.connect(vs);
@@ -1281,8 +1318,24 @@
     }
     if (now < horde.next) return;
     horde.next = now + R(0.35, 1.2) / (0.3 + lv * 1.2);
+    // at most a few overlapping distant moans (each synth moan is ~20 nodes)
+    horde.live = horde.live.filter((e) => e > now);
+    if (horde.live.length >= (MOBILE ? 2 : 3)) return;
     const t = now + R(0.03, 0.2);
     const s = { vol: R(0.35, 1), pan: R(-0.9, 0.9) };
+    if (bank.zgroan && SM.enabled) {
+      const big = Math.random() < 0.25;
+      const c = { srcs: [], end: t };
+      cur = c;
+      try {
+        smp(big ? 'zbig' : 'zgroan', t, s, { vol: big ? 0.45 : 0.55, rate: big ? R(0.6, 0.75) : R(0.7, 0.92), rv: 0, dest: horde.muf });
+      } finally {
+        cur = null;
+      }
+      horde.live.push(c.end);
+      return;
+    }
+    horde.live.push(t + 1.6);
     if (Math.random() < 0.2) {
       // a ragged distant exhale
       noise({ t, dur: R(0.6, 1.2), vol: 0.12 * s.vol, type: 'bandpass', f: R(250, 600), f2: R(150, 300), q: 2, pan: s.pan, a: 0.3, dest: horde.bus });
@@ -1297,6 +1350,349 @@
     o.dest = horde.bus;
     o.nf = 2;
     voice(t, s, o);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* recorded samples (assets/sfx/*.mp3, CC0 — see docs/CREDITS.md)     */
+  /* ------------------------------------------------------------------ */
+  // group -> number of takes (files are <group>-<n>.mp3). Loaded + decoded after the first tap.
+  const BANK = {
+    // most frequent first: they decode first
+    pistol: 3, smg: 3, rifle: 3, shotgun: 3, minigun: 2, lmg: 3, sniper: 3, launcher: 2, laser: 3, arc: 2, flame: 2,
+    hit: 4, zgroan: 10, zdeath: 5, zattack: 5, bite: 3, zscream: 4, zbig: 5, explode: 3, swing: 4, stab: 2,
+    dryfire: 2, magout: 1, magin: 1, swap: 1, hurt: 4, cash: 1, deny: 2, ui: 2, roundstart: 1, roundend: 1,
+    rise: 2, spit: 3, splat: 3, gulp: 2, clink: 2, lasersmall: 2, zap: 2, plank: 3, hammer: 2, door: 1,
+    power: 1, generator: 1, perk: 1, upgrade: 1, papwork: 1, pdrop: 2, pickup: 2, broar: 3, bslam: 1,
+    special: 1, gameover: 1, nuke: 1, siren: 1, thunder: 1, shutter: 1, bang: 2, helmet: 1, armor: 1,
+    glass: 1, teleport: 1,
+  };
+  const bank = {}; // group -> [AudioBuffer]
+  const lastTake = {};
+  const SM = (A.samples = { enabled: true, loaded: 0, failed: 0, pending: 0, total: 0, dir: 'assets/sfx/' });
+
+  function decode(ab) {
+    return new Promise((res, rej) => {
+      // callback form for old Safari; promise form rejects on its own in new browsers
+      const pr = ctx.decodeAudioData(ab, res, rej);
+      if (pr && pr.catch) pr.catch(rej);
+    });
+  }
+  function b64(str) {
+    const bin = atob(str), u = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return u.buffer;
+  }
+  /** Encoder padding: start each take at its first audible sample. */
+  function leadIn(buf) {
+    const d = buf.getChannelData(0), n = Math.min(d.length, (buf.sampleRate * 0.08) | 0);
+    let i = 0;
+    while (i < n && Math.abs(d[i]) < 0.0025) i++;
+    return i >= n ? 0 : Math.max(0, i - 8) / buf.sampleRate;
+  }
+
+  function loadSamples() {
+    if (SM.total || !SM.enabled) return;
+    const emb = GW.SFX_DATA; // single-file bundle: base64 mp3s inlined by tools/bundle.py --sfx
+    // a page opened straight from disk cannot fetch files: stay on the synthesised set, no console noise
+    if (!emb && (location.protocol === 'file:' || !window.fetch)) return;
+    const jobs = [];
+    for (const g in BANK) for (let i = 1; i <= BANK[g]; i++) jobs.push([g, g + '-' + i]);
+    SM.total = SM.pending = jobs.length;
+    let next = 0;
+    const worker = () => {
+      if (next >= jobs.length) return;
+      const [g, f] = jobs[next++];
+      const get = emb
+        ? emb[f] ? Promise.resolve(b64(emb[f])) : Promise.reject(new Error('missing'))
+        : fetch(SM.dir + f + '.mp3').then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(r.status))));
+      get
+        .then(decode)
+        .then((buf) => {
+          buf._off = leadIn(buf);
+          (bank[g] || (bank[g] = [])).push(buf);
+          SM.loaded++;
+        })
+        .catch(() => SM.failed++)
+        .then(() => {
+          SM.pending--;
+          worker();
+        });
+    };
+    for (let k = 0; k < 4; k++) worker();
+  }
+
+  /**
+   * Play one random take of a sample group into the voice being built.
+   * o: { vol, rate, rv (rate jitter, default 0.05), vv (volume jitter, default 0.12), at (delay s),
+   *      max (cut after s), verb, lp (lowpass Hz), pan, dest }. Returns false if the group isn't loaded.
+   */
+  function smp(name, t, s, o) {
+    const list = SM.enabled && bank[name];
+    if (!list || !list.length) return false;
+    o = o || {};
+    let i = (Math.random() * list.length) | 0;
+    if (list.length > 1 && i === lastTake[name]) i = (i + 1) % list.length;
+    lastTake[name] = i;
+    const buf = list[i];
+    const vv = o.vv === undefined ? 0.12 : o.vv, rv = o.rv === undefined ? 0.05 : o.rv;
+    const vol = (o.vol === undefined ? 1 : o.vol) * s.vol * (1 + (Math.random() * 2 - 1) * vv);
+    if (vol < 0.002) return true;
+    const rate = (o.rate || 1) * (1 + (Math.random() * 2 - 1) * rv);
+    const st = t + (o.at || 0);
+    const full = (buf.duration - buf._off) / rate;
+    const len = o.max && o.max < full ? o.max : full;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = rate;
+    const g = ctx.createGain();
+    g.gain.value = vol;
+    if (len < full) {
+      g.gain.setValueAtTime(vol, st + Math.max(0, len - 0.05));
+      g.gain.linearRampToValueAtTime(0.0001, st + len);
+    }
+    let n = src;
+    if (o.lp) {
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = o.lp;
+      f.Q.value = 0.7;
+      src.connect(f);
+      n = f;
+    }
+    n.connect(g);
+    route(g, { pan: o.pan === undefined ? s.pan : o.pan, verb: o.verb, dest: o.dest });
+    src.start(st, buf._off);
+    src.stop(st + len + 0.02);
+    track(src, st + len + 0.05);
+    return true;
+  }
+
+  const GUN = {
+    pistol: ['pistol', 0.8, 0.12], smg: ['smg', 0.62, 0.08], rifle: ['rifle', 0.75, 0.12], lmg: ['lmg', 0.82, 0.12],
+    shotgun: ['shotgun', 0.95, 0.22], sniper: ['sniper', 1, 0.3], minigun: ['minigun', 0.55, 0.06],
+    launcher: ['launcher', 0.85, 0.2], energy: ['laser', 0.5, 0.15],
+  };
+  /** creature vocal kind -> [group, volume, rate lo, rate hi, extra] */
+  const VOX = {
+    walker: ['zgroan', 0.5, 0.84, 1.0], runner: ['zgroan', 0.45, 1.0, 1.15], sprinter: ['zscream', 0.32, 1.05, 1.3],
+    helmet: ['zgroan', 0.5, 0.8, 0.95, { lp: 1000 }], brute: ['zbig', 0.6, 0.74, 0.88], bloater: ['zbig', 0.55, 0.62, 0.72],
+    spitter: ['zgroan', 0.45, 0.74, 0.86], leaper: ['zscream', 0.34, 0.85, 1.0], shrieker: ['zscream', 0.36, 1.35, 1.6],
+    boss: ['broar', 0.9, 0.95, 1.05],
+  };
+  const PERK_RATE = { thick: 1, quick: 1.12, burner: 0.94, twin: 1.06, wind: 0.89 };
+  const R2 = (a, b) => a + Math.random() * (b - a);
+
+  /** Sample versions of the sounds; each returns false when its samples aren't loaded (-> synth). */
+  const SAMPLED = {
+    shot(t, s, p) {
+      const cls = p.cls || 'pistol';
+      if (cls === 'flame') return smp('flame', t, s, { vol: 0.45, rv: 0.08 });
+      if (cls === 'katana' || cls === 'axe') return smp('swing', t, s, { vol: 0.6, rate: cls === 'axe' ? 0.75 : 1.1 });
+      const g = GUN[cls] || GUN.pistol;
+      if (!smp(g[0], t, s, { vol: g[1] * (p.x === undefined ? 1 : 0.8), rv: 0.06, verb: g[2] })) return false;
+      if (p.up && cls !== 'energy') smp('lasersmall', t, s, { vol: 0.16, rate: 1.15 });
+      return true;
+    },
+    arc: (t, s) => smp('arc', t, s, { vol: 0.6, verb: 0.2 }),
+    empty: (t, s) => smp('dryfire', t, s, { vol: 0.5 }),
+    reloadStart: (t, s) => smp('magout', t, s, { vol: 0.5 }),
+    reloadEnd: (t, s) => smp('magin', t, s, { vol: 0.55 }),
+    swap: (t, s) => smp('swap', t, s, { vol: 0.45 }),
+    slash: (t, s, p) => smp('swing', t, s, p.heavy ? { vol: 0.6, rate: 0.72 } : { vol: 0.55, rate: 1.12 }),
+    flame: (t, s) => smp('flame', t, s, { vol: 0.42, rv: 0.08 }),
+    slide: (t, s) => smp('swing', t, s, { vol: 0.4, rate: 0.55 }),
+    swing: (t, s) => smp('swing', t, s, { vol: 0.5 }),
+    stab: (t, s) => smp('stab', t, s, { vol: 0.7 }),
+    hit: (t, s) => smp('hit', t, s, { vol: 0.3, rv: 0.12, vv: 0.25 }),
+    zdeath: (t, s) => smp('zdeath', t, s, { vol: 0.5, rate: R2(0.85, 1.05), rv: 0 }),
+    voice(t, s, p) {
+      const v = VOX[p.kind] || VOX.walker;
+      const pitch = p.kind && p.pitch > 0 ? U.clamp(p.pitch, 0.5, 2) : 1;
+      const o = Object.assign({ vol: v[1], rate: R2(v[2], v[3]) * pitch, rv: 0, verb: p.kind === 'boss' ? 0.3 : 0.08 }, v[4]);
+      if (!smp(v[0], t, s, o)) return false;
+      if (p.kind === 'spitter' || p.kind === 'bloater') smp('gulp', t, s, { vol: 0.25, rate: 0.7, at: 0.15 });
+      return true;
+    },
+    groan(t, s, p) {
+      const pitch = p.pitch || 1;
+      return SAMPLED.voice(t, s, { kind: p.kind || (pitch < 0.8 ? 'brute' : pitch > 1.2 ? 'sprinter' : 'walker') });
+    },
+    shriek: (t, s) => SAMPLED.voice(t, s, { kind: 'shrieker' }),
+    zattack: (t, s) => smp('zattack', t, s, { vol: 0.45, rate: R2(0.85, 1.05), rv: 0 }),
+    bite: (t, s) => smp('bite', t, s, { vol: 0.75 }),
+    hurt: (t, s) => smp('hurt', t, s, { vol: 0.8 }),
+    purchase: (t, s) => smp('cash', t, s, { vol: 0.75, rv: 0.02 }),
+    deny: (t, s) => smp('deny', t, s, { vol: 0.5, rv: 0 }),
+    door: (t, s) => smp('door', t, s, { vol: 0.8, verb: 0.3 }),
+    power: (t, s) => smp('power', t, s, { vol: 0.9, rv: 0, vv: 0 }),
+    roundStart: (t, s) => smp('roundstart', t, s, { vol: 0.95, rv: 0, vv: 0 }),
+    roundEnd: (t, s) => smp('roundend', t, s, { vol: 0.85, rv: 0, vv: 0 }),
+    special: (t, s) => smp('special', t, s, { vol: 0.85, rv: 0, vv: 0 }),
+    gameOver: (t, s) => smp('gameover', t, s, { vol: 0.95, rv: 0, vv: 0 }),
+    perk: (t, s, p) => smp('perk', t, s, { vol: 0.75, rate: PERK_RATE[p.id] || 1, rv: 0 }),
+    powerup: (t, s) => smp('pickup', t, s, { vol: 0.6 }),
+    powerupDrop: (t, s) => smp('pdrop', t, s, { vol: 0.45, verb: 0.2 }),
+    explosion: (t, s) => smp('explode', t, s, { vol: 0.95, verb: 0.25, rv: 0.08 }),
+    plasmaHit: (t, s) => smp('explode', t, s, { vol: 0.45, rate: 1.45, verb: 0.2 }),
+    nuke: (t, s) => smp('nuke', t, s, { vol: 1, rv: 0, vv: 0 }),
+    bounce: (t, s) => smp('clink', t, s, { vol: 0.3, rv: 0.15 }),
+    throw: (t, s) => smp('swing', t, s, { vol: 0.4, rate: 0.82 }),
+    plank: (t, s) => smp('plank', t, s, { vol: 0.55 }),
+    repair: (t, s) => smp('hammer', t, s, { vol: 0.55 }),
+    papWork: (t, s) => smp('papwork', t, s, { vol: 0.65, rv: 0 }),
+    papDone: (t, s) => smp('upgrade', t, s, { vol: 0.8, rv: 0 }),
+    tierUp: (t, s, p) => smp('upgrade', t, s, { vol: 0.85, rate: [1, 1.06, 1.12][U.clamp(Math.round(p.tier || 1), 1, 3) - 1], rv: 0 }),
+    ui: (t, s) => smp('ui', t, s, { vol: 0.4 }),
+    modCycle: (t, s) => smp('ui', t, s, { vol: 0.3, rate: 1.3 }),
+    rise: (t, s) => smp('rise', t, s, { vol: 0.5 }),
+    lightning: (t, s) => smp('thunder', t, s, { vol: 0.8 }),
+    trapOn: (t, s) => smp('arc', t, s, { vol: 0.5, rate: 0.8, verb: 0.2 }),
+    zap: (t, s) => smp('zap', t, s, { vol: 0.42 }),
+    shutter: (t, s) => smp('shutter', t, s, { vol: 0.8, verb: 0.25 }),
+    hatch: (t, s) => smp('shutter', t, s, { vol: 0.8, rate: 0.8, verb: 0.3 }),
+    bang: (t, s) => smp('bang', t, s, { vol: 0.6 }),
+    siren: (t, s) => smp('siren', t, s, { vol: 0.55, rv: 0 }),
+    freeze: (t, s) => smp('glass', t, s, { vol: 0.5, rate: 1.3, verb: 0.3 }),
+    allyShot: (t, s) => smp('lasersmall', t, s, { vol: 0.28 }),
+    armor: (t, s) => smp('armor', t, s, { vol: 0.6 }),
+    armorBreak: (t, s) => smp('glass', t, s, { vol: 0.6 }),
+    teleport: (t, s) => smp('teleport', t, s, { vol: 0.6, verb: 0.3 }),
+    helmetBreak: (t, s) => smp('helmet', t, s, { vol: 0.55 }),
+    spit: (t, s) => smp('spit', t, s, { vol: 0.55 }),
+    acidSplash: (t, s) => smp('splat', t, s, { vol: 0.55 }),
+    swell(t, s) {
+      if (!smp('zbig', t, s, { vol: 0.45, rate: 1.15 })) return false;
+      smp('gulp', t, s, { vol: 0.35, rate: 0.6, at: 0.2 });
+      return true;
+    },
+    bloaterPop(t, s) {
+      if (!smp('splat', t, s, { vol: 0.8, rate: 0.8 })) return false;
+      smp('explode', t, s, { vol: 0.45, rate: 1.6 });
+      return true;
+    },
+    leapWarn: (t, s) => smp('zscream', t, s, { vol: 0.42, rate: 1.4, rv: 0.05 }),
+    leap: (t, s) => smp('swing', t, s, { vol: 0.5, rate: 0.6 }),
+    bossRoar: (t, s) => smp('broar', t, s, { vol: 1, verb: 0.35 }),
+    bossCharge: (t, s) => smp('bslam', t, s, { vol: 0.55, rate: 1.25 }),
+    bossSlam: (t, s) => smp('bslam', t, s, { vol: 1, verb: 0.3 }),
+    bossPhase(t, s) {
+      if (!smp('broar', t, s, { vol: 0.9, rate: 1.1, verb: 0.35 })) return false;
+      smp('bang', t, s, { vol: 0.4 });
+      return true;
+    },
+    bossDeath(t, s) {
+      if (!smp('broar', t, s, { vol: 1, rate: 0.8, verb: 0.4 })) return false;
+      smp('explode', t, s, { vol: 0.8, at: 0.5 });
+      smp('nuke', t, s, { vol: 0.7, at: 1.2 });
+      return true;
+    },
+    generator: (t, s) => smp('generator', t, s, { vol: 0.8, rv: 0 }),
+    modFire: (t, s) => smp('flame', t, s, { vol: 0.3, rate: 1.2 }),
+    modShock: (t, s) => smp('zap', t, s, { vol: 0.3, rate: 1.2 }),
+    modBlast: (t, s) => smp('explode', t, s, { vol: 0.4, rate: 1.5 }),
+    shockwave(t, s) {
+      if (!smp('explode', t, s, { vol: 0.8, rate: 0.8, verb: 0.3 })) return false;
+      smp('arc', t, s, { vol: 0.4 });
+      return true;
+    },
+  };
+
+  /* ------------------------------------------------------------------ */
+  /* voice limiter                                                      */
+  /* ------------------------------------------------------------------ */
+  // Crowds used to stack 50+ live sources (every groan ~20 nodes, every shot several) until the
+  // audio thread under-ran and crackled. Now each play is one voice; a global cap and per-sound caps
+  // steal the least important / oldest voice (20 ms fade), and finished voices are disconnected.
+  const MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '') || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform || ''));
+  const MAX_VOICES = MOBILE ? 20 : 30, MAX_SRCS = MOBILE ? 32 : 52;
+  /** importance 0..10 (stingers / UI never get stolen); own gun shots (no x) get +3 in play() */
+  const PRI = {
+    roundStart: 10, roundEnd: 10, special: 10, gameOver: 10, power: 10, purchase: 10, deny: 10, ui: 10, perk: 10,
+    tierUp: 10, papDone: 10, papWork: 9, secondWind: 10, nuke: 10, powerup: 10, boxRoll: 10, boxReady: 10, boxJester: 10,
+    siren: 10, bossDeath: 10, door: 9, generator: 9, fusePickup: 9, fuseInsert: 9, modCycle: 9,
+    hurt: 9, reloadStart: 9, reloadEnd: 9, empty: 9, swap: 9, stab: 9, swing: 9, slash: 8, throw: 8, armorBreak: 9,
+    armor: 9, heartbeat: 9, slide: 9, bite: 8, explosion: 8, bossRoar: 8, bossSlam: 8, bossCharge: 8, bossPhase: 8,
+    bossVolley: 7, leapWarn: 7, shot: 6, arc: 6, flame: 6, bloaterPop: 7, shockwave: 7, lightning: 7, shutter: 7,
+    zattack: 6, spit: 6, acidSplash: 6, leap: 6, swell: 6, crit: 6, helmetBreak: 5, zdeath: 5, plasmaHit: 5,
+    allyShot: 4, plank: 4, bounce: 4, lureBeep: 4, modFire: 4, modShock: 4, modFrost: 4, modBlast: 4,
+    hit: 3, voice: 3, groan: 3, shriek: 3, rise: 3, acidSizzle: 2,
+  };
+  /** max simultaneous voices of one sound */
+  const CAP = {
+    shot: 8, arc: 3, flame: 2, voice: MOBILE ? 4 : 6, groan: 3, shriek: 2, hit: 3, zdeath: 3, zattack: 3, bite: 2,
+    explosion: 4, plasmaHit: 3, plank: 2, rise: 2, spit: 2, acidSplash: 2, acidSizzle: 1, allyShot: 3, crit: 2,
+    bounce: 2, lureBeep: 1, modFire: 2, modShock: 2, modFrost: 2, modBlast: 2, swell: 2, leap: 2, leapWarn: 2,
+    helmetBreak: 2, zap: 2, laser: 1, siren: 1, heartbeat: 1, papWork: 1, boxRoll: 1,
+  };
+  const voices = [], dying = [];
+  const VS = { played: 0, stolen: 0, dropped: 0, peak: 0 };
+
+  function release(v) {
+    try {
+      v.out.disconnect();
+      if (v.lp) v.lp.disconnect();
+      if (v.send) v.send.disconnect();
+      if (v.lpv) v.lpv.disconnect();
+    } catch (e) {
+      /* already gone */
+    }
+    v.srcs.length = 0;
+  }
+  /** Fade a voice out fast, stop its sources, disconnect it shortly after. */
+  function steal(v, now) {
+    const i = voices.indexOf(v);
+    if (i >= 0) voices.splice(i, 1);
+    const end = now + 0.025;
+    for (const gn of [v.out.gain, v.send && v.send.gain]) {
+      if (!gn) continue;
+      gn.cancelScheduledValues(now);
+      gn.setValueAtTime(gn.value, now);
+      gn.linearRampToValueAtTime(0, end);
+    }
+    for (const src of v.srcs) {
+      try {
+        src.stop(end + 0.01);
+      } catch (e) {
+        /* not started yet / already stopped */
+      }
+    }
+    v.end = end + 0.05;
+    dying.push(v);
+    VS.stolen++;
+  }
+  /** Disconnect voices that have finished (called from play() and the scheduler tick). */
+  function reap(now) {
+    for (let i = voices.length - 1; i >= 0; i--) {
+      if (voices[i].end + 0.05 < now) release(voices.splice(i, 1)[0]);
+    }
+    for (let i = dying.length - 1; i >= 0; i--) {
+      if (dying[i].end < now) release(dying.splice(i, 1)[0]);
+    }
+  }
+  /** Make room for a new voice; false if it should be dropped instead. */
+  function admit(name, pri, now) {
+    const cap = CAP[name] || 4;
+    let same = 0, oldest = null;
+    for (const v of voices) {
+      if (v.name !== name) continue;
+      same++;
+      if (!oldest || v.t0 < oldest.t0) oldest = v;
+    }
+    if (same >= cap) {
+      if (oldest.pri > pri) return false;
+      steal(oldest, now);
+    }
+    // global budget: voices, and live sources (a synthesised groan is 3-6 of them, a sample 1-2)
+    let cost = 0;
+    for (const v of voices) cost += v.srcs.length;
+    while (voices.length && (voices.length >= MAX_VOICES || cost >= MAX_SRCS)) {
+      let victim = null;
+      for (const v of voices) if (!victim || v.pri < victim.pri || (v.pri === victim.pri && v.t0 < victim.t0)) victim = v;
+      if (victim.pri > pri) return false;
+      cost -= victim.srcs.length;
+      steal(victim, now);
+    }
+    return true;
   }
 
   /** Play a named sound. p may carry {x,y} for positional audio plus sound-specific params. */
@@ -1316,24 +1712,53 @@
     }
     if (s.vol < 0.012) return;
     last[name] = now;
+    reap(now);
+    // the local player's own weapon (no position given) outranks everything in the crowd
+    let pri = PRI[name] === undefined ? 5 : PRI[name];
+    if ((name === 'shot' || name === 'arc' || name === 'flame') && p.x === undefined) pri += 3;
+    pri -= s.muffle * 2; // far-away sounds are the first to go
+    if (!admit(name, pri, now)) {
+      VS.dropped++;
+      return;
+    }
+    const v = { name, pri, t0: now, end: now + 0.1, out: null, lp: null, send: null, lpv: null, srcs: [] };
     try {
-      // far positional sounds go through a per-sound lowpass so distance muffles, not just fades
+      v.out = ctx.createGain();
+      // far positional sounds go through a per-voice lowpass so distance muffles, not just fades
       if (s.lp && s.lp < 15000) {
-        curLP = ctx.createBiquadFilter();
-        curLP.type = 'lowpass';
-        curLP.frequency.value = s.lp;
-        curLP.Q.value = 0.6;
-        curLP.connect(sfxBus);
-      }
-      fn(now + 0.001, s, p);
+        v.lp = ctx.createBiquadFilter();
+        v.lp.type = 'lowpass';
+        v.lp.frequency.value = s.lp;
+        v.lp.Q.value = 0.6;
+        v.out.connect(v.lp);
+        v.lp.connect(sfxBus);
+      } else v.out.connect(sfxBus);
+      cur = v;
+      const sf = SAMPLED[name];
+      if (!(sf && sf(now + 0.001, s, p))) fn(now + 0.001, s, p);
     } catch (e) {
       /* never let an audio hiccup break the game loop */
     } finally {
-      curLP = curLPv = null;
+      cur = null;
     }
+    if (!v.srcs.length) {
+      release(v);
+      return;
+    }
+    voices.push(v);
+    VS.played++;
+    if (voices.length > VS.peak) VS.peak = voices.length;
   };
   A.sfx = SFX; // exposed for debugging / tooling (names, direct calls)
+  A.sampled = SAMPLED;
   A.throttle = THROTTLE;
+  /** Debug / test numbers: live voices, limiter activity, sample loading. */
+  A.stats = () => ({
+    voices: voices.length, dying: dying.length, max: MAX_VOICES, played: VS.played, stolen: VS.stolen, dropped: VS.dropped,
+    peak: VS.peak, horde: horde.live.length, samples: SM.loaded + '/' + SM.total, failed: SM.failed,
+    srcs: voices.reduce((n, v) => n + v.srcs.length, 0),
+    live: voices.reduce((o, v) => ((o[v.name] = (o[v.name] || 0) + 1), o), {}),
+  });
 
   /* ------------------------------------------------------------------ */
   /* synthwave sequencer                                                */
@@ -1371,6 +1796,7 @@
     try {
       if (warmQueue.length) warmTick();
       hordeTick();
+      reap(ctx.currentTime);
     } catch (e) {
       /* ambience is optional */
     }
