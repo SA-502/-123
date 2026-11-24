@@ -308,7 +308,7 @@
     // shutter. Its switch is INSIDE the panic room (north wall): seal yourself in, let the horde pile
     // up against the shutter, then fry it. ----
     M.traps = [
-      { kind: 'zap', x: 8, y: 35, w: 3, h: 7, sw: { tx: 13, ty: 35, fx: 0, fy: 1 }, hint: 'Fry the horde outside the shutter' },
+      { kind: 'zap', x: 8, y: 35, w: 3, h: 7, sw: { tx: 12, ty: 35, fx: 0, fy: 1 }, hint: 'Fry the horde outside the shutter' },
     ].map((t, i) => Object.assign(t, { id: i, rx: t.x * T, ry: t.y * T, rw: t.w * T, rh: t.h * T, state: 'idle', t: 0, playerT: 0, sfxT: 0 }));
 
     // ---- panic room: steel shutter on (11,36..37), console inside on the east wall ----
