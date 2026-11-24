@@ -121,6 +121,12 @@
     Perf.gfxChanged();
   };
 
+  /**
+   * The readout: "● 58 FPS · RES 85%" in one small pill. The dot compares the frame rate with
+   * what we aim for (60, or the cap in battery saver, shown as MAX 30): green on target,
+   * yellow a little short, red only when it is really struggling.
+   */
+  let parts = null;
   function paint() {
     if (!el) {
       el = document.getElementById('fps');
@@ -130,11 +136,32 @@
     const now = performance.now();
     if (now - lastShow < 400) return;
     lastShow = now;
-    const R = GW.Render;
-    el.textContent =
-      Math.round(Perf.fps) + ' FPS · ' + Perf.frameMs.toFixed(1) + ' ms\n' +
-      'sim ' + Perf.simMs.toFixed(1) + ' · draw ' + Perf.drawMs.toFixed(1) + ' ms\n' +
-      'res ' + Math.round(R.quality * 100) + '%' + (R.fpsCap ? ' · cap ' + R.fpsCap : '') + (R.saver ? ' · saver' : '');
-    el.classList.toggle('bad', Perf.fps < 50);
+    if (!parts) {
+      el.textContent = '';
+      const span = (cls, txt) => {
+        const s = document.createElement(cls === 'b' ? 'b' : 'span');
+        if (cls !== 'b') s.className = cls;
+        if (txt) s.textContent = txt;
+        el.appendChild(s);
+        return s;
+      };
+      parts = { dot: span('fps-dot'), n: span('b'), unit: span('fps-u', 'FPS'), cap: span('fps-dim'), res: span('fps-dim') };
+      parts.capL = document.createElement('span');
+      parts.capL.textContent = 'MAX';
+      parts.capN = document.createElement('span');
+      parts.cap.append(parts.capL, ' ', parts.capN);
+      parts.resL = document.createElement('span');
+      parts.resL.textContent = 'RES';
+      parts.resN = document.createElement('span');
+      parts.res.append('· ', parts.resL, ' ', parts.resN);
+    }
+    const R = GW.Render, target = R.fpsCap || 60, ratio = Perf.fps / target;
+    parts.n.textContent = String(Math.round(Perf.fps));
+    parts.cap.style.display = R.fpsCap ? '' : 'none';
+    parts.capN.textContent = String(R.fpsCap || '');
+    parts.resN.textContent = Math.round(R.quality * 100) + '%';
+    el.classList.toggle('slow', ratio < 0.9 && ratio >= 0.65);
+    el.classList.toggle('bad', ratio < 0.65);
+    el.title = Perf.frameMs.toFixed(1) + ' ms · sim ' + Perf.simMs.toFixed(1) + ' · draw ' + Perf.drawMs.toFixed(1);
   }
 })();

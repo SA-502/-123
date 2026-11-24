@@ -185,8 +185,9 @@
         DASH: 'زحلقة', 'FIRE: DRAG TO SHOOT': 'الإطلاق: اسحب العصا', 'FIRE: TAP TO SHOOT': 'الإطلاق: بمجرد اللمس',
     'GRAPHICS: HIGH': 'الرسومات: عالية', 'GRAPHICS: BATTERY SAVER': 'الرسومات: توفير البطارية',
     'MAP · TAB': 'الخريطة', slide: 'زحلقة', 'big map': 'الخريطة الكبيرة',
-    'Left thumb: move (push past the ring to sprint) · Right thumb: aim and shoot · DASH slides · Tap the map to enlarge it':
-      'الإبهام اليسار: حركة (اطلع برا الدائرة عشان تركض) · الإبهام اليمين: صوّب واطلق · زر «زحلقة» للانزلاق · المس الخريطة عشان تكبر',
+    'Left thumb: move (push past the ring, or tap the runner to lock sprint on) · Right thumb: aim and shoot · » slides · Tap the map to enlarge it':
+      'الإبهام اليسار: حركة (اطلع برا الدائرة، أو المس زر الراكض عشان يثبت الركض) · الإبهام اليمين: صوّب واطلق · زر » للانزلاق · المس الخريطة عشان تكبر',
+    SPRINT: 'ركض', MAX: 'الحد', RES: 'الدقة',
 
     // ---- co-op lobby ----
     'Up to 4 players against the horde': 'لين 4 لاعبين ضد الزومبي',

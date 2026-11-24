@@ -81,5 +81,6 @@
       In.touch.mx = In.touch.my = 0;
       In.touch.aiming = In.touch.fire = In.touch.sprint = In.touch.autoAim = false;
     }
+    if (GW.Touch && GW.Touch.setSprintLock) GW.Touch.setSprintLock(false); // pause, restart, menus: walk again
   };
 })();
