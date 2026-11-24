@@ -51,6 +51,8 @@
     TRAP: { cost: 1000, duration: 25, cooldown: 60, tick: 0.25, playerDmg: 40, playerTick: 0.5, bruteFrac: 0.07 },
     SAFEROOM: { cost: 1500, duration: 20, cooldown: 120, warn: 3, blastR: 380, daze: 3, blastFrac: 0.2, hatchWindow: 10 },
     ARMOR: { cost: 1250, max: 150, absorb: 0.7 },
+    // co-op: a player at 0 health goes down and bleeds out unless a teammate holds USE next to them
+    REVIVE: { bleed: 30, time: 3, range: 66, hpFrac: 0.5, invuln: 2.5, crawl: 42 },
     TELEPORT: { cost: 500, cooldown: 25 },
     TACTICAL_MAX: 3,
     PAL: { cost: 2000, duration: 45, dropDuration: 25, cooldown: 90, rpm: 600, range: 520, speed: 270, dmgBase: 30, dmgRound: 10 },

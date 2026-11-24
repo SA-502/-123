@@ -140,6 +140,12 @@
     FINALE: 'الختام', 'SECOND ACT': 'الفصل الثاني', 'The Headliner is enraged': 'النجم معصّب', 'It calls for backup': 'ينادي على المساعدة',
     ' IS DOWN': ' طاح', 'Survive the round to bring them back': 'اصمدوا لين تخلص الجولة عشان يرجع',
     'CO-OP': 'لعب جماعي',
+    // revive (co-op)
+    'Crawl to a teammate — they can revive you': 'ازحف لزميلك — يقدر يقوّمك',
+    'Revive them before they bleed out': 'قوّمه قبل ما يخلص دمه',
+    ' BLED OUT': ' خلص دمه', 'YOU BLED OUT': 'خلص دمك', "YOU'RE UP": 'قمت!', 'Revived by ': 'قوّمك ',
+    'BLEEDING OUT': 'تنزف', 'a teammate can revive you': 'زميلك يقدر يقوّمك', ' is reviving you': ' يقوّمك الحين',
+    ' to revive ': ' عشان تقوّم ', 'Reviving ': 'تقوّم ', REVIVING: 'جاري الإنعاش', OUT: 'برا',
 
     // ---- objective ----
     'Insert your fuse into a zone generator (': 'ركّب الفيوز في أي مولد (',
