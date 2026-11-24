@@ -186,6 +186,8 @@
     if (AL.pal) out.push({ id: 'pal', kind: 'gadget', t: AL.pal.t, name: 'PIXEL PAL', color: '#b77dff' });
     if (AL.sentry) out.push({ id: 'sentry', kind: 'gadget', t: AL.sentry.t, name: 'SENTRY', color: '#19f0ff' });
     if (S.state === 'sealed') out.push({ id: 'safe', kind: 'gadget', t: S.t, name: 'LOCKDOWN', color: '#3dff8b' });
+    const R = M.papRoom; // Overclocker lockdown (facilities.js)
+    if (R && R.state === 'sealed') out.push({ id: 'paplock', icon: 'safe', kind: 'gadget', t: R.t, name: 'LOCKDOWN', color: '#ff4fd8' });
     return out;
   }
 
@@ -199,7 +201,7 @@
         node = puNodes[e.id] = document.createElement('div');
         node.className = 'pu-timer';
         node.style.color = e.color;
-        node.appendChild(Art.iconCanvas(e.kind, e.id, 26));
+        node.appendChild(Art.iconCanvas(e.kind, e.icon || e.id, 26));
         const label = document.createElement('span');
         node.appendChild(label);
         node._label = label;
@@ -287,25 +289,17 @@
       g.fillStyle = '#ff4fd8';
       g.fillRect(M.pap.x * s - 3, M.pap.y * s - 2, 6, 4);
     }
-    // traps, pads and the panic room
+    // the trap, the Overclocker lockdown and the panic room
     for (const tr of M.traps) {
       if (!I.powered(tr.zone)) continue;
       g.fillStyle = tr.state === 'active' ? (blink ? GW.TRAPS[tr.kind].color : '#ffffff') : U.rgba(GW.TRAPS[tr.kind].color, tr.state === 'idle' ? 0.55 : 0.2);
       g.fillRect(tr.rx * s, tr.ry * s, tr.rw * s, tr.rh * s);
     }
-    {
-      for (const pr of M.pads) {
-        for (const e of [pr.a, pr.b]) {
-          if (!M.zones[e.zone].open || !I.powered(e.zone)) continue;
-          g.strokeStyle = pr.color;
-          g.globalAlpha = pr.cd > 0 ? 0.35 : 1;
-          g.lineWidth = 1;
-          g.beginPath();
-          g.arc(e.x * s, e.y * s, 2.5, 0, U.TAU);
-          g.stroke();
-        }
-      }
-      g.globalAlpha = 1;
+    const LR = M.papRoom;
+    if (LR && LR.state === 'sealed') {
+      g.strokeStyle = blink ? '#ff4fd8' : '#ff3b4e';
+      g.lineWidth = 1.5;
+      g.strokeRect(LR.x0 * T * s, LR.y0 * T * s, (LR.x1 - LR.x0 + 1) * T * s, (LR.y1 - LR.y0 + 1) * T * s);
     }
     const SR = M.safeRoom;
     g.strokeStyle = SR.state === 'sealed' ? '#ff3b4e' : '#3dff8b';

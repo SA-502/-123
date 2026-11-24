@@ -301,12 +301,13 @@
     In.endFrame();
   };
 
-  /** The horde's main flow field targets the player, or the panic-room shutter while it is sealed. */
+  /** The horde's main flow field targets the player, or a sealed shutter (panic room / Overclocker lockdown). */
   function updateFlow() {
-    const N = GW.Net;
-    if (N && N.isHost && N.remotes.size && !GW.Facilities.flowGoal()) {
+    const N = GW.Net, Fa = GW.Facilities;
+    if (N && N.isHost && N.remotes.size && !Fa.flowGoal()) {
       // co-op: one field that leads every zombie to whichever living player is closest
-      const pts = N.players().filter((p) => p.alive);
+      // (players sealed in the Overclocker room are out of reach: the horde hunts the others)
+      const pts = N.players().filter((p) => p.alive && !Fa.lockedIn(p));
       if (!pts.length) pts.push(GW.Player);
       let key = '';
       for (const p of pts) key += Math.floor(p.x / GW.CFG.TILE) + ',' + Math.floor(p.y / GW.CFG.TILE) + ';';

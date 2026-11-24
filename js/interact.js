@@ -43,6 +43,7 @@
   function build() {
     // --- buyable doors ---
     for (const d of M.doors) {
+      if (d.lock) continue; // Overclocker lockdown shutters (facilities.js) are not for sale
       if (d.power) {
         I.list.push({
           kind: 'gate', ref: d,
@@ -214,7 +215,7 @@
           const w = p.weapon();
           if (!w) return info('No weapon to overclock');
           if (w.tier >= 3) return info(w.s.name + ' is fully overclocked');
-          return ok('Press ' + key('F') + ' to overclock ' + w.s.name + (w.tier ? ' to tier ' + (w.tier + 1) : '') + ' ' + cost(C.COSTS.papTiers[w.tier]));
+          return ok('Press ' + key('F') + ' to overclock ' + w.s.name + (w.tier ? ' to tier ' + (w.tier + 1) : '') + GW.Facilities.lockNote() + ' ' + cost(C.COSTS.papTiers[w.tier]));
         },
         use(p) {
           const k = I.pap;
@@ -240,6 +241,7 @@
           k.state = 'working';
           k.t = 3.4;
           A.play('papWork');
+          GW.Facilities.onOverclock(); // the round's first upgrade seals the room (docs/LOCKDOWN.md)
         },
       });
     }

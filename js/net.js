@@ -452,6 +452,9 @@
       case 'seal':
         applying(() => GW.Facilities.sealRemote());
         break;
+      case 'lock': // Overclocker lockdown (facilities.js)
+        applying(() => GW.Facilities.lockRemote(m));
+        break;
       case 'gad':
         applying(() => GW.Gadgets.land({ kind: m.k, x: m.x, y: m.y, remote: true }));
         break;
