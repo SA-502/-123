@@ -1065,7 +1065,8 @@
   N.update = function (dt) {
     updateRemotes(dt);
     sendT += dt;
-    if (sendT >= 0.05 && !N.serverMode) {
+    // battery saver: 12 position updates a second instead of 20 (receivers already ease + extrapolate up to 0.1 s)
+    if (!N.serverMode && sendT >= (GW.Render.saver === true ? 1 / 12 : 0.05)) {
       sendT = 0;
       sendState(false);
     }

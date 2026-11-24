@@ -367,8 +367,8 @@
     TC.enabled = on;
     In.touch.active = on;
     document.body.classList.toggle('touch', on);
-    GW.Render.setTouchProfile(on);
-    GW.FX.maxParts = on ? 360 : 700;
+    GW.Render.setTouchProfile(on); // also sets the particle budget
+    if (GW.Perf.gfxChanged) GW.Perf.gfxChanged(); // battery saver is the default on phones
     TC.updateSideways();
   };
 

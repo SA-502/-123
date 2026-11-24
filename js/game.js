@@ -354,6 +354,12 @@
 
   function frame(ts) {
     requestAnimationFrame(frame);
+    // frame cap (phones / battery saver): skip this display refresh if the last drawn frame is too
+    // recent. The skipped time is not lost: the next frame's dt covers it and runs the fixed steps.
+    // A paused solo game or an open menu over a frozen world only needs a slow refresh.
+    let cap = GW.Render.fpsCap;
+    if (G.state === 'paused' || G.state === 'modpick') cap = 15;
+    if (cap && lastTs && ts - lastTs < 1000 / cap - 3) return; // 3 ms slack for display jitter
     let dt = lastTs ? (ts - lastTs) / 1000 : STEP;
     lastTs = ts;
     if (dt > 0.1) dt = 0.1; // tab was hidden; don't fast-forward
@@ -398,6 +404,7 @@
     GW.Interact.reset();
     GW.Director.reset();
     GW.Render.init(canvas);
+    GW.Perf.initGfx(); // GRAPHICS: HIGH / BATTERY SAVER buttons; applies the saved choice
     showBest();
 
     function syncMapBtns() {
@@ -471,7 +478,10 @@
     };
     window.addEventListener('blur', () => G.pause());
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) G.pause();
+      if (!document.hidden) return;
+      G.pause();
+      // the synthesized music and ambience keep the audio thread busy: stop it while nobody can hear it
+      if (A.ctx && A.ctx.state === 'running') A.ctx.suspend().catch(() => {});
     });
 
     requestAnimationFrame(frame);

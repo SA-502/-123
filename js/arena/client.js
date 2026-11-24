@@ -672,9 +672,15 @@
   /* ------------------------------------------------------------------ */
   /* the frame loop                                                      */
   /* ------------------------------------------------------------------ */
-  let last = 0;
+  let last = 0, capT = 0, cap = 0;
   function frame(t) {
     requestAnimationFrame(frame);
+    // frame cap (phones / battery saver): skip this refresh if the last drawn frame is too recent
+    if (t - capT > 1000) {
+      capT = t; // re-read the setting once a second, not every frame (it touches localStorage)
+      cap = GW.ADraw.fpsCap();
+    }
+    if (cap && last && t - last < 1000 / cap - 3) return;
     const dt = Math.min(0.05, last ? (t - last) / 1000 : 0.016);
     last = t;
     try {

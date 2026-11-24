@@ -35,12 +35,33 @@
 
   R.dprCap = 1.5;
   R.pixelCap = 2.8e6;
-  /** Phones: fewer pixels and a slightly wider view so thumbs don't hide the action. */
-  R.setTouchProfile = function (on) {
-    R.dprCap = on ? 1.25 : 1.5;
-    R.pixelCap = on ? 1.6e6 : 2.8e6;
-    R.touch = on;
+  R.touch = false;
+  R.saver = false; // GRAPHICS: BATTERY SAVER (see perf.js)
+  R.fpsCap = 0; // frames drawn per second at most (0 = the display's rate); the simulation is not affected
+  R.lightDiv = 2; // the lighting layer is 1/lightDiv of the canvas resolution
+  R.rays = 1; // share of flashlight / personal-glow rays to cast
+  /**
+   * Phones and battery saver: fewer pixels and frames. Phones also get a slightly wider view so
+   * thumbs don't hide the action. Battery saver draws at CSS-pixel resolution, caps the frame
+   * rate at 30 (game logic still runs 60 steps a second), softer lighting and fewer particles.
+   */
+  R.applyProfile = function () {
+    const on = R.touch, sv = R.saver;
+    R.dprCap = sv ? 1 : on ? 1.25 : 1.5;
+    R.pixelCap = sv ? 1.0e6 : on ? 1.6e6 : 2.8e6;
+    R.fpsCap = sv ? 30 : on ? 60 : 0; // 60 on phones too: ProMotion screens would otherwise draw 120
+    R.lightDiv = sv ? 3 : 2;
+    R.rays = sv ? 0.6 : 1;
+    GW.FX.maxParts = sv ? 220 : on ? 360 : 700;
     if (canvas) R.resize();
+  };
+  R.setTouchProfile = function (on) {
+    R.touch = on;
+    R.applyProfile();
+  };
+  R.setSaver = function (on) {
+    R.saver = !!on;
+    R.applyProfile();
   };
 
   R.resize = function () {
@@ -56,8 +77,8 @@
     // phones see a slightly closer view (about 15% bigger) so the player and the horde read better
     const VW = R.touch ? 1130 : 1300, VH = R.touch ? 648 : 745;
     R.cam.zoom = Math.max(R.vw / VW, R.vh / VH);
-    lcan.width = Math.ceil(R.vw / 2);
-    lcan.height = Math.ceil(R.vh / 2);
+    lcan.width = Math.ceil(R.vw / R.lightDiv);
+    lcan.height = Math.ceil(R.vh / R.lightDiv);
   };
 
   /** CSS-pixel screen position -> world position. */
@@ -108,6 +129,82 @@
     if (x1 <= x0 || y1 <= y0) return;
     ctx.drawImage(img, x0 * s, y0 * s, (x1 - x0) * s, (y1 - y0) * s, x0, y0, x1 - x0, y1 - y0);
   }
+
+  /**
+   * Which tiles of a mostly-transparent layer have anything in them, found once per layer build.
+   * Drawing only those cuts the pixels pushed per frame: the neon zones alone used to cover ~2.3
+   * screens of additive blending a frame, about half of it fully transparent.
+   * Returns { ts, cols, rows, on: Uint8Array } in the layer's own (canvas) pixels.
+   */
+  const TILE_PX = 64;
+  function tileMask(cv) {
+    const ts = TILE_PX, cols = Math.ceil(cv.width / ts), rows = Math.ceil(cv.height / ts);
+    const on = new Uint8Array(cols * rows);
+    const g = cv.getContext('2d'), W = cv.width;
+    // one band of tile rows at a time: a whole map layer read at once would be a 60 MB copy
+    for (let ty = 0; ty < rows; ty++) {
+      const y0 = ty * ts, bh = Math.min(ts, cv.height - y0);
+      let px;
+      try {
+        px = new Uint32Array(g.getImageData(0, y0, W, bh).data.buffer);
+      } catch (e) {
+        on.fill(1); // can't read it back: draw everything, as before
+        return { ts, cols, rows, on };
+      }
+      for (let tx = 0; tx < cols; tx++) {
+        const xe = Math.min(W, (tx + 1) * ts);
+        search: for (let y = 0; y < bh; y++)
+          for (let i = y * W + tx * ts, e = y * W + xe; i < e; i++)
+            if (px[i] >>> 25) {
+              // alpha >= 2 (the top byte of a little-endian RGBA pixel)
+              on[ty * cols + tx] = 1;
+              break search;
+            }
+      }
+    }
+    return { ts, cols, rows, on };
+  }
+
+  /**
+   * Draw the part of a layer that is in view, skipping its empty tiles. The layer covers world
+   * box (ox, oy) at scale s (layer px per world px); `mask` comes from tileMask().
+   * Neighbouring tiles in a row go out as one drawImage, so the call count stays small.
+   */
+  function blitTiles(img, mask, ox, oy, s) {
+    const ts = mask.ts / s; // tile size in world px
+    const c0 = Math.max(0, Math.floor((view.x - ox) / ts)), c1 = Math.min(mask.cols - 1, Math.floor((view.x + view.w - ox) / ts));
+    const r0 = Math.max(0, Math.floor((view.y - oy) / ts)), r1 = Math.min(mask.rows - 1, Math.floor((view.y + view.h - oy) / ts));
+    // clip each run to the view and the layer, like blit() does
+    const vx0 = Math.max(view.x, ox), vx1 = Math.min(view.x + view.w, ox + img.width / s);
+    const vy0 = Math.max(view.y, oy), vy1 = Math.min(view.y + view.h, oy + img.height / s);
+    for (let r = r0; r <= r1; r++) {
+      const ya = Math.max(vy0, oy + r * ts), yb = Math.min(vy1, oy + (r + 1) * ts);
+      if (yb <= ya) continue;
+      let c = c0;
+      while (c <= c1) {
+        if (!mask.on[r * mask.cols + c]) {
+          c++;
+          continue;
+        }
+        let e = c;
+        while (e + 1 <= c1 && mask.on[r * mask.cols + e + 1]) e++;
+        const xa = Math.max(vx0, ox + c * ts), xb = Math.min(vx1, ox + (e + 1) * ts);
+        if (xb > xa) ctx.drawImage(img, (xa - ox) * s, (ya - oy) * s, (xb - xa) * s, (yb - ya) * s, xa, ya, xb - xa, yb - ya);
+        c = e + 1;
+      }
+    }
+  }
+  /** The tile mask of a map layer, rebuilt whenever MapArt makes new layers (MA.version). */
+  function layerMask(holder, key, cv) {
+    const v = GW.MapArt.version || 0;
+    if (!holder[key] || holder[key + 'V'] !== v || holder[key + 'C'] !== cv) {
+      holder[key] = tileMask(cv);
+      holder[key + 'V'] = v;
+      holder[key + 'C'] = cv;
+    }
+    return holder[key];
+  }
+  const masks = {};
 
   /* ------------------------------------------------------------------ */
   /* entities                                                           */
@@ -627,11 +724,13 @@
       if (sx > -m && sx < R.vw + m && sy > -m && sy < R.vh + m) {
         const y = sy - 26 * z;
         ctx.globalAlpha = 0.95;
+        // a dark outline instead of shadowBlur: a blurred shadow is one of the slowest things a canvas can draw
+        ctx.lineWidth = 3 * R.dpr;
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = 'rgba(4,2,12,0.85)';
+        ctx.strokeText(rp.name, sx, y - 5 * R.dpr);
         ctx.fillStyle = rp.jacket;
-        ctx.shadowColor = rp.jacket;
-        ctx.shadowBlur = 8;
         ctx.fillText(rp.name, sx, y - 5 * R.dpr);
-        ctx.shadowBlur = 0;
         const bw = 34 * R.dpr, bh = 3 * R.dpr;
         ctx.fillStyle = 'rgba(0,0,0,0.6)';
         ctx.fillRect(sx - bw / 2, y - 3 * R.dpr, bw, bh);
@@ -1524,16 +1623,15 @@
 
   function drawLighting(inGame, power) {
     const P = GW.Player, I = GW.Interact;
-    const ls = R.cam.zoom * 0.5;
+    const ls = R.cam.zoom / R.lightDiv;
     lctx.setTransform(1, 0, 0, 1, 0, 0);
-    lctx.globalCompositeOperation = 'source-over';
+    lctx.globalCompositeOperation = 'copy'; // one pass replaces clear + fill
     lctx.globalAlpha = 1;
-    lctx.clearRect(0, 0, lcan.width, lcan.height);
     const th = M.theme;
     const amb = U.lerp(th ? th.ambOff : 0.8, th ? th.ambOn : 0.48, power); // `power` = light level where the camera is
     lctx.fillStyle = 'rgba(' + (th ? th.ambientRgb : '4,2,14') + ',' + amb + ')';
     lctx.fillRect(0, 0, lcan.width, lcan.height);
-    lctx.setTransform(ls, 0, 0, ls, R.ox * 0.5, R.oy * 0.5);
+    lctx.setTransform(ls, 0, 0, ls, R.ox / R.lightDiv, R.oy / R.lightDiv);
     lctx.globalCompositeOperation = 'destination-out';
 
     for (const L of M.lights) {
@@ -1575,7 +1673,7 @@
       gr.addColorStop(0.5, 'rgba(0,0,0,0.85)');
       gr.addColorStop(1, 'rgba(0,0,0,0)');
       lctx.fillStyle = gr;
-      castPath(lctx, P.x, P.y, 0, U.TAU, 72, 200, false);
+      castPath(lctx, P.x, P.y, 0, U.TAU, Math.round(72 * R.rays), 200, false);
       lctx.fill();
       // flashlight: wide soft cone + tight bright cone, both stopped by walls
       gr = lctx.createRadialGradient(P.x, P.y, 0, P.x, P.y, 660);
@@ -1583,14 +1681,14 @@
       gr.addColorStop(0.6, 'rgba(0,0,0,0.38)');
       gr.addColorStop(1, 'rgba(0,0,0,0)');
       lctx.fillStyle = gr;
-      castPath(lctx, P.x, P.y, P.angle - 0.6, P.angle + 0.6, 36, 660, true);
+      castPath(lctx, P.x, P.y, P.angle - 0.6, P.angle + 0.6, Math.round(36 * R.rays), 660, true);
       lctx.fill();
       gr = lctx.createRadialGradient(P.x, P.y, 0, P.x, P.y, 660);
       gr.addColorStop(0, 'rgba(0,0,0,1)');
       gr.addColorStop(0.55, 'rgba(0,0,0,0.8)');
       gr.addColorStop(1, 'rgba(0,0,0,0)');
       lctx.fillStyle = gr;
-      castPath(lctx, P.x, P.y, P.angle - 0.4, P.angle + 0.4, 36, 660, true);
+      castPath(lctx, P.x, P.y, P.angle - 0.4, P.angle + 0.4, Math.round(36 * R.rays), 660, true);
       lctx.fill();
     }
     lctx.globalAlpha = 1;
@@ -1637,8 +1735,7 @@
       const x1 = Math.min(view.x + view.w, nz.x + nz.w), y1 = Math.min(view.y + view.h, nz.y + nz.h);
       if (x1 <= x0 || y1 <= y0) continue;
       ctx.globalAlpha = U.clamp(0.1 + 0.88 * lv(nz.z) * hum, 0, 1);
-      const s = MA.NEON_SCALE;
-      ctx.drawImage(nz.canvas, (x0 - nz.x) * s, (y0 - nz.y) * s, (x1 - x0) * s, (y1 - y0) * s, x0, y0, x1 - x0, y1 - y0);
+      blitTiles(nz.canvas, layerMask(nz, 'mask', nz.canvas), nz.x, nz.y, MA.NEON_SCALE);
     }
     ctx.globalAlpha = 1;
 
@@ -2101,8 +2198,11 @@
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = '#04030b';
-    ctx.fillRect(0, 0, R.vw, R.vh);
+    // the floor covers the whole view unless the view is bigger than the map: skip a full-screen fill then
+    if (view.x < 0 || view.y < 0 || view.x + view.w > M.pxW || view.y + view.h > M.pxH) {
+      ctx.fillStyle = '#04030b';
+      ctx.fillRect(0, 0, R.vw, R.vh);
+    }
     ctx.setTransform(z, 0, 0, z, R.ox, R.oy);
 
     blit(MA.floor, 1);
@@ -2114,7 +2214,7 @@
     const N = GW.Net;
     if (inGame && N && N.active) for (const rp of N.remotes.values()) if (rp.alive && inView(rp.x, rp.y, 40)) drawPlayer(rp);
     if (inGame && P.alive) drawPlayer(P);
-    blit(MA.top, 1);
+    blitTiles(MA.top, layerMask(masks, 'top', MA.top), 0, 0, 1); // wall tops + props: about a third of it is empty
     drawDoors();
     drawShutter();
     drawPlanks();

@@ -500,6 +500,9 @@ body.touch .logo-img { width: min(820px, 86vw, calc(var(--gh, 100vh) * 0.72)); }
 .touch-only { display: none; }
 body.touch .touch-only { display: inline-block; }
 .touch-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+/* phones: FIRE, BUTTONS and GRAPHICS share one row, so the title screen still fits a short landscape screen */
+body.touch .touch-row { gap: 8px; flex-wrap: nowrap; }
+body.touch .touch-row .neon-btn { font-size: 12px; padding: 10px 14px; white-space: nowrap; }
 /* a saved layout: buttons sit where the player put them (centre as % of the screen) at their own size */
 #touch.custom .tbtns { left: 0; top: 0; right: 0; bottom: 0; width: auto; height: auto; pointer-events: none; }
 #touch.custom .tbtn { pointer-events: auto; right: auto; bottom: auto; transform: translate(-50%, -50%) scale(var(--s, 1)); }

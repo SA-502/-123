@@ -13,10 +13,34 @@
     D.resize();
     window.addEventListener('resize', D.resize);
   };
+  /**
+   * The zombie game's GRAPHICS setting ('gravewave.gfx', shared through localStorage) also
+   * applies here: battery saver (the default on phones) draws fewer pixels and 30 frames a second.
+   */
+  function touchScreen() {
+    try {
+      return (GW.AControls && GW.AControls.touch) || (window.matchMedia('(pointer: coarse)').matches && navigator.maxTouchPoints > 0);
+    } catch (e) {
+      return false;
+    }
+  }
+  D.saver = function () {
+    let v = null;
+    try {
+      v = localStorage.getItem('gravewave.gfx');
+    } catch (e) {
+      /* storage unavailable */
+    }
+    return v === 'saver' || (v !== 'high' && touchScreen());
+  };
+  /** Most frames to draw per second (0 = the display's rate). The match itself runs on its own clock. */
+  D.fpsCap = function () {
+    return D.saver() ? 30 : touchScreen() ? 60 : 0;
+  };
   D.resize = function () {
     if (!canvas) return;
     const w = Math.max(320, U.viewW()), h = Math.max(240, U.viewH());
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    dpr = Math.min(window.devicePixelRatio || 1, D.saver() ? 1.25 : 2);
     if (w * h * dpr * dpr > 2.6e6) dpr = Math.sqrt(2.6e6 / (w * h));
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);

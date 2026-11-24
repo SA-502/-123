@@ -28,7 +28,9 @@
     return c;
   }
 
+  MA.version = 0; // bumped on every rebuild, so the renderer re-checks which tiles of each layer are empty
   MA.build = function () {
+    MA.version++;
     if (GW.Maps && GW.Maps[M.activeMap] && GW.Maps[M.activeMap].buildArt) { GW.Maps[M.activeMap].buildArt(); return; }
     if (!MA.floor) {
       MA.floor = makeCanvas(M.pxW, M.pxH);
