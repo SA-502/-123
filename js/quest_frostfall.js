@@ -280,7 +280,8 @@
     const n = I.poweredCount(), total = M.generators.length;
     if (P.fuses > 0) return null;
     if (n === 0 && !z[1].open && !z[2].open && !z[3].open) return 'Earn points, open the station and search for fuses';
-    if (!I.powered(M.Z.SUB)) return n === 0 ? null : 'Power the Boiler House to open the Engine Shed (' + n + '/' + total + ')';
+    if (n === 0) return 'Search the station for a fuse and power a generator';
+    if (!I.powered(M.Z.SUB)) return 'Power the Boiler House to open the Engine Shed (' + n + '/' + total + ')';
     if (!I.everUpgraded && I.powered(M.Z.VAULT)) return 'Overclock a weapon in the Engine Shed [5000]';
     if (n < total) return 'Restore the station: ' + n + '/' + total + ' generators online';
     if (Q.state === 'ready' && !Q.claimed) return 'The Frostbite is ready at the Boiler House workbench';

@@ -366,7 +366,7 @@
   /* ------------------------------------------------------------------ */
   /* per-frame: the Night Express slides along the platforms              */
   /* ------------------------------------------------------------------ */
-  function update() {
+  function update(dt) {
     for (const tr of M.traps) {
       const S = tr.slide;
       if (!S) continue;
@@ -377,6 +377,14 @@
         tr.rx = x * T;
         tr.rw = S.w * T;
         tr.w = S.w;
+        // the "train": lightning arcs down the band, sparks off its front, a cold headlight
+        const FX = GW.FX, dir = ph < span ? 1 : -1, front = tr.rx + (dir > 0 ? tr.rw : 0);
+        if (FX && Math.random() < dt * 22) {
+          const bx = tr.rx + Math.random() * tr.rw;
+          FX.bolt(bx, tr.ry + Math.random() * T, bx + (Math.random() - 0.5) * 60, tr.ry + tr.rh - Math.random() * T, '#8fd8ff', 0.12, 2.5);
+        }
+        if (FX && Math.random() < dt * 30) FX.sparks(front, tr.ry + Math.random() * tr.rh, dir > 0 ? 0 : Math.PI, 3, Math.random() < 0.5 ? '#8fd8ff' : '#ffffff', 260, 0.5);
+        if (FX && Math.random() < dt * 8) FX.light(tr.rx + tr.rw / 2, tr.ry + tr.rh / 2, 260, '#8fd8ff', 0.25);
       } else if (tr.rw !== (S.x1 - S.x0 + 1) * T) {
         tr.rx = S.x0 * T;
         tr.w = S.x1 - S.x0 + 1;

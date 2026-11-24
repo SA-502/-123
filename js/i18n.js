@@ -70,6 +70,7 @@
     'The Frostbite is ready at the Boiler House workbench': 'الفروستبايت جاهز على طاولة العمل في غرفة الغلايات',
     'Mount the relics on the Boiler House workbench (': 'ركّب القطع على طاولة العمل في غرفة الغلايات (',
     'Find the remaining relics (': 'دوّر باقي القطع (',
+    'Search the station for a fuse and power a generator': 'دوّر في المحطة على فيوز وشغّل مولد',
     'Boardwalk Plaza': 'ساحة الممشى',
     'Pixel Palace': 'قصر البكسل',
     'Deep Six Aquarium': 'أكواريوم الأعماق',

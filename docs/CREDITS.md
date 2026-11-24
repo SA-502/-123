@@ -27,3 +27,29 @@ of these recordings. Some layers are re-pitched or have a small added room rever
 Licences were checked on each mirror: the repository LICENSE, or the per-pack `license` field and the
 original OpenGameArt or Kenney page it names. Sound packs released as CC-BY (for example Oculus Audio
 Pack 1) were looked at but not used.
+
+## Frostfall Junction textures (assets/frostfall)
+
+The ten floor and roof textures of the third map (`js/map_frostfall.js`) are **CC0 1.0** (public domain)
+materials from ambientCG and Poly Haven. They were fetched from the CC0 mirrors kept by
+github.com/zuujis-cc0 (each repository's LICENSE is CC0 1.0 and its README links every asset to its original
+page), using only the colour (albedo) map at 1K. Each was resized to 384 or 768 px so that 96 px covers one
+48 px game tile, darkened and slightly desaturated (snow and ice also tinted blue, the yard snow lowered in
+contrast), and saved as WebP. Everything else on the map (props, tracks, signs, light) is drawn with canvas
+code. The original seamless tiling is kept: no crops except Tiles074, cut exactly on its checker period.
+
+| Game file | Source material (author) | Original page | Mirror |
+|---|---|---|---|
+| `concourse.webp` | Tiles 074 (ambientCG) | ambientcg.com/a/Tiles074 | zuujis-cc0/ambientcg-materials-tiles-3 |
+| `platform.webp` | Brown Planks 04 (Rob Tuytel, Poly Haven) | polyhaven.com/a/brown_planks_04 | zuujis-cc0/polyhaven-textures-wood |
+| `ballast.webp` | Gravel 015 (ambientCG) | ambientcg.com/a/Gravel015 | zuujis-cc0/ambientcg-materials-gravel |
+| `cobble.webp` | Paving Stones 142 (ambientCG) | ambientcg.com/a/PavingStones142 | zuujis-cc0/ambientcg-materials-paving-stones-7 |
+| `yard.webp` | Snow 011 (ambientCG) | ambientcg.com/a/Snow011 | zuujis-cc0/ambientcg-materials-snow |
+| `snow.webp` | Snow 007 A (ambientCG) | ambientcg.com/a/Snow007A | zuujis-cc0/ambientcg-materials-snow |
+| `ice.webp` | Snow 013 (ambientCG) | ambientcg.com/a/Snow013 | zuujis-cc0/ambientcg-materials-snow |
+| `boiler.webp` | Diamond Plate 008 D (ambientCG) | ambientcg.com/a/DiamondPlate008D | zuujis-cc0/ambientcg-materials-diamond-plate |
+| `shed.webp` | Diamond Plate 006 C (ambientCG) | ambientcg.com/a/DiamondPlate006C | zuujis-cc0/ambientcg-materials-diamond-plate |
+| `roof.webp` | Bricks 023 (ambientCG) | ambientcg.com/a/Bricks023 | zuujis-cc0/ambientcg-materials-bricks |
+
+ambientCG licence: docs.ambientcg.com/license (CC0 1.0). Poly Haven licence: polyhaven.com/license (CC0 1.0).
+If a texture fails to load (offline, or a page opened from disk) the map paints a procedural floor instead.
