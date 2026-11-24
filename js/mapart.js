@@ -29,6 +29,7 @@
   }
 
   MA.build = function () {
+    if (GW.Maps && GW.Maps[M.activeMap] && GW.Maps[M.activeMap].buildArt) { GW.Maps[M.activeMap].buildArt(); return; }
     if (!MA.floor) {
       MA.floor = makeCanvas(M.pxW, M.pxH);
       MA.top = makeCanvas(M.pxW, M.pxH);

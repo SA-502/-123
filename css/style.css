@@ -13,7 +13,7 @@
   --red: #ff3b4e;
   --purple: #a855ff;
   --ink: #07040f;
-  --font: "Orbitron", "Trebuchet MS", "Segoe UI", sans-serif;
+  --font: "Orbitron", "Cairo", "Tajawal", "Tahoma", "Arial", "Segoe UI", sans-serif;
   --display: "Monoton", "Orbitron", "Trebuchet MS", sans-serif;
 }
 
@@ -478,3 +478,20 @@ html[lang="ar"] #prompt .cost, html[lang="ar"] #prompt .key { direction: ltr; un
   .mod-btn { padding: 10px 8px; }
 }
 html[lang="ar"] .mod-btn span { direction: rtl; }
+
+/* ---------- Map Selector (Claude: Lumina Pier / Gemini: Dustline Outpost) ---------- */
+#map-pick { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 6px 0 10px; }
+.map-btn {
+  padding: 8px 14px; border-radius: 6px; border: 1.5px solid rgba(255,255,255,0.28);
+  background: rgba(14,10,22,0.75); color: rgba(255,255,255,0.78);
+  font-family: var(--font); font-size: 11px; font-weight: 700; letter-spacing: 1px; cursor: pointer;
+  transition: transform .12s, border-color .15s, background .15s, color .15s;
+}
+.map-btn:hover { transform: translateY(-1px); border-color: #ffe14d; color: #fff; }
+.map-btn.on { border-color: #e09a43; background: rgba(224,154,67,0.24); color: #fff; box-shadow: 0 0 12px rgba(224,154,67,0.35); }
+#map-lumina.on { border-color: var(--pink); background: rgba(255,79,216,0.22); box-shadow: 0 0 12px rgba(255,79,216,0.35); }
+
+/* phones: keep the title screen inside a short landscape screen (map picker included) */
+body.touch #map-pick { margin: 0; }
+body.touch #menu.screen { gap: 8px; }
+body.touch .logo-img { width: min(820px, 86vw, calc(var(--gh, 100vh) * 0.72)); }

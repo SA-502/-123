@@ -8,7 +8,7 @@
   /** Zone ids. */
   const Z = { HUB: 0, ARCADE: 1, AQUA: 2, SPEED: 3, SUB: 4, VAULT: 5, FERRIS: 6, HAUNT: 7, PIER: 8 };
 
-  const M = (GW.Map = { TT, Z, W: 96, H: 72 });
+  const M = (GW.Map = { TT, Z, W: 96, H: 72, activeMap: (typeof localStorage !== "undefined" && localStorage.getItem("gravewave.map")) || "lumina", theme: null });
   M.pxW = M.W * T;
   M.pxH = M.H * T;
 
@@ -85,6 +85,8 @@
 
   /** (Re)build the entire map. Called for every new game. */
   M.build = function () {
+    if (GW.Maps && GW.Maps[M.activeMap] && GW.Maps[M.activeMap].build) { GW.Maps[M.activeMap].build(); return; }
+    M.theme = null;
     M.tiles = new Uint8Array(W * H); // all WALL
     M.zone = new Int8Array(W * H).fill(-1);
     M.flow = new Uint16Array(W * H).fill(65535);

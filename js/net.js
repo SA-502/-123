@@ -144,6 +144,14 @@
   }
 
   function resetSession() {
+    // back to the player's own map pick (a co-op game may have used the leader's)
+    if (!N.serverMode) {
+      try {
+        GW.Map.activeMap = localStorage.getItem('gravewave.map') || 'lumina';
+      } catch (e) {
+        /* storage unavailable */
+      }
+    }
     N.active = N.isHost = N.isGuest = false;
     N.myId = 0;
     N.code = '';
@@ -290,7 +298,7 @@
     });
     $('btn-coop-start').addEventListener('click', () => {
       if (N.leader !== N.myId) return;
-      send({ t: 'start' }); // the server builds the game and tells everyone to begin
+      send({ t: 'start', map: GW.Map.activeMap }); // the server builds the game (on the leader's map) and tells everyone to begin
     });
     // a link like https://game…/?room=ABCD opens straight into the join screen (?lobby=1: just the lobby,
     // used when switching between the online and the home server)
@@ -352,7 +360,7 @@
         lobbyMsg('Connection lost');
         return;
       case 'start':
-        if (!N.serverMode) startGame(m.seed, m.players);
+        if (!N.serverMode) startGame(m.seed, m.players, m.map);
         return;
     }
     if (!N.active) return;
@@ -443,8 +451,10 @@
   /* ------------------------------------------------------------------ */
   /* game session                                                       */
   /* ------------------------------------------------------------------ */
-  function startGame(seed, players) {
+  function startGame(seed, players, map) {
     if (players && players.length) N.lobby = players.slice().sort();
+    // everyone plays the leader's map (only for this game: the player's own pick stays saved)
+    if (map && (map === 'lumina' || (GW.Maps && GW.Maps[map]))) GW.Map.activeMap = map;
     N.active = true;
     $('lobby').classList.add('hidden');
     GW.Game.newGame(seed);

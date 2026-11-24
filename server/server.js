@@ -90,7 +90,7 @@ const server = http.createServer((req, res) => {
  *                    (omitted = everyone else in the room incl. the server game, 'host' = the server game,
  *                    a number = one player)
  * server -> client   {t:'created'|'joined', code, id, players, leader} | {t:'leader', id} | {t:'err', msg}
- *                    {t:'peer+', id} | {t:'peer-', id} | {t:'start', seed, players} | game messages with `from`
+ *                    {t:'peer+', id} | {t:'peer-', id} | {t:'start', seed, players, map} | game messages with `from`
  */
 const crypto = require('crypto');
 const { Sim } = require('./sim');
@@ -190,18 +190,21 @@ function fromGame(room, text) {
   } else for (const o of room.clients.values()) wsSend(o, out);
 }
 
+/** Maps a room can be played on (js/map.js is 'lumina', js/map_gemini.js is 'gemini'). */
+const MAPS = ['lumina', 'gemini'];
+
 function startGame(room) {
   stopGame(room);
   const seed = 1 + crypto.randomInt(2147483000);
   const players = [...room.clients.keys()].sort((a, b) => a - b);
   try {
-    room.sim = new Sim(seed, players, (text) => fromGame(room, text));
+    room.sim = new Sim(seed, players, (text) => fromGame(room, text), room.map);
   } catch (e) {
     console.error('[gravewave] could not start a game', e);
     for (const o of room.clients.values()) wsSend(o, { t: 'err', msg: 'Server error, try again' });
     return;
   }
-  for (const o of room.clients.values()) wsSend(o, { t: 'start', seed, players });
+  for (const o of room.clients.values()) wsSend(o, { t: 'start', seed, players, map: room.map || 'lumina' });
 }
 
 function onMessage(cl, text) {
@@ -244,7 +247,10 @@ function onMessage(cl, text) {
   }
   const room = cl.room;
   if (m.t === 'start') {
-    if (room.leader === cl.id && !room.sim) startGame(room);
+    if (room.leader === cl.id && !room.sim) {
+      room.map = MAPS.includes(m.map) ? m.map : 'lumina';
+      startGame(room);
+    }
     return;
   }
   const to = m.to;

@@ -81,6 +81,12 @@
     "z_bloater": { "file": "zombies/bloater.webp", "w": 256, "h": 256 },
     "z_leaper": { "file": "zombies/leaper.webp", "w": 256, "h": 256 },
     "z_brute": { "file": "zombies/brute.webp", "w": 256, "h": 256 },
-    "z_headliner": { "file": "zombies/headliner.webp", "w": 384, "h": 384 }
+    "z_headliner": { "file": "zombies/headliner.webp", "w": 384, "h": 384 },
+
+    "gemini_sandstone": { "file": "gemini_map/sandstone.webp", "w": 384, "h": 384, "tile": true },
+    "gemini_concrete": { "file": "gemini_map/concrete.webp", "w": 384, "h": 384, "tile": true },
+    "gemini_asphalt": { "file": "gemini_map/asphalt.webp", "w": 384, "h": 384, "tile": true },
+    "gemini_wall_top": { "file": "gemini_map/wall_top.webp", "w": 384, "h": 384, "tile": true },
+    "gemini_oasis": { "file": "gemini_map/oasis.webp", "w": 384, "h": 384, "tile": true }
   }
 }

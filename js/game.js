@@ -129,6 +129,7 @@
     $('btn-again').textContent = coop ? 'BACK TO ROOM' : 'PLAY AGAIN';
     GW.Player.jacket = null;
     if (coop) N.onNewGame();
+    else if (M.theme) G.announce(M.theme.name, M.theme.sub, M.theme.accent);
     else G.announce('LUMINA PIER', 'The park is closed. Something is still inside.', '#ff4fd8');
   };
 
@@ -399,6 +400,24 @@
     GW.Render.init(canvas);
     showBest();
 
+    function syncMapBtns() {
+      const bL = $('map-lumina'), bG = $('map-gemini');
+      if (bL) bL.classList.toggle('on', M.activeMap !== 'gemini');
+      if (bG) bG.classList.toggle('on', M.activeMap === 'gemini');
+      const sub = document.querySelector('#menu .subtitle');
+      if (sub) sub.textContent = M.activeMap === 'gemini' ? 'DUSTLINE OUTPOST · DESERT COMPOUND' : 'LAST NIGHT AT LUMINA PIER';
+    }
+    function pickMap(id) {
+      M.activeMap = id;
+      try { localStorage.setItem('gravewave.map', id); } catch (_) {}
+      M.build();
+      GW.MapArt.build();
+      GW.Interact.reset();
+      syncMapBtns();
+    }
+    if ($('map-lumina')) $('map-lumina').addEventListener('click', () => pickMap('lumina'));
+    if ($('map-gemini')) $('map-gemini').addEventListener('click', () => pickMap('gemini'));
+    syncMapBtns();
     $('btn-start').addEventListener('click', G.newGame);
     const coop = () => GW.Net && GW.Net.active;
     $('btn-again').addEventListener('click', () => (coop() ? GW.Net.again() : G.newGame()));
@@ -410,7 +429,13 @@
     $('opt-fps').addEventListener('change', (e) => GW.Perf.toggle(e.target.checked));
     GW.Perf.toggle(GW.Perf.show);
     // any click wakes the audio context (browsers require a user gesture)
-    window.addEventListener('pointerdown', () => A.init(), { passive: true });
+    // (iPhone counts only touchend / click / keys as a real tap for sound, not touchstart or pointerdown)
+    for (const ev of ['pointerdown', 'touchend', 'click', 'keydown'])
+      window.addEventListener(ev, () => A.init(), { passive: true, capture: true });
+    // coming back to the game (from another app, a call, the lock screen) wakes the sound again on the next tap
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && A.ctx && A.ctx.state !== 'running') A.ctx.resume().catch(() => {});
+    });
 
     In.onKey = function (code) {
       if (G.modPickOpen) {

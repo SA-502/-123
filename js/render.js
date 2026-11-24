@@ -897,7 +897,7 @@
     const I = GW.Interact;
     // dance floor on the Overclock Stage pulses to the beat once powered
     const stage = lv(M.Z.VAULT);
-    if (stage > 0.3 && inView(32 * T, 36 * T, 7 * T)) {
+    if (stage > 0.3 && !M.theme && inView(32 * T, 36 * T, 7 * T)) { // (Lumina Pier only: other maps have no stage there)
       const beat = Math.floor(R.time * (104 / 60));
       const pal = ['#ff4fd8', '#19f0ff', '#ffe14d', '#a855ff', '#3dff8b'];
       ctx.save();
@@ -1529,8 +1529,9 @@
     lctx.globalCompositeOperation = 'source-over';
     lctx.globalAlpha = 1;
     lctx.clearRect(0, 0, lcan.width, lcan.height);
-    const amb = U.lerp(0.8, 0.48, power); // `power` = light level where the camera is
-    lctx.fillStyle = 'rgba(4,2,14,' + amb + ')';
+    const th = M.theme;
+    const amb = U.lerp(th ? th.ambOff : 0.8, th ? th.ambOn : 0.48, power); // `power` = light level where the camera is
+    lctx.fillStyle = 'rgba(' + (th ? th.ambientRgb : '4,2,14') + ',' + amb + ')';
     lctx.fillRect(0, 0, lcan.width, lcan.height);
     lctx.setTransform(ls, 0, 0, ls, R.ox * 0.5, R.oy * 0.5);
     lctx.globalCompositeOperation = 'destination-out';

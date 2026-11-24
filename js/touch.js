@@ -231,6 +231,8 @@
     }
     const on = TC.enabled && portrait;
     const was = document.body.classList.contains('sideways');
+    // the game's own screen height, for CSS that must fit a short landscape screen
+    document.documentElement.style.setProperty('--gh', (on ? window.innerWidth : window.innerHeight) + 'px');
     document.body.classList.toggle('sideways', on);
     if (on) {
       const W = window.innerWidth, H = window.innerHeight;

@@ -101,6 +101,10 @@ Tactical grenades refill by one each round, and Full Reload restocks them.
 
 `server/server.js` is a dependency-free Node server that serves only the public game files. `server/docker-compose.yml` runs it as the `gravewave` Docker project on the VPS, behind the existing Traefik proxy, which provides HTTPS for `game.srv2082532.hstgr.cloud`. The container clones the latest commit of the branch on every start, so **restarting the project deploys the newest version**.
 
+## Maps
+
+Pick the map on the title screen: **Lumina Pier** (`js/map.js` + `js/mapart.js`) or **Dustline Outpost**, a desert compound made by Gemini (`js/map_gemini.js` + `assets/gemini_map/`, notes in `docs/GEMINI_MAP_NOTES.md`). In co-op everyone plays the room leader's map: it travels with the start message and the server's copy of the game builds the same one.
+
 ## Playing at home (same Wi-Fi)
 
 Co-op has two servers, picked in the CO-OP screen: **Online** (the VPS above, play from anywhere) and **Home** (a computer on your own Wi-Fi, for players in the same place: lower lag, works without internet).

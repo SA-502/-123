@@ -13,7 +13,7 @@ const vm = require('vm');
 
 const ROOT = path.resolve(__dirname, '..');
 // game logic that runs on the server, in the same order as index.html
-const LOGIC = ['utils', 'config', 'map', 'weapons', 'zombies', 'boss', 'director', 'player', 'gadgets', 'allies', 'facilities', 'interact', 'game', 'net'];
+const LOGIC = ['utils', 'config', 'map', 'map_gemini', 'weapons', 'zombies', 'boss', 'director', 'player', 'gadgets', 'allies', 'facilities', 'interact', 'game', 'net'];
 // browser-only modules: replaced by stand-ins
 const STUBBED = ['Art', 'Assets', 'Audio', 'Input', 'Touch', 'MapArt', 'FX', 'Render', 'HUD', 'Perf'];
 
@@ -62,8 +62,9 @@ class Sim {
    * @param {number} seed       same seed the players use, so the park is identical
    * @param {number[]} players  player ids in the room
    * @param {(text: string) => void} out  messages from the game to the room
+   * @param {string} [map]  'lumina' (default) or 'gemini'
    */
-  constructor(seed, players, out) {
+  constructor(seed, players, out, map) {
     this.out = out;
     this.dead = false;
     const sandbox = {
@@ -99,6 +100,7 @@ class Sim {
     N.myId = 0;
     N.hostId = 0;
     N.lobby = players.slice();
+    if (map) GW.Map.activeMap = map; // the room's map, picked by its leader
     GW.Game.newGame(seed);
     this.last = performance.now();
     this.acc = 0;

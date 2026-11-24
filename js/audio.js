@@ -15,18 +15,47 @@
   /* ------------------------------------------------------------------ */
   /* setup                                                              */
   /* ------------------------------------------------------------------ */
+  /** Older iPhones only start Web Audio after a sound is played inside a tap: a silent blip does it. */
+  function unlock() {
+    try {
+      const b = ctx.createBuffer(1, 1, 22050);
+      const s = ctx.createBufferSource();
+      s.buffer = b;
+      s.connect(ctx.destination);
+      s.start(0);
+      if (ctx.state !== 'running') ctx.resume().catch(() => {});
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
   A.init = function () {
     if (A.ctx) {
-      if (ctx.state === 'suspended') ctx.resume();
+      // 'suspended' before the first tap, 'interrupted' on iPhone after a call or switching apps
+      if (ctx.state !== 'running') {
+        try {
+          ctx.resume().catch(() => {});
+        } catch (e) {
+          /* old browser */
+        }
+        unlock();
+      }
       return;
     }
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
+    // iPhone: play like a game (heard even with the silent switch on), not like a ringtone
+    try {
+      if (navigator.audioSession) navigator.audioSession.type = 'playback';
+    } catch (e) {
+      /* not supported */
+    }
     try {
       ctx = A.ctx = new AC();
     } catch (e) {
       return;
     }
+    unlock();
     master = ctx.createGain();
     master.gain.value = 0.9;
     const comp = ctx.createDynamicsCompressor();
