@@ -68,4 +68,20 @@
     }
     return arr;
   };
+
+  /* ---------- sideways mode: a phone held upright still plays in landscape ---------- *
+   * In portrait the whole #game box is turned 90 degrees (body.sideways, set by touch.js), so
+   * the game's own "screen" is the window turned on its side. These convert between the two. */
+  U.sideways = () => typeof document !== 'undefined' && document.body && document.body.classList.contains('sideways');
+  /** The game's screen size (swapped while sideways). */
+  U.viewW = () => (U.sideways() ? window.innerHeight : window.innerWidth);
+  U.viewH = () => (U.sideways() ? window.innerWidth : window.innerHeight);
+  /** A pointer event's position in the game's screen. */
+  U.pt = (e) => (U.sideways() ? { x: e.clientY, y: window.innerWidth - e.clientX } : { x: e.clientX, y: e.clientY });
+  /** An element's box in the game's screen. */
+  U.rect = (el) => {
+    const r = el.getBoundingClientRect();
+    if (!U.sideways()) return r;
+    return { left: r.top, top: window.innerWidth - r.right, width: r.height, height: r.width };
+  };
 })();

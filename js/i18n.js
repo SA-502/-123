@@ -175,6 +175,13 @@
     'No game with code ': 'ما فيه لعبة بالكود ', 'That game is full (4 players)': 'اللعبة مليانة (4 لاعبين)',
     'That game has already started': 'اللعبة بدأت خلاص', 'Server is full, try again later': 'السيرفر مليان، جرّب بعدين',
     'Server error, try again': 'صار خطأ في السيرفر، جرّب مرة ثانية',
+    'ONLINE · FROM ANYWHERE': 'أونلاين · من أي مكان', 'HOME · SAME WI-FI': 'محلي · نفس الواي فاي', GO: 'اتصل',
+    'Play together from anywhere, over the internet': 'العبوا مع بعض من أي مكان عن طريق الإنترنت',
+    'Opening the online server…': 'جاري فتح سيرفر الأونلاين…',
+    'Home server: ': 'السيرفر المحلي: ', 'everyone must be on this Wi-Fi': 'لازم الكل يكون على نفس الواي فاي',
+    'Start the play-at-home file on a computer on this Wi-Fi, then type the address it shows':
+      'شغّل ملف اللعب بالبيت على كمبيوتر متصل بنفس الواي فاي، واكتب هنا العنوان اللي يطلع لك',
+    'Type the address shown on the computer, like 192.168.1.5': 'اكتب العنوان اللي طالع على الكمبيوتر، مثل 192.168.1.5',
   };
 
   // weapon names stay in English (like brand names): listed so their words are never half-translated

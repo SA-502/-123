@@ -178,10 +178,21 @@
     <h2 class="screen-head">CO-OP</h2>
     <div class="lobby-sub">Up to 4 players against the horde</div>
     <div id="lobby-pick">
+      <div id="server-pick">
+        <button id="srv-online" class="srv-btn">ONLINE · FROM ANYWHERE</button>
+        <button id="srv-home" class="srv-btn">HOME · SAME WI-FI</button>
+      </div>
+      <div id="srv-note" class="srv-note"></div>
+      <div id="home-row" class="join-row hidden">
+        <input id="home-addr" maxlength="40" placeholder="192.168.1.5" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="url">
+        <button id="btn-home-go" class="neon-btn alt">GO</button>
+      </div>
+      <div id="room-actions">
       <button id="btn-host" class="neon-btn">CREATE ROOM</button>
       <div class="join-row">
         <input id="join-code" maxlength="4" placeholder="CODE" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" inputmode="text">
         <button id="btn-join" class="neon-btn alt">JOIN</button>
+      </div>
       </div>
     </div>
     <div id="lobby-room" class="hidden">

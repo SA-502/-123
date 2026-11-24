@@ -44,7 +44,7 @@
   };
 
   R.resize = function () {
-    const w = Math.max(320, window.innerWidth), h = Math.max(240, window.innerHeight);
+    const w = Math.max(320, U.viewW()), h = Math.max(240, U.viewH());
     let s = Math.min(window.devicePixelRatio || 1, R.dprCap);
     if (w * h * s * s > R.pixelCap) s = Math.sqrt(R.pixelCap / (w * h));
     s *= R.quality; // lowered automatically if the frame rate struggles
@@ -139,6 +139,10 @@
     let reach = 0;
     if (z.state === 'attack') reach = Math.sin(U.clamp(1 - z.attackT / C.ZOMBIE.attackWindup, 0, 1) * Math.PI) * 7;
     else if (z.state === 'breach') reach = Math.abs(Math.sin(z.t * 6)) * 5;
+    if (drawZombieSprite(z, sw, reach, alpha)) {
+      ctx.restore();
+      return;
+    }
     // arms
     ctx.strokeStyle = z.skin;
     ctx.lineWidth = brute ? 5.5 : 4.2;
@@ -236,6 +240,42 @@
     ctx.restore();
   }
 
+  /** Which painted sprite a zombie wears (a helmet zombie whose helmet broke looks like a walker). */
+  function zombieKey(z) {
+    if (z.helmet > 0) return 'z_helmet';
+    return z.type === 'helmet' || !z.type ? 'z_walker' : 'z_' + z.type;
+  }
+
+  /**
+   * A zombie drawn from its painted sprite, if it has one (the canvas is already at the zombie,
+   * turned to face its heading and scaled). The picture is still, so the motion comes from here:
+   * a shuffling sway, a lunge on attacks, a squash and stretch, and tinted overlays for fire,
+   * frost and hit flashes. Returns false so the procedural zombie is drawn instead.
+   */
+  function drawZombieSprite(z, sw, reach, alpha) {
+    const key = zombieKey(z);
+    const im = Art.sprite(key);
+    if (!im) return false;
+    const D = z.type === 'leaper' ? 40 : z.type === 'bloater' ? 38 : 36; // in the zombie's own units (its radius is ~13)
+    const lunge = z.type === 'leaper' && z.state === 'leap' ? 6 : 0;
+    ctx.rotate(sw * 0.07);
+    ctx.translate(reach * 0.7 + lunge, sw * 0.6);
+    const pulse = z.type === 'spitter' && z.state === 'spit' ? 0.06 : 0;
+    ctx.scale(1 + sw * 0.025 + pulse, 1 - sw * 0.025 + pulse);
+    ctx.drawImage(im, -D / 2, -D / 2, D, D);
+    const over = (color, a) => {
+      const t = Art.tinted(key, color, 1);
+      if (!t || a <= 0.01) return;
+      ctx.globalAlpha = alpha * Math.min(1, a);
+      ctx.drawImage(t, -D / 2, -D / 2, D, D);
+      ctx.globalAlpha = alpha;
+    };
+    if (z.burnT > 0) over('#ff7a1a', 0.45);
+    if (z.freezeT > 0 || z.slowT > 0) over('#a8efff', z.freezeT > 0 ? 0.7 : 0.32);
+    if (z.flash > 0) over('#ffffff', z.flash * 8);
+    return true;
+  }
+
   function drawBoss(z) {
     const b = z.boss || {};
     const k = z.state === 'rise' ? U.clamp(1 - z.riseT / 1.6, 0, 1) : 1;
@@ -252,6 +292,36 @@
     ctx.scale(0.5 + 0.5 * k, 0.5 + 0.5 * k);
     const raise = b.mode === 'slamWarn' ? 10 * U.clamp(1 - b.t / GW.Boss.CFG.slam.warn, 0, 1) : 0;
     const sw = Math.sin(b.spin * 5) * 2;
+    const bossIm = Art.sprite('z_headliner');
+    if (bossIm) {
+      // painted Headliner, with the armour plate and the weak point drawn on top: they are how
+      // players read the fight, so they stay exactly where the procedural boss has them
+      const D = 96;
+      ctx.save();
+      ctx.translate(raise * 0.5, sw * 0.5);
+      ctx.drawImage(bossIm, -D / 2, -D / 2, D, D);
+      if (z.flash > 0) {
+        const t = Art.tinted('z_headliner', '#ffffff', 1);
+        ctx.globalAlpha *= Math.min(1, z.flash * 6) * 0.6;
+        ctx.drawImage(t, -D / 2, -D / 2, D, D);
+      }
+      ctx.restore();
+      ctx.strokeStyle = b.armorFlash > 0 ? '#ffffff' : 'rgba(154,161,176,0.85)';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(-2, 0, 27, -1.05, 1.05);
+      ctx.stroke();
+      ctx.fillStyle = '#3a2a10';
+      ctx.beginPath();
+      ctx.arc(-24, 0, 10, 0, U.TAU);
+      ctx.fill();
+      ctx.fillStyle = b.weakFlash > 0 ? '#ffffff' : '#ffd426';
+      ctx.beginPath();
+      ctx.arc(-24, 0, 6.5, 0, U.TAU);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
     // arms: heavy steel pistons
     ctx.strokeStyle = '#6a7080';
     ctx.lineWidth = 11;
@@ -1601,7 +1671,7 @@
       const pulse = 0.85 + 0.15 * Math.sin(R.time * 2.4 + wb.tx);
       Art.drawGlow(ctx, '#ffe14d', wb.x, wb.y - WH, 70, 0.22 * pulse);
       ctx.globalAlpha = pulse;
-      Art.weapon(ctx, wb.def.cls, wb.x, wb.y - WH - 3, 70, '#fff3b0', 'neon');
+      Art.weapon(ctx, wb.def.cls, wb.x, wb.y - WH - 3, 70, '#fff3b0', 'neon', wb.def.id);
       ctx.globalAlpha = 1;
     }
     // generator lamps, and the faint glint of hidden fuses
@@ -1655,7 +1725,7 @@
         const blink = b.state === 'ready' && b.t < 3 ? (Math.sin(R.time * 18) > 0 ? 1 : 0.3) : 1;
         Art.drawGlow(ctx, def.wonder ? '#7dff5a' : '#ffe14d', bs.x, bobY, 60, 0.45 * blink);
         ctx.globalAlpha = blink;
-        Art.weapon(ctx, def.cls, bs.x, bobY, 64, def.wonder ? '#b6ff9c' : '#fff3b0', 'neon');
+        Art.weapon(ctx, def.cls, bs.x, bobY, 64, def.wonder ? '#b6ff9c' : '#fff3b0', 'neon', def.id);
         ctx.globalAlpha = 1;
       } else if (b.state === 'jester') {
         Art.drawGlow(ctx, '#ff3b4e', bs.x, bs.y - 34, 70, 0.6);
@@ -1680,7 +1750,7 @@
         const col = pk.state === 'ready' ? pk.weapon.s.color : '#ffffff';
         Art.drawGlow(ctx, col, pm.x, wy, 60, 0.5 * blink);
         ctx.globalAlpha = blink;
-        Art.weapon(ctx, pk.weapon.s.cls, pm.x + (pk.state === 'working' ? U.rand(-2, 2) : 0), wy, pk.state === 'ready' ? 66 : 44, col, 'neon');
+        Art.weapon(ctx, pk.weapon.s.cls, pm.x + (pk.state === 'working' ? U.rand(-2, 2) : 0), wy, pk.state === 'ready' ? 66 : 44, col, 'neon', pk.weapon.id, pk.state === 'ready' ? col : null);
         ctx.globalAlpha = 1;
         if (pk.state === 'ready') {
           // the four ammo mods orbit above; the lit one is what you get

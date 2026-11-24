@@ -172,7 +172,7 @@
     g.save();
     g.shadowColor = col;
     g.shadowBlur = 10;
-    Art.weapon(g, w.s.cls, 214 - width / 2, 26, width, col, 'neon');
+    Art.weapon(g, w.s.cls, 214 - width / 2, 26, width, col, 'neon', w.id, w.up ? col : null);
     g.restore();
   }
 
@@ -402,7 +402,7 @@
       cls('cliplow', el.clip, 'low', false);
       set('hint', el['ammo-hint'], '');
     }
-    const wkey = w ? w.id + w.tier + (w.mod || '') : 'none';
+    const wkey = (w ? w.id + w.tier + (w.mod || '') : 'none') + '|' + GW.Assets.loaded; // redraw once the pictures arrive
     if (last.wicon !== wkey) {
       last.wicon = wkey;
       drawWeaponIcon(w);

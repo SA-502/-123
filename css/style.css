@@ -352,8 +352,11 @@ body.touch .title-wrap { padding-top: 10px; }
 body.touch .title-sun { width: 200px; height: 200px; top: -36px; }
 body.touch #fps { bottom: auto; top: 4px; }
 
-/* portrait phones: ask to rotate */
-@media (orientation: portrait) {
+/* portrait phones: the game box is turned on its side (touch.js sets the size), so it always plays in landscape */
+body.sideways #game { inset: auto; top: 0; transform: rotate(90deg); transform-origin: top left; }
+
+/* (old) portrait phones: ask to rotate. Unused now that the game turns itself; kept for very old browsers */
+@media (orientation: portrait) and (max-width: 1px) {
   body.touch #rotate {
     display: flex; position: fixed; inset: 0; z-index: 50; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
     background: #07040f; color: #fff; text-align: center; padding: 24px; font-size: 14px; letter-spacing: 0.15em; text-transform: uppercase;
@@ -385,6 +388,22 @@ body.touch #fps { bottom: auto; top: 4px; }
 .lobby-sub { font-size: 12px; letter-spacing: 0.12em; color: #cdb8ea; }
 #lobby-pick, #lobby-room { display: flex; flex-direction: column; align-items: center; gap: 14px; }
 #lobby-pick.hidden, #lobby-room.hidden { display: none; }
+#room-actions { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+#room-actions.hidden, #home-row.hidden { display: none; }
+/* online server or a home server on the same Wi-Fi */
+#server-pick { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.srv-btn {
+  padding: 8px 14px; font: 700 11px var(--font); letter-spacing: 0.14em; color: #cdb8ea; cursor: pointer;
+  background: rgba(10, 5, 24, 0.7); border: 2px solid rgba(205, 184, 234, 0.35); border-radius: 18px; -webkit-tap-highlight-color: transparent;
+}
+.srv-btn.on { color: #fff; border-color: var(--cyan); box-shadow: 0 0 12px rgba(25, 240, 255, 0.5); background: rgba(25, 240, 255, 0.12); }
+.srv-note { max-width: 520px; font-size: 11px; line-height: 1.6; letter-spacing: 0.08em; color: #cdb8ea; text-align: center; }
+#home-addr {
+  width: 200px; padding: 10px 12px; font: 700 16px var(--font); letter-spacing: 0.08em; text-align: center;
+  color: #fff; background: rgba(10, 5, 24, 0.85); border: 2px solid var(--cyan); border-radius: 6px; outline: none;
+  box-shadow: 0 0 12px rgba(25, 240, 255, 0.4); user-select: text; -webkit-user-select: text;
+}
+#home-addr::placeholder { color: rgba(255, 255, 255, 0.3); }
 .join-row { display: flex; gap: 10px; align-items: center; }
 #join-code {
   width: 150px; padding: 10px 12px; font: 900 22px var(--font); letter-spacing: 0.35em; text-align: center; text-transform: uppercase;

@@ -196,7 +196,70 @@
     $('menu').classList.remove('hidden');
   }
 
+  /* ------------------------------------------------------------------ */
+  /* which server: online (the VPS, play from anywhere) or a home        */
+  /* computer on the same Wi-Fi (play-at-home script, see server.js)      */
+  /* ------------------------------------------------------------------ */
+  N.ONLINE_URL = 'https://game.srv2082532.hstgr.cloud/';
+  const HOME_KEY = 'gravewave.home';
+  /** True when this page was opened from a computer on the local network (a home server). */
+  N.isHomeServer = function () {
+    const h = location.hostname;
+    return h === 'localhost' || /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h) || /\.local$/.test(h);
+  };
+  function note(parts) {
+    const el = $('srv-note');
+    el.textContent = '';
+    for (const t of parts) {
+      const sp = document.createElement('span');
+      sp.textContent = t;
+      el.appendChild(sp);
+    }
+  }
+  function showServer(mode) {
+    const home = N.isHomeServer();
+    $('srv-online').classList.toggle('on', mode === 'online');
+    $('srv-home').classList.toggle('on', mode === 'home');
+    // rooms can be made right here when the page came from the chosen server
+    const here = (mode === 'home') === home;
+    $('room-actions').classList.toggle('hidden', !here);
+    $('home-row').classList.toggle('hidden', here || mode !== 'home');
+    if (mode === 'online') note(home ? ['Opening the online server…'] : ['Play together from anywhere, over the internet']);
+    else if (home) note(['Home server: ', location.host, ' · ', 'everyone must be on this Wi-Fi']);
+    else {
+      note(['Start the play-at-home file on a computer on this Wi-Fi, then type the address it shows']);
+      try {
+        $('home-addr').value = localStorage.getItem(HOME_KEY) || '';
+      } catch (e) {
+        /* storage unavailable */
+      }
+    }
+    if (mode === 'online' && home) location.href = N.ONLINE_URL + '?lobby=1';
+  }
+  function goHome() {
+    let a = $('home-addr').value.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+    if (!/^[a-z0-9.-]+(:\d{2,5})?$/i.test(a)) return lobbyMsg('Type the address shown on the computer, like 192.168.1.5');
+    if (!/:\d+$/.test(a)) a += ':8080';
+    try {
+      localStorage.setItem(HOME_KEY, a);
+    } catch (e) {
+      /* storage unavailable */
+    }
+    $('home-addr').blur();
+    lobbyMsg('Connecting…');
+    location.href = 'http://' + a + '/?lobby=1';
+  }
+
   function initUi() {
+    $('srv-online').addEventListener('click', () => showServer('online'));
+    $('srv-home').addEventListener('click', () => showServer('home'));
+    $('btn-home-go').addEventListener('click', goHome);
+    $('home-addr').addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') goHome();
+    });
+    $('home-addr').addEventListener('keyup', (e) => e.stopPropagation());
+    showServer(N.isHomeServer() ? 'home' : 'online');
     $('btn-coop').addEventListener('click', () => {
       A.init();
       openLobby();
@@ -229,8 +292,10 @@
       if (N.leader !== N.myId) return;
       send({ t: 'start' }); // the server builds the game and tells everyone to begin
     });
-    // a link like https://game…/?room=ABCD opens straight into the join screen
+    // a link like https://game…/?room=ABCD opens straight into the join screen (?lobby=1: just the lobby,
+    // used when switching between the online and the home server)
     const q = new URLSearchParams(location.search).get('room');
+    if (!q && new URLSearchParams(location.search).get('lobby')) openLobby();
     if (q) {
       openLobby();
       $('join-code').value = q.toUpperCase().slice(0, 4);

@@ -101,10 +101,20 @@ Tactical grenades refill by one each round, and Full Reload restocks them.
 
 `server/server.js` is a dependency-free Node server that serves only the public game files. `server/docker-compose.yml` runs it as the `gravewave` Docker project on the VPS, behind the existing Traefik proxy, which provides HTTPS for `game.srv2082532.hstgr.cloud`. The container clones the latest commit of the branch on every start, so **restarting the project deploys the newest version**.
 
+## Playing at home (same Wi-Fi)
+
+Co-op has two servers, picked in the CO-OP screen: **Online** (the VPS above, play from anywhere) and **Home** (a computer on your own Wi-Fi, for players in the same place: lower lag, works without internet).
+
+1. On a computer on the Wi-Fi, install [Node.js](https://nodejs.org) (LTS) once, and download this repository (Code > Download ZIP, then unzip).
+2. Double-click `play-at-home-windows.bat` (Windows) or `play-at-home-mac.command` (Mac). It prints an address like `http://192.168.1.5:8080`.
+3. On each phone (same Wi-Fi): open the game, CO-OP > HOME · SAME WI-FI, type that address and press GO (or open the address in Safari directly). Then create / join a room as usual.
+
+Keep the window open while you play. If phones can't connect, allow Node.js through the computer's firewall when asked.
+
 ## Performance
 
 The simulation runs in fixed 1/60 s steps and rendering interpolates between them. Press **F3** (or tick *Show FPS* in the pause menu) for a frame-rate meter; resolution adapts automatically to hold 60 fps.
 
 ## Art
 
-Environment and UI images are produced by a separate art agent following `docs/ART_BRIEF.md` (task: `docs/GEMINI_TASK.md`). They live in `assets/` with `assets/manifest.json`; any missing image falls back to the procedural art.
+Environment and UI images are produced by a separate art agent following `docs/ART_BRIEF.md` (task: `docs/GEMINI_TASK.md`). They live in `assets/` with `assets/manifest.json`; any missing image falls back to the procedural art. Weapon icons (`assets/weapons/`) and top-down zombie sprites (`assets/zombies/`) were cut from Nano Banana renders on a green screen with `tools/prep_sprites.py`; Overclocked weapons are tinted in code.

@@ -126,7 +126,8 @@
    * Draw a weapon silhouette. (x,y) is the centre, w the total width.
    * mode: 'fill' | 'neon' (outline with inner tint)
    */
-  Art.weapon = function (ctx, cls, x, y, w, color, mode) {
+  Art.weapon = function (ctx, cls, x, y, w, color, mode, id, tint) {
+    if (id && Art.weaponImage(ctx, id, x, y, w, tint)) return;
     const polys = SIL[cls] || SIL.pistol;
     ctx.save();
     ctx.translate(x - w / 2, y + w * 0.02);
@@ -148,6 +149,51 @@
       ctx.fill();
     }
     ctx.restore();
+  };
+
+  /* ---------------- painted sprites (optional: procedural art above is the fallback) ---------------- */
+
+  /** A loaded sprite image for an asset key, or null. */
+  Art.sprite = (key) => (GW.Assets && GW.Assets.get(key)) || null;
+
+  const tintCache = {};
+  /**
+   * The sprite recoloured: `amount` of `color` laid over its painted pixels only (the
+   * transparent cut-out stays transparent). amount 1 = a flat silhouette for hit flashes.
+   * Cached per key + colour + amount, so it costs one small canvas the first time only.
+   */
+  Art.tinted = function (key, color, amount) {
+    const im = Art.sprite(key);
+    if (!im) return null;
+    const ck = key + '|' + color + '|' + amount;
+    if (tintCache[ck]) return tintCache[ck];
+    const c = document.createElement('canvas');
+    c.width = im.naturalWidth;
+    c.height = im.naturalHeight;
+    const g = c.getContext('2d');
+    g.drawImage(im, 0, 0);
+    g.globalCompositeOperation = 'source-atop';
+    g.globalAlpha = amount;
+    g.fillStyle = color;
+    g.fillRect(0, 0, c.width, c.height);
+    tintCache[ck] = c;
+    return c;
+  };
+
+  /**
+   * Draw a weapon's painted icon centred on (x, y), about `w` wide (tall guns are kept short so a
+   * pistol doesn't tower over a rifle). `tint` (a colour) recolours it, e.g. an Overclocked gun.
+   * Returns false when there's no picture for this weapon, so the neon outline is drawn instead.
+   */
+  Art.weaponImage = function (ctx, id, x, y, w, tint) {
+    const key = 'wpn_' + id;
+    const im = tint ? Art.tinted(key, tint, 0.45) : Art.sprite(key);
+    if (!im) return false;
+    const iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height;
+    const k = Math.min((w * 1.08) / iw, (w * 0.62) / ih);
+    const dw = iw * k, dh = ih * k;
+    ctx.drawImage(im, x - dw / 2, y - dh / 2, dw, dh);
+    return true;
   };
 
   /* ---------------- perk icons ---------------- */

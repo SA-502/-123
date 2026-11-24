@@ -43,7 +43,7 @@
     const st = { id: null, ox: 0, oy: 0 };
     const radius = () => base.offsetWidth / 2 || 60;
     const show = (x, y, kx, ky) => {
-      const r = zone.getBoundingClientRect();
+      const r = U.rect(zone);
       base.style.display = knob.style.display = 'block';
       base.style.left = x - r.left + 'px';
       base.style.top = y - r.top + 'px';
@@ -54,8 +54,9 @@
       if (e.pointerType === 'mouse' || st.id !== null) return;
       e.preventDefault();
       st.id = e.pointerId;
-      st.ox = e.clientX;
-      st.oy = e.clientY;
+      const p0 = U.pt(e);
+      st.ox = p0.x;
+      st.oy = p0.y;
       try {
         zone.setPointerCapture(e.pointerId);
       } catch (err) {
@@ -68,7 +69,8 @@
       if (e.pointerId !== st.id) return;
       e.preventDefault();
       const R = radius();
-      let dx = e.clientX - st.ox, dy = e.clientY - st.oy;
+      const p = U.pt(e);
+      let dx = p.x - st.ox, dy = p.y - st.oy;
       const d = Math.hypot(dx, dy);
       if (fixed) {
         const over = d / R;
@@ -81,8 +83,8 @@
         // drag past the rim: the base follows the thumb so direction changes stay instant
         st.ox += (dx / d) * (d - R);
         st.oy += (dy / d) * (d - R);
-        dx = e.clientX - st.ox;
-        dy = e.clientY - st.oy;
+        dx = p.x - st.ox;
+        dy = p.y - st.oy;
       }
       show(st.ox, st.oy, st.ox + dx, st.oy + dy);
       const m = Math.min(1, Math.hypot(dx, dy) / R);
@@ -143,8 +145,9 @@
       e.preventDefault();
       e.stopPropagation();
       id = e.pointerId;
-      ox = e.clientX;
-      oy = e.clientY;
+      const p0 = U.pt(e);
+      ox = p0.x;
+      oy = p0.y;
       try {
         btn.setPointerCapture(e.pointerId);
       } catch (err) {
@@ -156,8 +159,9 @@
     btn.addEventListener('pointermove', (e) => {
       if (e.pointerId !== id || !In.touch.throw) return;
       e.preventDefault();
-      In.touch.throw.dx = e.clientX - ox;
-      In.touch.throw.dy = e.clientY - oy;
+      const p = U.pt(e);
+      In.touch.throw.dx = p.x - ox;
+      In.touch.throw.dy = p.y - oy;
     });
     const up = (e, cancel) => {
       if (e.pointerId !== id) return;
@@ -205,6 +209,38 @@
     document.body.classList.toggle('touch', on);
     GW.Render.setTouchProfile(on);
     GW.FX.maxParts = on ? 360 : 700;
+    TC.updateSideways();
+  };
+
+  /**
+   * A phone held upright (or with the rotation lock on) still plays in landscape: the whole
+   * game box is turned 90 degrees, so turning the phone to the left shows it the right way up,
+   * the way many phone games do. Touch input is mapped through U.pt / U.rect to match.
+   */
+  TC.updateSideways = function () {
+    const game = document.getElementById('game');
+    if (!game) return;
+    // while typing (room code, name) keep the layout still: the keyboard must not flip the game
+    const a = document.activeElement;
+    if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA')) return;
+    let portrait = window.innerHeight > window.innerWidth;
+    try {
+      portrait = window.matchMedia('(orientation: portrait)').matches;
+    } catch (e) {
+      /* old browser: use the window size */
+    }
+    const on = TC.enabled && portrait;
+    const was = document.body.classList.contains('sideways');
+    document.body.classList.toggle('sideways', on);
+    if (on) {
+      const W = window.innerWidth, H = window.innerHeight;
+      game.style.width = H + 'px';
+      game.style.height = W + 'px';
+      game.style.left = W + 'px';
+    } else {
+      game.style.width = game.style.height = game.style.left = '';
+    }
+    if ((on !== was || on) && GW.Render.vw) GW.Render.resize(); // (before the first frame, render sizes itself)
   };
 
   TC.init = function () {
@@ -258,6 +294,15 @@
       });
     ov.querySelectorAll('[data-key]').forEach((b) => (b.dataset.throw ? bindThrow(b) : bindButton(b)));
     ov.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    // phones and tablets start in the touch layout (and sideways if held upright) before the first tap
+    try {
+      if (window.matchMedia('(pointer: coarse)').matches && navigator.maxTouchPoints > 0) TC.enable(true);
+    } catch (e) {
+      /* old browser: the first touch switches */
+    }
+    window.addEventListener('resize', TC.updateSideways);
+    window.addEventListener('orientationchange', () => setTimeout(TC.updateSideways, 250));
 
     // switch layouts by what the player actually uses
     window.addEventListener(

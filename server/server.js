@@ -3,6 +3,9 @@
  * handles HTTPS. No dependencies (Node 18+). Also hosts co-op games over WebSocket (/ws): see sim.js.
  *
  *   PORT=8080 node server/server.js
+ *
+ * Home play (same Wi-Fi, no internet server): run the play-at-home script on a computer, or
+ *   GW_LAN=1 node server/server.js   — it prints the address the phones should open.
  */
 'use strict';
 const http = require('http');
@@ -329,4 +332,21 @@ setInterval(() => {
     }
 }, 15000);
 
-server.listen(PORT, () => console.log('[gravewave] serving ' + ROOT + ' on :' + PORT));
+server.listen(PORT, () => {
+  console.log('[gravewave] serving ' + ROOT + ' on :' + PORT);
+  // home play: list this computer's Wi-Fi / LAN addresses, so phones on the same network can join
+  if (process.env.GW_LAN) {
+    const nets = require('os').networkInterfaces();
+    const ips = [];
+    for (const list of Object.values(nets))
+      for (const n of list || []) if ((n.family === 'IPv4' || n.family === 4) && !n.internal) ips.push(n.address);
+    console.log('');
+    console.log('  GRAVEWAVE home server is running.');
+    console.log('  On every phone connected to the SAME Wi-Fi, open in Safari:');
+    for (const ip of ips) console.log('      http://' + ip + ':' + PORT);
+    if (!ips.length) console.log('      (no network found: connect this computer to the Wi-Fi first)');
+    console.log('  Then: Co-op > one player creates a room, the others join with its code.');
+    console.log('  Keep this window open while you play. Close it to stop the server.');
+    console.log('');
+  }
+});
