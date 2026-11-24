@@ -199,7 +199,7 @@
       const dmg = Wp.bladeDamage(z, s.dmg, s.frac);
       const killed = GW.Zombies.damage(z, dmg, { melee: true, dir });
       if (killed) kill = true;
-      if (s.mod) Wp.applyMod(z, s, dir, dmg);
+      if (s.mod) Wp.applyMod(z, s, dir); // the flat blade damage: the %-of-health part stays on this zombie
       FX.sparks(z.x, z.y, dir, 5 + (s.tier || 0) * 2, s.color, 260);
     }
     p.stats.hits++;
@@ -240,7 +240,7 @@
       any = true;
       if (killed) kill = true;
       // a flame tick touches many zombies ten times a second: its mod procs far less often per tick
-      if (s.mod && Math.random() < 0.25) Wp.applyMod(z, s, a, dmg);
+      if (s.mod && Math.random() < 0.25) Wp.applyMod(z, s, a);
     }
     FX.flame(mx, my, a, reach, s.spread, w.up ? s.color : null);
     FX.light(mx + ca * reach * 0.5, my + sa * reach * 0.5, reach * 1.2, w.up ? s.color : '#ff8a2a', 0.08);
@@ -384,9 +384,9 @@
 
   /** Floating damage number: crits always, big hits sometimes (throttled per zombie). */
   Wp.damageText = function (z, dmg, crit) {
-    if (!(dmg >= 1) || (z.dmgTxtT > 0 && !crit)) return;
+    if (!(dmg >= 1) || z.dmgTxtT > (crit ? 0.08 : 0)) return;
     if (!crit && dmg < z.maxHp * 0.3) return;
-    z.dmgTxtT = 0.18;
+    z.dmgTxtT = 0.2;
     FX.popup(z.x + U.rand(-10, 10), z.y - z.r - 10, String(Math.round(dmg)), crit ? '#ff7a8a' : '#ffffff', crit ? 13 : 11, 0.6);
   };
 
