@@ -18,7 +18,13 @@ then visit `http://localhost:8000`.
 
 ## Controls
 
-On touch screens the left thumb moves (the stick stays inside its ring; push your thumb past the dashed outer ring to sprint) and the right thumb aims and fires, with a gentle aim assist. A fire-mode button (title screen and pause menu) switches between **drag to shoot** and **tap to shoot**, where touching the right side fires straight away at the nearest zombie. DASH slides. Tap the minimap for the big map. USE lights up when there is something to buy; hold it to rebuild a barricade. RELOAD, SWAP, NADE, TAC, KNIFE, SENTRY and pause are on-screen buttons.
+On touch screens the left thumb moves (the stick stays inside its ring; push your thumb past the dashed outer ring to sprint) and the right thumb aims and fires, with a gentle aim assist. A fire-mode button (title screen and pause menu) switches between **drag to shoot** and **tap to shoot**, where touching the right side fires straight away at the nearest zombie. Tap the minimap (the corner arrows) for the big map.
+
+The on-screen buttons are pictures: a hand for USE / buy (it lights up when there is something to buy; hold it to rebuild a barricade), a circular arrow to reload, two arrows to swap weapons, a grenade and the tactical you carry (snowflake = cryo, beacon = lure, dome = bubble) with how many are left on a badge, a knife, `>>` to slide, a drone to put the sentry down, and pause. Drag on a grenade button to aim the throw, or tap to throw at the busiest spot nearby.
+
+**Sprint lock:** the see-through running-man button (left, above the stick). Tap it once and you keep sprinting while you move, no need to hold the stick past the ring. It turns itself off when you tap it again, when you run out of breath, or when you stop: let go of the move stick for about a second (a quick re-grip doesn't count, and you can tap it first and start moving within that second). While it is on it turns yellow with a padlock. Shooting pauses the sprint, as with Shift on a keyboard; it picks up again when you stop shooting. Pausing also turns it off. Pushing the stick past the ring still sprints for as long as you hold it there.
+
+The BUTTONS button (title screen and pause menu, phones) lets you drag every button, sprint included, where your thumbs want it and change its size and see-through; the layout is saved on the phone.
 
 
 | Input | Action |
@@ -126,7 +132,7 @@ Keep the window open while you play. If phones can't connect, allow Node.js thro
 
 ## Performance
 
-The simulation runs in fixed 1/60 s steps and rendering interpolates between them. Press **F3** (or tick *Show FPS* in the pause menu) for a frame-rate meter; resolution adapts automatically to hold 60 fps.
+The simulation runs in fixed 1/60 s steps and rendering interpolates between them. Press **F3** (or tick *Show FPS* in the pause menu) for a small frame-rate readout at the bottom centre during play, e.g. `● 58 FPS · RES 85%`: the dot is green on target, yellow when a little short and red only when it is really struggling; `MAX 30` shows the battery-saver frame cap and `RES` the current render resolution. Resolution adapts automatically to hold 60 fps (or the cap).
 
 ## Art
 

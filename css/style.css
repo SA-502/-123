@@ -54,11 +54,13 @@ html, body {
   background: rgba(4, 2, 12, 0.5); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 10px;
 }
 #fps b { color: #fff; font-weight: 800; }
+#fps span, #fps b { unicode-bidi: isolate; } /* keeps "MAX 30" and "RES 85%" in order when the words are Arabic */
 #fps .fps-dot { width: 7px; height: 7px; border-radius: 50%; background: #3dff8b; box-shadow: 0 0 6px #3dff8b; }
 #fps .fps-dim { opacity: 0.6; }
 #fps.slow .fps-dot { background: #ffe14d; box-shadow: 0 0 6px #ffe14d; }
 #fps.bad .fps-dot { background: #ff3b4e; box-shadow: 0 0 6px #ff3b4e; }
 #fps.bad b { color: #ff7a88; }
+#game:not(.playing) #fps { display: none; } /* menus have buttons down there */
 .opt { display: flex; align-items: center; gap: 8px; font-size: 12px; letter-spacing: 0.2em; cursor: pointer; }
 .opt input { pointer-events: auto; accent-color: var(--pink); width: 16px; height: 16px; }
 .opt .dim { opacity: 0.55; }
@@ -348,7 +350,7 @@ body.touch #game.playing #touch { display: block; }
 /* sprint lock: see-through until it is on, then yellow with a padlock */
 #tb-sprint { left: calc(max(10px, env(safe-area-inset-left, 0px)) + 168px); bottom: 150px; color: rgba(255, 255, 255, 0.6);
   background: rgba(8, 4, 20, 0.22); border-color: rgba(255, 225, 77, 0.35); box-shadow: none; --glow: rgba(255, 225, 77, 0.45); }
-#tb-sprint .tb-lock { display: none; padding: 3px; }
+#tb-sprint .tb-lock { display: none; width: 19px; padding: 3px; }
 #tb-sprint .tb-lock .ico { width: 100%; height: 100%; stroke: #140a24; filter: none; }
 #tb-sprint.on { color: #fff; background: rgba(255, 225, 77, 0.2); border-color: var(--yellow); box-shadow: 0 0 16px rgba(255, 225, 77, 0.75); --glow: rgba(255, 225, 77, 1); }
 #tb-sprint.on .tb-lock { display: block; }
