@@ -30,7 +30,7 @@
     const sp = ZC.speeds[speedClass] || ZC.speeds.walk;
     const z = {
       id: Zs.nextId++, type, x: spot.x, y: spot.y, r: ZC.radius, angle: Math.random() * U.TAU,
-      hp, maxHp: hp, speed: U.rand(sp[0], sp[1]), speedClass, damage: ZC.damage,
+      hp, maxHp: hp, speed: U.rand(sp[0], sp[1]), speedClass, damage: GW.Rounds.damage(Math.max(1, GW.Director.round || 1)),
       state: 'rise', window: null, t: U.rand(0, 10), animRate: U.rand(5, 8),
       attackT: 0, attackCd: 0, stun: 0, flash: 0, kx: 0, ky: 0, tearT: 0, riseT: 0.9,
       farT: 0, stuckT: 0, lastX: spot.x, lastY: spot.y, groanT: U.rand(0.5, 6), dead: false,
@@ -39,9 +39,9 @@
     if (type === 'brute') {
       z.r = 20;
       z.hp = z.maxHp = hp * 6;
-      z.speed = U.rand(86, 98);
+      z.speed = U.rand(80, 92);
       z.speedClass = 'run';
-      z.damage = 80;
+      z.damage = Math.round(z.damage * 1.6);
       z.skin = '#8f7a72';
       z.shirt = '#3b2230';
       z.eye = '#ff3b4e';
@@ -50,7 +50,7 @@
       z.shirt = '#4a4f5a';
     } else if (type === 'spitter') {
       z.hp = z.maxHp = hp * 0.8;
-      z.speed = U.rand(105, 120);
+      z.speed = U.rand(95, 110);
       z.speedClass = 'run';
       z.skin = '#86b052';
       z.shirt = '#2f4a22';
@@ -67,7 +67,7 @@
     } else if (type === 'leaper') {
       z.r = 12;
       z.hp = z.maxHp = hp * 0.7;
-      z.speed = U.rand(165, 180);
+      z.speed = U.rand(135, 150);
       z.speedClass = 'sprint';
       z.skin = '#a77fa0';
       z.shirt = '#3a1f3a';
@@ -76,9 +76,9 @@
     } else if (type === 'shrieker') {
       z.r = 11;
       z.hp = z.maxHp = Math.max(100, hp * 0.55);
-      z.speed = U.rand(205, 228);
+      z.speed = U.rand(168, 186);
       z.speedClass = 'sprint';
-      z.damage = 35;
+      z.damage = Math.round(z.damage * 0.75);
       z.skin = '#a6d3da';
       z.shirt = '#1c3b46';
       z.eye = '#35f0ff';
@@ -203,7 +203,7 @@
         z.tearT -= dt;
         if (z.tearT <= 0) {
           w.planks--;
-          z.tearT = C.ZOMBIE.plankTearTime * (z.type === 'brute' ? 0.5 : 1);
+          z.tearT = C.ZOMBIE.plankTearTime * (z.type === 'brute' ? 0.5 : z.crawl ? C.ZOMBIE.crawl.tearMult : 1);
           A.play('plank', { x: w.x, y: w.y });
           FX.sparks(w.x + w.dx * 22, w.y + w.dy * 22, Math.atan2(w.dy, w.dx), 6, '#b08a4a', 170);
         }
@@ -349,7 +349,7 @@
 
     if (P.alive && dp < reach + 8 && z.attackCd <= 0 && !Gd.shielded(P) && z.type !== 'bloater') {
       z.state = 'attack';
-      z.attackT = C.ZOMBIE.attackWindup;
+      z.attackT = z.crawl ? C.ZOMBIE.crawl.windup : C.ZOMBIE.attackWindup;
     }
 
     // stragglers: too far along the path, unreachable, or wedged somewhere -> respawn nearer
@@ -506,9 +506,11 @@
     if (z.dead) return false;
     info = info || {};
     if (z.type === 'boss') amount = GW.Boss.adjustDamage(z, amount, info);
+    const hp0 = z.hp;
     // helmets soak headshots: the crit bonus is lost until the helmet breaks
     if (z.helmet > 0 && info.crit && !info.explosive && !info.melee) {
       const base = amount / (info.critMult || 1);
+      Zs.payShare(z, Math.min(base, z.helmet), info, false);
       z.helmet -= base;
       z.flash = 0.08;
       FX.sparks(z.x, z.y, (info.dir || 0) + Math.PI, 3, '#d8dce4', 220);
@@ -532,10 +534,65 @@
       z.ky += Math.sin(dir) * 45;
     }
     if (z.hp <= 0) {
+      z.payRest = Zs.payShare(z, hp0, info, true);
       Zs.kill(z, info);
       return true;
     }
+    Zs.payShare(z, amount, info, false);
+    if (!z.crawl && CRAWLERS[z.type] && z.state !== 'rise' && !info.nuke) {
+      const CR = C.ZOMBIE.crawl;
+      const crossed = hp0 >= z.maxHp * CR.hpFrac && z.hp < z.maxHp * CR.hpFrac;
+      const blown = info.explosive && z.hp < z.maxHp * 0.6;
+      if ((crossed && Math.random() < CR.chance) || (blown && Math.random() < CR.blastChance)) Zs.makeCrawler(z, dir);
+    }
     return false;
+  };
+
+  /** Types that can lose their legs (never brutes, bosses, bloaters, spitters or leapers). */
+  const CRAWLERS = { walker: true, helmet: true, shrieker: true };
+
+  /** Legs gone: it drops and drags itself along, slower, with a weaker, slower bite. */
+  Zs.makeCrawler = function (z, dir) {
+    const CR = C.ZOMBIE.crawl;
+    if (Zs.list.reduce((n, o) => n + (o.crawl ? 1 : 0), 0) >= 6) return; // never a carpet of crawlers
+    z.crawl = true;
+    z.speed = U.clamp(z.speed * CR.speedMult, CR.minSpeed, CR.maxSpeed);
+    z.damage = Math.round(z.damage * CR.dmgMult);
+    z.stun = Math.max(z.stun, 0.5);
+    z.animRate *= 0.6;
+    if (z.state === 'attack') {
+      z.state = 'chase';
+      z.attackCd = Math.max(z.attackCd, 0.6);
+    }
+    FX.blood(z.x, z.y, dir === undefined ? Math.random() * U.TAU : dir, 16, 260);
+    FX.blood(z.x, z.y, (dir || 0) + Math.PI, 8, 180);
+    GW.MapArt.decal(z.x, z.y, z.r * 1.1, '#5c0a16', 0.45);
+  };
+
+  /**
+   * Hit points by damage share. Each zombie holds a small pool of points (CFG.POINTS.pool) that is
+   * paid out 10 at a time as the local player's damage chips its health away; whatever is left of
+   * this player's share rides on the kill bonus (returned when `killed`). A minigun and a sniper
+   * earn the same from the same zombie. Only the local player is paid here: the co-op server has no
+   * player of its own, and guests pay themselves (Net.guestDamage).
+   */
+  Zs.payShare = function (z, dealt, info, killed) {
+    if (GW.Net && GW.Net.serverMode) return 0;
+    if (info.ally || info.trap || info.silent || info.nuke || info.by) return 0;
+    const Pt = C.POINTS;
+    const pool = z.type === 'boss' ? Pt.poolBoss : z.type === 'brute' ? Pt.poolBrute : Pt.pool;
+    const whole = (z.maxHp || 1) + (z.helmetMax || 0);
+    z.payAcc = (z.payAcc || 0) + pool * U.clamp((dealt || 0) / whole, 0, 1);
+    if (killed) {
+      const rest = Math.round(z.payAcc / 5) * 5;
+      z.payAcc = 0;
+      return rest;
+    }
+    while (z.payAcc >= Pt.hit) {
+      z.payAcc -= Pt.hit;
+      GW.Game.addPoints(Pt.hit, z.x, z.y - z.r, { small: true });
+    }
+    return 0;
   };
 
   Zs.kill = function (z, info) {
@@ -566,11 +623,14 @@
     if (z.type === 'boss') GW.Boss.onDeath(z, pos);
 
     const P = GW.Player, Pt = C.POINTS;
-    let pts = info.melee ? Pt.melee : info.crit ? Pt.crit : Pt.kill;
+    // the knife pays best, a headshot kill next; blades pay a normal kill
+    let pts = info.knife ? Pt.melee : info.crit ? Pt.crit : Pt.kill;
     if (z.type === 'brute') pts = Pt.brute;
     else if (z.type === 'boss') pts = Pt.boss;
     else if (info.trap) pts = Pt.trap;
     else if (info.ally) pts = Pt.ally;
+    pts += z.payRest || 0; // the rest of the killer's hit-point share
+    z.payRest = 0;
     const by = info.by || (GW.Net && GW.Net.serverMode ? z.lastBy : 0);
     if (by && GW.Net && GW.Net.active) {
       // a teammate's shot: the points and the kill are theirs

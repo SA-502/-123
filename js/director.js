@@ -24,6 +24,9 @@
     D.brutesSpawned = 0;
     D.dropsThisRound = 0;
     D.sinceDrop = 0;
+    D.dropCd = 0;
+    D.droppedKinds = {};
+    D.lastDrop = '';
     D.plankPts = 0;
     D.maxAlive = C.MAX_ALIVE;
   };
@@ -41,6 +44,7 @@
     D.bossSpawned = false;
     D.bossT = 3.5;
     D.dropsThisRound = 0;
+    D.droppedKinds = {};
     D.plankPts = 0;
     D.spawned = 0;
     D.brutesSpawned = 0;
@@ -159,6 +163,7 @@
 
   D.update = function (dt) {
     for (const r of M.risers) if (r.cool > 0) r.cool -= dt;
+    if (D.dropCd > 0) D.dropCd -= dt;
     if (D.state === 'intermission') {
       D.timer -= dt;
       if (D.timer <= 0) begin(D.round + 1);
@@ -191,23 +196,43 @@
     return D.state === 'active' ? D.toSpawn + GW.Zombies.list.length : 0;
   };
 
-  const DROP_TABLE = [['ammo', 1], ['instakill', 1], ['double', 1], ['nuke', 0.8], ['carpenter', 0.7], ['pal', 0.4]];
+  /*
+   * Power-up drops: rare and spread out. At most CFG.DROPS.maxPerRound a round, a cooldown (seconds
+   * and kills) between two drops, never the same power-up twice in a row, never a timed power-up
+   * (Overkill, Double Score) twice in one round or while it is still running. Purge and Overkill
+   * are the rarest. A pity counter guarantees one every `pity` kills if luck runs dry.
+   */
+  const DROP_TABLE = [['ammo', 1], ['double', 0.8], ['carpenter', 0.6], ['instakill', 0.45], ['nuke', 0.3], ['pal', 0.35]];
+
+  D.dropWeight = function (id, w) {
+    const T = GW.Game.timers || {};
+    if (id === D.lastDrop) return 0;
+    if (GW.POWERUPS[id].timed && (D.droppedKinds[id] || T[id] > 0)) return 0;
+    if (id === 'nuke' && D.droppedKinds.nuke) return 0;
+    if (id === 'carpenter' && !M.windows.some((x) => x.planks < 6 && M.zones[x.zone].open)) return 0;
+    return w;
+  };
 
   D.onKill = function (z, info, pos) {
     D.sinceDrop++;
-    const P = GW.Player;
+    const P = GW.Player, DR = C.DROPS;
     const lastOne = D.state === 'active' && D.toSpawn <= 0 && GW.Zombies.list.length === 0;
     if (D.special && lastOne) {
       // surviving a special round always pays out a full reload
       GW.Interact.spawnPowerup('ammo', pos ? pos.x : P.x, pos ? pos.y : P.y);
       return;
     }
-    if (!pos || info.nuke || D.dropsThisRound >= 4) return;
-    if (Math.random() < 0.03 || D.sinceDrop >= 50) {
-      const pick = U.weighted(DROP_TABLE, (e) => e[1]);
+    if (!pos || info.nuke || info.silent || D.dropsThisRound >= DR.maxPerRound) return;
+    if (D.dropCd > 0 || D.sinceDrop < DR.minKills) return;
+    if (Math.random() < DR.chance || D.sinceDrop >= DR.pity) {
+      const pick = U.weighted(DROP_TABLE, (e) => D.dropWeight(e[0], e[1]));
+      if (!pick) return;
       GW.Interact.spawnPowerup(pick[0], pos.x, pos.y);
       D.dropsThisRound++;
+      D.droppedKinds[pick[0]] = true;
+      D.lastDrop = pick[0];
       D.sinceDrop = 0;
+      D.dropCd = DR.cooldown;
     }
   };
 })();

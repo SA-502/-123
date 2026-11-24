@@ -104,9 +104,24 @@
     FX.lights.push({ x, y, r, color, life, max: life });
   };
 
-  FX.popup = function (x, y, text, color, size) {
+  FX.popup = function (x, y, text, color, size, life) {
     if (FX.popups.length > 40) FX.popups.shift();
-    FX.popups.push({ x: x + U.rand(-8, 8), y, text, color: color || '#ffe14d', size: size || 14, life: 0.9, max: 0.9, vy: -46 });
+    const l = life || 0.9;
+    FX.popups.push({ x: x + U.rand(-8, 8), y, text, color: color || '#ffe14d', size: size || 14, life: l, max: l, vy: -46 });
+  };
+
+  /**
+   * Overclocked muzzle flash: a hot core and a starburst that grow with the tier (1..3);
+   * a modded weapon flashes its mod colour too.
+   */
+  FX.muzzle = function (x, y, dir, color, tier, modColor) {
+    const len = 10 + tier * 7;
+    for (let i = -1; i <= 1; i++) {
+      const a = dir + i * (0.5 - tier * 0.06);
+      FX.tracer(x, y, x + Math.cos(a) * len * (i ? 0.55 : 1), y + Math.sin(a) * len * (i ? 0.55 : 1), i ? color : '#ffffff', 1.5 + tier * 0.9, 0.05 + tier * 0.01, true);
+    }
+    if (tier >= 2) FX.ring(x, y, 8 + tier * 4, color, 0.08, 1.5 + tier * 0.5);
+    if (modColor) FX.sparks(x, y, dir, tier, modColor, 260, 0.6);
   };
 
   FX.corpse = function (z) {
@@ -135,7 +150,46 @@
     GW.MapArt.decal(x, y, r * 0.5, '#050308', 0.5);
   };
 
+  /**
+   * Status effects on the horde, drawn with particles so they read on any zombie art:
+   * burnT (Inferno / flames), slowT + freezeT (Frost / Cryo), shockT (Arc), crawl (legless crawler).
+   * shockT, blastT and dmgTxtT are visual-only timers and run down here.
+   */
+  let statusT = 0;
+  function statusFx(dt) {
+    const Zs = GW.Zombies;
+    if (!Zs || !Zs.list) return;
+    statusT += dt;
+    if (statusT < 1 / 30) return;
+    const step = statusT;
+    statusT = 0;
+    const lite = FX.maxParts < 500 ? 0.5 : 1; // phones: half the extra particles
+    for (const z of Zs.list) {
+      if (z.dead) continue;
+      if (z.shockT > 0) z.shockT -= step;
+      if (z.blastT > 0) z.blastT -= step;
+      if (z.dmgTxtT > 0) z.dmgTxtT -= step;
+      if (z.burnT > 0 && Math.random() < 14 * step * lite) {
+        const r = Math.random();
+        part({ x: z.x + U.rand(-z.r, z.r) * 0.7, y: z.y + U.rand(-z.r, z.r) * 0.5, vx: U.rand(-12, 12), vy: U.rand(-80, -40), life: U.rand(0.25, 0.45), max: 0.45, size: U.rand(2.5, 4.5), color: r < 0.5 ? '#ff7a1a' : r < 0.85 ? '#ffb02e' : '#ffe14d', drag: 2, glow: true, flame: true });
+      }
+      if (z.freezeT > 0) {
+        if (Math.random() < 6 * step * lite) part({ x: z.x + U.rand(-z.r, z.r), y: z.y + U.rand(-z.r, z.r), vx: 0, vy: -8, life: 0.35, max: 0.35, size: U.rand(1.5, 2.5), color: '#ffffff', drag: 1, glow: true });
+      } else if (z.slowT > 0 && Math.random() < 7 * step * lite) {
+        part({ x: z.x + U.rand(-z.r, z.r), y: z.y + U.rand(-z.r, z.r) * 0.6, vx: U.rand(-10, 10), vy: U.rand(10, 26), life: U.rand(0.3, 0.6), max: 0.6, size: U.rand(1.5, 3), color: Math.random() < 0.5 ? '#8fe9ff' : '#d8f8ff', drag: 1.5, glow: true });
+      }
+      if (z.shockT > 0 && Math.random() < 12 * step * lite) {
+        const a = Math.random() * U.TAU, b = a + U.rand(1, 2.4), rr = z.r + 4;
+        FX.bolt(z.x + Math.cos(a) * rr, z.y + Math.sin(a) * rr, z.x + Math.cos(b) * rr, z.y + Math.sin(b) * rr, '#bfe9ff', 0.08, 1.5);
+      }
+      if (z.crawl && z.state === 'chase' && Math.random() < 3 * step * lite) {
+        part({ x: z.x + U.rand(-4, 4), y: z.y + U.rand(-4, 4), vx: 0, vy: 0, life: 0.8, max: 0.8, size: U.rand(2, 3.5), color: '#6e0b18', drag: 1, glow: false });
+      }
+    }
+  }
+
   FX.update = function (dt) {
+    statusFx(dt);
     let arr = FX.parts;
     for (let i = arr.length - 1; i >= 0; i--) {
       const p = arr[i];
