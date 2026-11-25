@@ -235,6 +235,7 @@
     LATER: 'بعدين', ' is spinning the Prize Crate': ' يفتح صندوق الجوائز', ' and choose its ammo mod': ' واختر نوع الذخيرة',
         DASH: 'زحلقة', 'FIRE: DRAG TO SHOOT': 'الإطلاق: اسحب العصا', 'FIRE: TAP TO SHOOT': 'الإطلاق: بمجرد اللمس',
     'GRAPHICS: HIGH': 'الرسومات: عالية', 'GRAPHICS: BATTERY SAVER': 'الرسومات: توفير البطارية',
+    'ZOMBIE STYLE: ANIMATED': 'شكل الزومبي: متحرك', 'ZOMBIE STYLE: CLASSIC': 'شكل الزومبي: كلاسيكي',
     'MAP · TAB': 'الخريطة', slide: 'زحلقة', 'big map': 'الخريطة الكبيرة',
     'Left thumb: move (push past the ring, or tap the runner to lock sprint on) · Right thumb: aim and shoot · » slides · Tap the map to enlarge it':
       'الإبهام اليسار: حركة (اطلع برا الدائرة، أو المس زر الراكض عشان يثبت الركض) · الإبهام اليمين: صوّب واطلق · زر » للانزلاق · المس الخريطة عشان تكبر',

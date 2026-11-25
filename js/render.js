@@ -31,6 +31,7 @@
     g.fillRect(0, 0, 128, 128);
     R.resize();
     window.addEventListener('resize', R.resize);
+    initZStyle();
   };
 
   R.dprCap = 1.5;
@@ -330,9 +331,235 @@
     ctx.restore();
   }
 
+  /* ------------------------------------------------------------------ */
+  /* zombie style: ANIMATED (side-view frame sheets)                    */
+  /* ------------------------------------------------------------------ */
+  /*
+   * The other look, chosen in the menus (R.zstyle): upright side-view zombies that never rotate,
+   * mirrored when they head left, with the frames from Art.SHEET_META. Walk frames advance with the
+   * distance covered (zAnim's phase), attacks play the attack row through the wind-up and strike,
+   * crawlers use the crawl row, the dead play the death row. Status tints, hit flash, rising from
+   * the ground and the rest are laid over the frame the same way as on the classic rig.
+   */
+  const ZSTYLE_KEY = 'gravewave.zstyle';
+  R.zstyle = 'animated';
+  try {
+    const v = localStorage.getItem(ZSTYLE_KEY);
+    if (v === 'classic' || v === 'animated') R.zstyle = v;
+  } catch (e) {
+    /* storage unavailable */
+  }
+  R.setZStyle = function (v) {
+    R.zstyle = v === 'classic' ? 'classic' : 'animated';
+    try {
+      localStorage.setItem(ZSTYLE_KEY, R.zstyle);
+    } catch (e) {
+      /* storage unavailable */
+    }
+    zstyleLabels();
+  };
+  function zstyleLabels() {
+    if (typeof document === 'undefined' || !document.querySelectorAll) return;
+    document.querySelectorAll('.zstyle-toggle').forEach((b) => {
+      b.textContent = R.zstyle === 'classic' ? 'ZOMBIE STYLE: CLASSIC' : 'ZOMBIE STYLE: ANIMATED';
+    });
+  }
+  function initZStyle() {
+    if (typeof document === 'undefined' || !document.querySelectorAll) return;
+    document.querySelectorAll('.zstyle-toggle').forEach((b) =>
+      b.addEventListener('click', () => R.setZStyle(R.zstyle === 'classic' ? 'animated' : 'classic'))
+    );
+    zstyleLabels();
+  }
+
+  /** Which sheet a zombie uses (a helmet zombie whose helmet broke walks on as a plain walker). */
+  const SHEET_OF = { walker: 'walker', spitter: 'spitter', bloater: 'bloater', leaper: 'leaper', brute: 'brute', shrieker: 'leaper' };
+  function sheetOf(z) {
+    if (z.type === 'helmet') return z.helmet > 0 ? 'helmet' : 'walker';
+    return SHEET_OF[z.type || 'walker'] || null;
+  }
+  /** Standing height of each kind, in multiples of its radius (the hitbox stays the circle). */
+  const SHEET_H = { walker: 3.5, helmet: 3.6, spitter: 3.5, bloater: 3.2, leaper: 3.9, brute: 3.2, shrieker: 3.9 };
+  /** Frames left out because they're off-model (cells: row * 4 + col). */
+  // walker: frames 0-1 shamble with the arms down, 2-3 reach out; only the reaching pair is walked
+  // (mixing them makes the arms flap), frame 0 is its idle stance
+  const WALK = { walker: [2, 3], brute: [0, 1, 2, 3], helmet: [0, 1, 2, 3], spitter: [0, 1, 2, 3], bloater: [0, 1, 2, 3], leaper: [0, 1, 2, 3] };
+  const IDLE = { walker: 0 };
+  // attack row: [wind-up, strike] cells
+  const ATTACK = { walker: [5, 6], helmet: [5, 6], spitter: [4, 7], bloater: [5, 6], leaper: [4, 6], brute: [5, 7] };
+  const CRAWL = [12, 13, 14, 15];
+
+  function sheetFrame(z, a) {
+    const t = a.sh;
+    if (z.state === 'rise') return WALK[t][0];
+    if (z.crawl) return CRAWL[Math.floor((a.ph / U.TAU) * 4) & 3];
+    const at = ATTACK[t];
+    if (z.state === 'attack') {
+      const k = U.clamp(1 - z.attackT / (C.ZOMBIE.attackWindup || 0.5), 0, 1);
+      return k < 0.55 ? at[0] : at[1];
+    }
+    if (z.state === 'breach') return at[Math.floor(z.t * 5) & 1];
+    if (z.state === 'spit') return 5 + (Math.floor(R.time * 8) & 1);
+    if (z.state === 'swell') return 7;
+    if (z.state === 'crouch') return 4;
+    if (z.state === 'leap') return 5;
+    const w = WALK[t];
+    if (a.spd < 6) return IDLE[t] !== undefined ? IDLE[t] : w[(a.wi || 0) % w.length]; // standing still
+    a.wi = Math.floor((a.ph / U.TAU) * w.length);
+    return w[((a.wi % w.length) + w.length) % w.length];
+  }
+
+  /** Flames licking up an upright figure (additive). x0..x1 its width, y0 its top, y1 its feet. */
+  function drawFlamesUp(x, y0, y1, w, seed, alpha) {
+    const prev = ctx.globalCompositeOperation;
+    ctx.globalCompositeOperation = 'lighter';
+    const t = R.time, h = y1 - y0, nf = R.saver ? 3 : 5;
+    for (let i = 0; i < nf; i++) {
+      const px = x + (U.hash(i, 1, 5) - 0.5) * w * 0.8, py = y0 + h * (0.3 + 0.6 * U.hash(i, 2, 5));
+      const fl = 0.5 + 0.5 * Math.sin(t * (9 + i * 2.3) + seed + i);
+      const len = h * (0.14 + 0.16 * fl);
+      ctx.globalAlpha = alpha * (0.35 + 0.4 * fl);
+      ctx.fillStyle = i % 2 ? '#ff7a1a' : '#ffb02e';
+      ctx.beginPath();
+      ctx.moveTo(px - 3, py + 2);
+      ctx.quadraticCurveTo(px - 3 + Math.sin(t * 13 + i) * 2, py - len * 0.6, px + Math.sin(t * 11 + i) * 3, py - len);
+      ctx.quadraticCurveTo(px + 3, py - len * 0.5, px + 3, py + 2);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = prev;
+    ctx.globalAlpha = alpha;
+  }
+
+  /** Draws z in the animated style; false if it has no sheet (the caller draws the classic rig). */
+  function drawZombieSheet(z, a) {
+    const t = sheetOf(z);
+    const im = t && Art.sheet(t);
+    if (!im) return false;
+    a.sh = t;
+    const meta = Art.SHEET_META, S = meta.cell, info = meta.types[t];
+    const frozen = z.freezeT > 0;
+    // facing: mirror when heading left (with a dead zone so it doesn't flap when moving straight up/down)
+    const cx = Math.cos(a.ang);
+    if (!a.flip) a.flip = 1;
+    if (!frozen) {
+      if (cx < -0.2) a.flip = -1;
+      else if (cx > 0.2) a.flip = 1;
+    }
+    let f = frozen && a.fr !== undefined ? a.fr : sheetFrame(z, a);
+    a.fr = f;
+    const H = z.r * (SHEET_H[z.type] || 3.5);
+    let k = H / info.h; // world units per cell pixel
+    let sx = 1, sy = 1, alpha = 1, dark = 0, sink = 0;
+    if (z.state === 'rise') {
+      const kk = U.clamp(1 - z.riseT / 0.9, 0, 1);
+      drawRiseDirt({ x: z.x, y: z.y + H * 0.36, r: z.r, _an: a }, kk, 1);
+      sink = (1 - ease(kk)) * H; // climbs out of the ground
+      dark = 0.7 * (1 - kk);
+    } else if (a.riseFade > 0) drawRiseDirt({ x: z.x, y: z.y + H * 0.36, r: z.r, _an: a }, 1, U.clamp(a.riseFade / 1.4, 0, 1));
+    if (z.state === 'swell') {
+      const sw = 1 + 0.35 * U.clamp(1 - z.attackT / C.ZOMBIE.bloat.swell, 0, 1);
+      sx = sy = sw;
+      sx += Math.sin(R.time * 40) * 0.03;
+    }
+    const m = frozen ? 0 : U.clamp(a.spd / 58, 0, 1.35);
+    const breath = frozen ? 0 : Math.sin(R.time * 2.3 + a.seed) * (1 - Math.min(1, m * 2));
+    sy *= 1 + 0.02 * breath + 0.025 * m * Math.abs(Math.sin(a.ph * 2));
+    // hit: knocked back a step and squashed
+    const hk = a.hit;
+    sx *= 1 - 0.1 * hk;
+    sy *= 1 - 0.05 * hk;
+    let ox = -3 * hk * a.flip, wob = 0;
+    if (!frozen && (z.dazeT > 0 || z.stun > 0.2)) wob = Math.sin(R.time * 9 + a.seed) * 0.1;
+    if (z.shockT > 0 && !frozen) ox += U.rand(-1.2, 1.2);
+    const feetY = z.y + H * 0.42;
+    // shadow under the feet
+    ctx.globalAlpha = 0.42;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(z.x, feetY, z.r * (z.crawl ? 1.5 : 1.15), z.r * 0.42, 0, 0, U.TAU);
+    ctx.fill();
+    ctx.save();
+    if (sink > 0.5) {
+      ctx.beginPath();
+      ctx.rect(z.x - H * 1.5, feetY - H * 2, H * 3, H * 2 + 2);
+      ctx.clip();
+    }
+    ctx.translate(z.x + ox, feetY + sink);
+    if (wob) ctx.rotate(wob);
+    ctx.scale(a.flip * sx * k, sy * k);
+    const dx = -S / 2, dy = -meta.base;
+    const fx = (f & 3) * S, fy = (f >> 2) * S;
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(im, fx, fy, S, S, dx, dy, S, S);
+    const over = (color, al) => {
+      if (al <= 0.01) return;
+      const c = Art.sheetFrame(t, f, color);
+      if (!c) return;
+      ctx.globalAlpha = alpha * Math.min(1, al);
+      ctx.drawImage(c, dx, dy, S, S);
+    };
+    if (frozen) over('ice', 1);
+    else if (z.shockT > 0 && Math.sin(R.time * 55 + a.seed) > 0) over('#d8f4ff', 0.6);
+    else if (z.burnT > 0) over('#ff6a12', 0.3 + 0.18 * Math.sin(R.time * 17 + a.seed));
+    else if (z.slowT > 0) over('#5fc8ff', 0.3 + Math.min(0.2, (z.frost || 0) * 0.08));
+    else if (a.char > 0.02 || a.soot > 0.02) over('#1c0f08', Math.max(a.char * 0.55, a.soot * 0.4));
+    if (dark > 0.01) over('#0a0606', dark);
+    if (z.flash > 0) over('#ffffff', z.flash * 9);
+    ctx.restore();
+    if (z.burnT > 0 && !frozen) drawFlamesUp(z.x, feetY - H, feetY, z.r * 2, a.seed, 1);
+    ctx.globalAlpha = 1;
+    // where the head is, for the glowing eyes (emissive pass): a little below the top, toward the face
+    const hd = info.head[f];
+    a.sc = k;
+    a.ex = z.x + ((hd[0] - S / 2) * a.flip * sx + 6 * a.flip) * k + ox;
+    a.ey = feetY + sink + (hd[1] + H * 0.12 / k - meta.base) * sy * k;
+    a.sheetDrawn = R.time;
+    return true;
+  }
+
+  /** Death in the animated style: the death row plays out, then the body lies there and fades. */
+  function drawCorpseSheet(c, age) {
+    const im = Art.sheet(c.sheet);
+    if (!im) return false;
+    const meta = Art.SHEET_META, S = meta.cell, info = meta.types[c.sheet];
+    const fade = U.clamp(c.life / 1.2, 0, 1);
+    const H = c.r * (SHEET_H[c.type] || 3.5), k = H / info.h;
+    const f = 8 + Math.min(3, Math.floor(age / 0.13));
+    const feetY = c.y + H * 0.42;
+    const pool = ease(U.clamp((age - 0.3) / 1.2, 0, 1));
+    ctx.globalAlpha = fade * 0.7;
+    ctx.fillStyle = '#3d0610';
+    ctx.beginPath();
+    ctx.ellipse(c.x, feetY - 2, c.r * (0.4 + 1.3 * pool), c.r * (0.25 + 0.5 * pool), 0, 0, U.TAU);
+    ctx.fill();
+    ctx.save();
+    ctx.translate(c.x, feetY);
+    ctx.scale((c.flip || 1) * k, k);
+    ctx.globalAlpha = fade;
+    ctx.drawImage(im, (f & 3) * S, (f >> 2) * S, S, S, -S / 2, -meta.base, S, S);
+    const dk = c.burnt ? 0.7 : 0.15 + 0.3 * (1 - fade);
+    const dc = Art.sheetFrame(c.sheet, f, '#0c0506');
+    if (dc) {
+      ctx.globalAlpha = fade * dk;
+      ctx.drawImage(dc, -S / 2, -meta.base, S, S);
+    }
+    if (age < 0.12) {
+      const wc = Art.sheetFrame(c.sheet, f, '#ffffff');
+      if (wc) {
+        ctx.globalAlpha = 1 - age / 0.12;
+        ctx.drawImage(wc, -S / 2, -meta.base, S, S);
+      }
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    return true;
+  }
+
   function drawZombie(z) {
     if (z.type === 'boss') return drawBoss(z);
     const a = zAnim(z);
+    if (R.zstyle === 'animated' && drawZombieSheet(z, a)) return;
     const key = zombieKey(z);
     const rig = Art.zombieRig(key);
     const s = (z.r / 13) * 1.15;
@@ -1209,6 +1436,8 @@
       c.angle = an ? an.ang : z.angle;
       c.spin = (Math.random() - 0.5) * 0.9;
       c.dir = Math.random() < 0.5 ? -1 : 1;
+      c.sheet = sheetOf(z); // for the animated style's death row
+      c.flip = an ? an.flip || 1 : 1;
       if (c.ice) FX.burst(z.x, z.y, 14, '#d8f8ff', 260);
     };
     FX.corpse.wrapped = true;
@@ -1253,6 +1482,7 @@
   function drawCorpse(c) {
     const age = c.max - c.life;
     if (c.ice) return drawShatter(c, age);
+    if (c.sheet && R.zstyle === 'animated' && drawCorpseSheet(c, age)) return;
     const fade = U.clamp(c.life / 1.2, 0, 1);
     const s = (c.r / 13) * 1.15;
     const rig = c.key && Art.zombieRig(c.key);
@@ -2721,6 +2951,30 @@
       const s = an ? an.sc : (z.r / 13) * 1.15, ca = Math.cos(ang), sa = Math.sin(ang);
       const a = (z.state === 'rise' ? U.clamp(1 - z.riseT / 0.9, 0, 1) : 1) * (z.freezeT > 0 ? 0.35 : 1);
       const hx = an ? an.hx : 7.2 * s, hy = an ? an.hy : 0;
+      if (an && an.sheetDrawn === R.time) {
+        // animated style: one glowing eye on the side-on head
+        if (z.burnT > 0) Art.drawGlow(ctx, '#ff7a1a', z.x, an.ey + z.r, z.r * 2.4, 0.3 + 0.12 * Math.sin(R.time * 19 + z.x));
+        if (z.freezeT > 0) Art.drawGlow(ctx, '#8fe9ff', z.x, an.ey + z.r, z.r * 2.1, 0.22);
+        if (z.shockT > 0 && Math.sin(R.time * 47 + z.y) > 0.2) Art.drawGlow(ctx, '#bfe9ff', z.x, an.ey + z.r, z.r * 2.2, 0.4);
+        if ((z.dazeT > 0 || z.stun > 0.35) && z.freezeT <= 0) {
+          ctx.fillStyle = '#ffe14d';
+          for (let i = 0; i < 3; i++) {
+            const t = R.time * 4 + (i * U.TAU) / 3;
+            sparkle(z.x + Math.cos(t) * z.r * 0.9, an.ey - 6 + Math.sin(t) * z.r * 0.35, 3, 0.85);
+          }
+        }
+        ctx.fillStyle = z.eye;
+        ctx.globalAlpha = 0.35 * a;
+        ctx.beginPath();
+        ctx.arc(an.ex, an.ey, 3.6, 0, U.TAU);
+        ctx.fill();
+        ctx.globalAlpha = a;
+        ctx.beginPath();
+        ctx.arc(an.ex, an.ey, 1.4, 0, U.TAU);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        continue;
+      }
       if (z.burnT > 0) Art.drawGlow(ctx, '#ff7a1a', z.x, z.y, z.r * 2.1, 0.32 + 0.12 * Math.sin(R.time * 19 + z.x));
       if (z.freezeT > 0) Art.drawGlow(ctx, '#8fe9ff', z.x, z.y, z.r * 1.9, 0.22);
       if (z.shockT > 0 && Math.sin(R.time * 47 + z.y) > 0.2) Art.drawGlow(ctx, '#bfe9ff', z.x, z.y, z.r * 2, 0.4);
@@ -3023,6 +3277,7 @@
     }
   };
 
+  const zOrder = [];
   function drawFrame(dt) {
     R.time += dt;
     frameDt = Math.min(0.1, dt);
@@ -3064,7 +3319,8 @@
     drawGround(power);
     drawHazards();
     drawLure();
-    for (const zb of Zs.list) if (inView(zb.x, zb.y, 40)) drawZombie(zb);
+    const upright = R.zstyle === 'animated';
+    if (!upright) for (const zb of Zs.list) if (inView(zb.x, zb.y, 40)) drawZombie(zb);
     if (inGame) drawAllies();
     const N = GW.Net;
     if (inGame && N && N.active)
@@ -3076,6 +3332,14 @@
     if (inGame && P.alive) drawPlayer(P);
     else if (inGame && P.downed) drawDowned(P);
     blitTiles(MA.top, layerMask(masks, 'top', MA.top), 0, 0, 1); // wall tops + props: about a third of it is empty
+    if (upright) {
+      // upright (side-view) zombies stand in front of the walls behind them: drawn over the wall
+      // tops, back to front so the nearer ones overlap the farther ones
+      zOrder.length = 0;
+      for (const zb of Zs.list) if (inView(zb.x, zb.y, 70)) zOrder.push(zb);
+      zOrder.sort((p, q) => p.y - q.y);
+      for (const zb of zOrder) drawZombie(zb);
+    }
     drawDoors();
     drawShutter();
     drawPlanks();

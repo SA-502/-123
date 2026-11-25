@@ -400,6 +400,38 @@
     return out;
   };
 
+  /* ---------------- animated zombie sheets ---------------- */
+  /*
+   * Side-view frame sheets (assets/zombies/sheets/<type>.webp, 4 x 4 cells): row 0 walk, 1 attack,
+   * 2 death, 3 crawl, all facing right. tools/prep_zombie_sheets.py cleaned and aligned them (feet
+   * on the line y = base, torso on x = cell / 2) and wrote this table: per type the standing height
+   * of the figure in cell pixels (h) and, per frame, the top of the head (for the glowing eyes).
+   */
+  Art.SHEET_META = {"cell":192,"base":182,"types":{"walker":{"h":165,"head":[[110,28],[111,31],[110,31],[109,30],[123,29],[98,21],[89,31],[119,34],[109,24],[129,37],[134,71],[91,127],[116,80],[115,84],[118,96],[118,108]]},"helmet":{"h":177,"head":[[107,19],[109,18],[107,24],[107,18],[116,24],[114,26],[116,29],[118,27],[121,37],[129,65],[109,102],[94,119],[128,67],[129,67],[129,67],[129,73]]},"spitter":{"h":159,"head":[[111,36],[112,37],[113,39],[114,37],[118,27],[119,34],[107,35],[113,40],[109,35],[111,60],[109,113],[108,111],[106,101],[110,74],[104,75],[116,90]]},"bloater":{"h":157,"head":[[96,33],[98,38],[97,41],[96,33],[101,21],[98,20],[93,42],[93,51],[99,39],[105,56],[90,79],[80,101],[97,60],[97,66],[101,82],[100,89]]},"leaper":{"h":150,"head":[[152,46],[131,36],[154,58],[140,40],[127,55],[134,23],[97,19],[124,70],[71,30],[58,63],[76,91],[102,129],[117,69],[125,76],[119,79],[130,109]]},"brute":{"h":157,"head":[[101,39],[109,39],[106,39],[106,51],[100,34],[99,18],[98,22],[102,69],[98,37],[94,66],[103,82],[120,111],[108,73],[113,81],[107,86],[112,73]]}}};
+  const sheetCache = {};
+  /** The sheet image for a zombie type, or null (not loaded / no sheet). */
+  Art.sheet = (type) => Art.sprite('zs_' + type);
+  /**
+   * One frame of a sheet recoloured (`color` a CSS colour laid over the painted pixels, or 'ice'),
+   * cached per type + frame + colour: only the frames actually shown in that state get made.
+   */
+  Art.sheetFrame = function (type, f, color) {
+    const ck = type + '|' + f + '|' + color;
+    if (sheetCache[ck]) return sheetCache[ck];
+    const im = Art.sheet(type);
+    if (!im) return null;
+    const S = Art.SHEET_META.cell, c = mkCanvas(S), g = c.getContext('2d');
+    g.drawImage(im, (f % 4) * S, Math.floor(f / 4) * S, S, S, 0, 0, S, S);
+    if (color === 'ice') paintIce(g, S);
+    else {
+      g.globalCompositeOperation = 'source-atop';
+      g.fillStyle = color;
+      g.fillRect(0, 0, S, S);
+    }
+    sheetCache[ck] = c;
+    return c;
+  };
+
   /* ---------------- power-up pickup tokens ---------------- */
   const tokenCache = {};
   /**
