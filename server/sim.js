@@ -13,7 +13,7 @@ const vm = require('vm');
 
 const ROOT = path.resolve(__dirname, '..');
 // game logic that runs on the server, in the same order as index.html
-const LOGIC = ['utils', 'config', 'map', 'map_gemini', 'weapons', 'zombies', 'boss', 'director', 'player', 'gadgets', 'allies', 'facilities', 'interact', 'game', 'net'];
+const LOGIC = ['utils', 'config', 'map', 'map_gemini', 'map_frostfall', 'weapons', 'zombies', 'boss', 'director', 'player', 'gadgets', 'allies', 'facilities', 'interact', 'quest_frostfall', 'game', 'net'];
 // browser-only modules: replaced by stand-ins
 const STUBBED = ['Art', 'Assets', 'Audio', 'Input', 'Touch', 'MapArt', 'FX', 'Render', 'HUD', 'Perf'];
 

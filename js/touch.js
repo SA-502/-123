@@ -10,6 +10,7 @@
   const DEAD = 0.14; // stick dead zone
   const FIRE_AT = 0.3; // right stick fires once pushed this far ('drag' mode)
   const SPRINT_OVER = 1.08; // left stick: sprint only when the thumb goes past the ring (the knob stays on the rim)
+  const LOCK_IDLE = 1.0; // sprint lock: let go of the move stick this long (s) and it switches off
   const AIM_KEY = 'gravewave.aim';
   let lastTouch = 0;
 
@@ -207,8 +208,10 @@
    * thumbs want them and pick their size and see-through. Saved per device.
    * ------------------------------------------------------------------ */
   const LAYOUT_KEY = 'gravewave.buttons';
-  const EDITABLE = ['tb-use', 'tb-reload', 'tb-swap', 'tb-nade', 'tb-tac', 'tb-knife', 'tb-sentry', 'tb-dash', 'tb-pause'];
-  const NAMES = { 'tb-use': 'USE', 'tb-reload': 'RELOAD', 'tb-swap': 'SWAP', 'tb-nade': 'NADE', 'tb-tac': 'TAC', 'tb-knife': 'KNIFE', 'tb-sentry': 'SENTRY', 'tb-dash': 'DASH', 'tb-pause': 'PAUSE' };
+  const EDITABLE = ['tb-use', 'tb-reload', 'tb-swap', 'tb-nade', 'tb-tac', 'tb-knife', 'tb-sentry', 'tb-dash', 'tb-sprint', 'tb-pause'];
+  const NAMES = { 'tb-use': 'USE', 'tb-reload': 'RELOAD', 'tb-swap': 'SWAP', 'tb-nade': 'NADE', 'tb-tac': 'TAC', 'tb-knife': 'KNIFE', 'tb-sentry': 'SENTRY', 'tb-dash': 'DASH', 'tb-sprint': 'SPRINT', 'tb-pause': 'PAUSE' };
+  /** Buttons added after a player saved a layout start here (centre as a fraction of the screen). */
+  const NEW_DEFAULTS = { 'tb-sprint': { x: 0.27, y: 0.55, s: 1 } };
   /** { a: see-through 0.25..1, b: { id: { x, y, s } } }: x, y = the button's centre as a fraction of the screen. null = default layout. */
   TC.layout = null;
   TC.editing = false;
@@ -218,7 +221,10 @@
   function loadLayout() {
     try {
       const v = JSON.parse(localStorage.getItem(LAYOUT_KEY) || 'null');
-      if (v && v.b) TC.layout = v;
+      if (v && v.b) {
+        for (const id in NEW_DEFAULTS) if (!v.b[id]) v.b[id] = Object.assign({}, NEW_DEFAULTS[id]);
+        TC.layout = v;
+      }
     } catch (e) {
       /* storage unavailable or bad data: default layout */
     }
@@ -413,16 +419,15 @@
       stickL,
       (x, y, m, held, over) => {
         const t = In.touch;
-        const sprint = held && m >= DEAD && over >= SPRINT_OVER;
-        stickL.classList.toggle('sprint', sprint);
+        stickHeld = held;
+        stickSprint = held && m >= DEAD && over >= SPRINT_OVER;
+        t.sprint = stickSprint || TC.sprintLock;
         if (m < DEAD) {
           t.mx = t.my = 0;
-          t.sprint = false;
           return;
         }
         t.mx = x;
         t.my = y;
-        t.sprint = sprint;
       },
       true
     );
@@ -447,6 +452,15 @@
     );
     TC.setAimMode(TC.aimMode);
     initEditor();
+    // sprint lock: a tap switches it on or off (no key code: it is a switch, not a held key)
+    const sprintBtn = byId('tb-sprint');
+    if (sprintBtn)
+      sprintBtn.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'mouse' || TC.editing) return;
+        e.preventDefault();
+        e.stopPropagation();
+        TC.setSprintLock(!TC.sprintLock);
+      });
     // the minimap: tap it for the big map
     const mapBtn = document.getElementById('tb-map');
     if (mapBtn)
@@ -511,9 +525,40 @@
     }
   };
 
+  /*
+   * Sprint lock (the running-man button). Tap: you keep sprinting while you move, no need to hold
+   * the stick past the ring. It switches off when you tap it again, when you run out of breath, or
+   * when you stop: let go of the move stick for about a second (a quick re-grip doesn't count, and
+   * you can tap it first and start moving within that second). Firing still pauses the sprint, as
+   * with Shift; it picks up again when you stop shooting.
+   */
+  let stickHeld = false, stickSprint = false, idleT = 0, lastSync = 0;
+  TC.sprintLock = false;
+  TC.setSprintLock = function (on) {
+    TC.sprintLock = !!on;
+    idleT = 0;
+    In.touch.sprint = stickSprint || TC.sprintLock;
+    const b = byId('tb-sprint');
+    if (b) {
+      b.classList.toggle('on', TC.sprintLock);
+      b.setAttribute('aria-pressed', TC.sprintLock ? 'true' : 'false');
+    }
+  };
+
   /** Called by the HUD each frame so contextual buttons only show when they do something. */
   TC.sync = function (P, promptOk) {
     if (!TC.enabled) return;
+    const now = performance.now(), dt = Math.min(0.25, (now - (lastSync || now)) / 1000);
+    lastSync = now;
+    if (TC.sprintLock) {
+      idleT = stickHeld && (In.touch.mx || In.touch.my) ? 0 : idleT + dt;
+      if (idleT >= LOCK_IDLE || P.exhausted || !P.alive) TC.setSprintLock(false);
+    }
+    In.touch.sprint = stickSprint || TC.sprintLock;
+    const sb = byId('tb-sprint');
+    if (sb) sb.classList.toggle('run', !!P.sprinting);
+    const sl = byId('stick-l');
+    if (sl) sl.classList.toggle('sprint', !!P.sprinting && stickHeld);
     const use = document.getElementById('tb-use');
     if (use) use.classList.toggle('ready', !!promptOk);
     const sentry = document.getElementById('tb-sentry');
@@ -522,11 +567,32 @@
     if (tac) tac.classList.toggle('hidden', !P.tactical.type);
     const nade = document.getElementById('tb-nade');
     if (nade) nade.classList.toggle('empty', P.grenades <= 0);
+    badge('tb-nade-n', P.grenades);
+    const tt = P.tactical.type;
+    if (tac && tt && tac.dataset.t !== tt) {
+      // the tactical button shows what you carry: cryo snowflake, lure beacon, bubble dome
+      tac.dataset.t = tt;
+      const ico = byId('tb-tac-ico'), def = GW.TACTICALS[tt];
+      if (ico) ico.setAttribute('href', byId('i-' + tt) ? '#i-' + tt : '#i-tac');
+      if (def) tac.style.setProperty('--tc', def.color);
+    }
+    if (tac) {
+      tac.classList.toggle('empty', !!tt && P.tactical.count <= 0);
+      badge('tb-tac-n', tt ? P.tactical.count : '');
+    }
     const dash = document.getElementById('tb-dash');
     if (dash) dash.classList.toggle('cool', P.dashCd > 0 || P.stamina < C.PLAYER.dash.stamina * 0.4);
     const swap = document.getElementById('tb-swap');
     if (swap) swap.classList.toggle('hidden', P.weapons.length < 2);
   };
+
+  /** A count on a button (only touched when it changes). */
+  function badge(id, v) {
+    const el = byId(id);
+    if (!el) return;
+    const s = v === '' || v == null ? '' : String(v);
+    if (el.textContent !== s) el.textContent = s;
+  }
 
   /** Tap-to-fire target: the nearest zombie in sight and in range (in front wins a close tie). */
   TC.autoTarget = function (P) {

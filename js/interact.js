@@ -35,6 +35,7 @@
     I.pap = { state: 'idle', t: 0, weapon: null, anim: 0, modIdx: 0, modT: 0 };
     build();
     GW.Facilities.buildInteractables(I.list, I.ui);
+    if (GW.Quest) GW.Quest.reset(I.list, I.ui); // map side quests (js/quest_frostfall.js)
   };
 
   /* ------------------------------------------------------------------ */
@@ -43,6 +44,7 @@
   function build() {
     // --- buyable doors ---
     for (const d of M.doors) {
+      if (d.lock) continue; // Overclocker lockdown shutters (facilities.js) are not for sale
       if (d.power) {
         I.list.push({
           kind: 'gate', ref: d,
@@ -115,7 +117,7 @@
         dist: wallDist(g),
         prompt(p) {
           if (I.zonePower[g.zone]) return null;
-          if (p.fuses > 0) return ok('Press ' + key('F') + ' to insert a fuse and power ' + zn.name + (g.zone === M.Z.SUB ? ' <span class="dim">opens the Overclock Stage</span>' : ''));
+          if (p.fuses > 0) return ok('Press ' + key('F') + ' to insert a fuse and power ' + zn.name + (g.zone === M.Z.SUB ? ' <span class="dim">opens the ' + M.gate.name + '</span>' : ''));
           return info(zn.name + ' generator — needs a fuse');
         },
         use(p) {
@@ -214,7 +216,7 @@
           const w = p.weapon();
           if (!w) return info('No weapon to overclock');
           if (w.tier >= 3) return info(w.s.name + ' is fully overclocked');
-          return ok('Press ' + key('F') + ' to overclock ' + w.s.name + (w.tier ? ' to tier ' + (w.tier + 1) : '') + ' ' + cost(C.COSTS.papTiers[w.tier]));
+          return ok('Press ' + key('F') + ' to overclock ' + w.s.name + (w.tier ? ' to tier ' + (w.tier + 1) : '') + GW.Facilities.lockNote() + ' ' + cost(C.COSTS.papTiers[w.tier]));
         },
         use(p) {
           const k = I.pap;
@@ -240,6 +242,7 @@
           k.state = 'working';
           k.t = 3.4;
           A.play('papWork');
+          GW.Facilities.onOverclock(); // the round's first upgrade seals the room (docs/LOCKDOWN.md)
         },
       });
     }
@@ -290,7 +293,7 @@
     FX.flash = Math.max(FX.flash, 0.25);
     FX.shake(7);
     const n = I.poweredCount(), total = M.generators.length;
-    GW.Game.announce(M.zones[z].short + ' POWERED', n + ' / ' + total + ' generators online' + (z === M.Z.SUB ? ' · Overclock Stage unlocked' : ''), M.zones[z].color);
+    GW.Game.announce(M.zones[z].short + ' POWERED', n + ' / ' + total + ' generators online' + (z === M.Z.SUB ? ' · ' + M.gate.name + ' unlocked' : ''), M.zones[z].color);
   };
 
   /** Debug / test helper: everything on. */
@@ -631,15 +634,20 @@
 
   /** One-line current objective for the HUD. */
   I.objective = function () {
+    const q = GW.Quest && GW.Quest.objective ? GW.Quest.objective() : null; // a map's own wording / side quest
+    if (q) return q;
     const z = M.zones, P = GW.Player;
     const n = I.poweredCount(), total = M.generators.length;
     if (P.fuses > 0) return 'Insert your fuse into a zone generator (' + n + '/' + total + ' online)';
     if (n === 0 && !z[1].open && !z[2].open && !z[3].open) return 'Earn points, open the park and search for fuses';
     if (n === 0) return 'Search the park for a fuse and power a generator';
-    if (!I.powered(M.Z.SUB)) return 'Power the Substation to unlock the Overclock Stage (' + n + '/' + total + ')';
-    if (!I.everUpgraded && I.powered(M.Z.VAULT)) return 'Overclock a weapon on the Overclock Stage [5000]';
-    if (n < total) return 'Restore the park: ' + n + '/' + total + ' generators online';
-    if (!I.everUpgraded) return 'Overclock a weapon on the Overclock Stage [5000]';
+    const lum = !M.theme; // Lumina Pier keeps its own wording; other maps name their own rooms
+    const sub = lum ? 'Substation' : M.zones[M.Z.SUB].name, room = lum ? 'Overclock Stage' : M.zones[M.Z.VAULT].name;
+    if (!I.powered(M.Z.SUB)) return lum ? 'Power the Substation to unlock the Overclock Stage (' + n + '/' + total + ')' : 'Power the ' + sub + ' to open the ' + room + ' (' + n + '/' + total + ')';
+    const up = lum ? 'Overclock a weapon on the Overclock Stage [5000]' : 'Overclock a weapon in the ' + room + ' [5000]';
+    if (!I.everUpgraded && I.powered(M.Z.VAULT)) return up;
+    if (n < total) return (lum ? 'Restore the park: ' : 'Restore power: ') + n + '/' + total + ' generators online';
+    if (!I.everUpgraded) return up;
     return 'Survive';
   };
 })();

@@ -82,11 +82,28 @@
     "z_leaper": { "file": "zombies/leaper.webp", "w": 256, "h": 256 },
     "z_brute": { "file": "zombies/brute.webp", "w": 256, "h": 256 },
     "z_headliner": { "file": "zombies/headliner.webp", "w": 384, "h": 384 },
+    "zs_walker": { "file": "zombies/sheets/walker.webp", "w": 768, "h": 768 },
+    "zs_helmet": { "file": "zombies/sheets/helmet.webp", "w": 768, "h": 768 },
+    "zs_spitter": { "file": "zombies/sheets/spitter.webp", "w": 768, "h": 768 },
+    "zs_bloater": { "file": "zombies/sheets/bloater.webp", "w": 768, "h": 768 },
+    "zs_leaper": { "file": "zombies/sheets/leaper.webp", "w": 768, "h": 768 },
+    "zs_brute": { "file": "zombies/sheets/brute.webp", "w": 768, "h": 768 },
 
     "gemini_sandstone": { "file": "gemini_map/sandstone.webp", "w": 384, "h": 384, "tile": true },
     "gemini_concrete": { "file": "gemini_map/concrete.webp", "w": 384, "h": 384, "tile": true },
     "gemini_asphalt": { "file": "gemini_map/asphalt.webp", "w": 384, "h": 384, "tile": true },
     "gemini_wall_top": { "file": "gemini_map/wall_top.webp", "w": 384, "h": 384, "tile": true },
-    "gemini_oasis": { "file": "gemini_map/oasis.webp", "w": 384, "h": 384, "tile": true }
+    "gemini_oasis": { "file": "gemini_map/oasis.webp", "w": 384, "h": 384, "tile": true },
+
+    "ff_concourse": { "file": "frostfall/concourse.webp", "w": 384, "h": 384, "tile": true },
+    "ff_platform": { "file": "frostfall/platform.webp", "w": 768, "h": 768, "tile": true },
+    "ff_ballast": { "file": "frostfall/ballast.webp", "w": 384, "h": 384, "tile": true },
+    "ff_cobble": { "file": "frostfall/cobble.webp", "w": 768, "h": 768, "tile": true },
+    "ff_yard": { "file": "frostfall/yard.webp", "w": 384, "h": 384, "tile": true },
+    "ff_boiler": { "file": "frostfall/boiler.webp", "w": 768, "h": 768, "tile": true },
+    "ff_shed": { "file": "frostfall/shed.webp", "w": 768, "h": 768, "tile": true },
+    "ff_snow": { "file": "frostfall/snow.webp", "w": 384, "h": 384, "tile": true },
+    "ff_ice": { "file": "frostfall/ice.webp", "w": 384, "h": 384, "tile": true },
+    "ff_roof": { "file": "frostfall/roof.webp", "w": 768, "h": 768, "tile": true }
   }
 }

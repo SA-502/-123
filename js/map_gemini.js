@@ -327,11 +327,10 @@
       [76, 22], [77, 43], [90, 49], [73, 64], [87, 58], [17, 57], [23, 66], [50, 66], [35, 68],
     ].map(([tx, ty]) => ({ tx, ty, x: (tx + 0.5) * T, y: (ty + 0.5) * T, zone: M.zone[idx(tx, ty)] }));
 
-    // ---- 3 traps ----
+    // ---- the one trap: Burnout Jets fill the Motor Pool -> Powerhouse tunnel, and while they run a
+    // two-tile wall of diesel fire sweeps up and down its length (time your dash through it) ----
     M.traps = [
-      { kind: 'zap', x: 10, y: 41, w: 3, h: 3, sw: { tx: 13, ty: 40, fx: -1, fy: 0 } },
-      { kind: 'fire', x: 56, y: 41, w: 3, h: 3, sw: { tx: 55, ty: 40, fx: 1, fy: 0 } },
-      { kind: 'laser', x: 33, y: 15, w: 4, h: 2, sw: { tx: 37, ty: 17, fx: 0, fy: 1 } },
+      { kind: 'fire', x: 56, y: 37, w: 3, h: 7, sw: { tx: 55, ty: 40, fx: 1, fy: 0 }, sweep: { band: 2, speed: 1.7 }, hint: 'A wall of fire sweeps the tunnel' },
     ].map((t, i) => Object.assign(t, { id: i, rx: t.x * T, ry: t.y * T, rw: t.w * T, rh: t.h * T, state: 'idle', t: 0, playerT: 0, sfxT: 0 }));
 
     // ---- reinforced safe room ----
@@ -341,25 +340,13 @@
       outside: { x: 12.5 * T, y: 39 * T },
       console: { tx: 18, ty: 39, fx: -1, fy: 0 },
       hatch: { tx: 14, ty: 40 },
+      exit: { tx: 26, ty: 25 }, // the maintenance hatch comes out in the courtyard
       state: 'open', t: 0, cd: 0, warned: false, bangT: 0, hatchT: 0,
     };
 
-    // ---- 4 underground tunnel / fast-travel pads ----
-    M.pads = [
-      { color: '#e09a43', a: { tx: 26, ty: 25 }, b: { tx: 40, ty: 49 } },
-      { color: '#d4b855', a: { tx: 12, ty: 16 }, b: { tx: 63, ty: 33 } },
-      { color: '#c46d3b', a: { tx: 25, ty: 11 }, b: { tx: 31, ty: 39 } },
-      { color: '#4f9da6', a: { tx: 89, ty: 33 }, b: { tx: 36, ty: 64 } },
-    ];
-    for (const pr of M.pads) {
-      pr.cd = 0;
-      for (const k of ['a', 'b']) {
-        const e = pr[k];
-        e.x = (e.tx + 0.5) * T;
-        e.y = (e.ty + 0.5) * T;
-        e.zone = M.zone[idx(e.tx, e.ty)];
-      }
-    }
+    // ---- Overclocker lockdown: the Command Bunker (x29..40, y36..40) is entered only through the
+    // 4-wide corridor under the power gate; it seals for 30 s on the round's first upgrade ----
+    M.papRoom = { x0: 29, y0: 36, x1: 40, y1: 40, gates: [{ tx: 33, ty: 35 }, { tx: 34, ty: 35 }, { tx: 35, ty: 35 }, { tx: 36, ty: 35 }] };
 
     // ---- 6 wall-mounted supply vendors ----
     M.vendors = [

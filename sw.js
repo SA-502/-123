@@ -1,5 +1,7 @@
-/* GRAVEWAVE service worker: network first (so updates arrive immediately), cache as an offline fallback. */
-const CACHE = 'gravewave-v7';
+/* GRAVEWAVE service worker: network first (so updates arrive immediately), cache as an offline fallback.
+   Sound effects (assets/sfx/*.mp3) are fetched by js/audio.js after the first tap and land in the
+   cache through the fetch handler below, so a second visit plays them offline too. */
+const CACHE = 'gravewave-v8';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();

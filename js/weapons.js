@@ -16,22 +16,33 @@
     return { id, def, up: false, tier: 0, mod: null, s: def, clip: def.mag, reserve: def.reserve, cd: 0, reloadT: 0, reloadDur: 0 };
   };
 
+  /**
+   * Stats of a weapon at an Overclocker tier (1..3): the `up` overrides, then the tier's damage
+   * multiplier (per weapon: `up.tiers`, else CFG.TIER.dmg), more magazine, a little more fire rate,
+   * a bigger share of max health for blades and flames, longer chains for the Arc Caster.
+   */
+  Wp.tierStats = function (def, tier) {
+    const TR = C.TIER, i = tier - 1;
+    const s = Object.assign({}, def, def.up);
+    delete s.up;
+    const m = (s.tiers || TR.dmg)[i];
+    s.dmg = Math.round(s.dmg * m);
+    if (s.splash) s.splash = Math.round(s.splash * m);
+    if (s.mag > 1) s.mag = Math.round(s.mag * TR.mag[i]);
+    s.reserve = Math.round(s.reserve * TR.mag[i]);
+    s.rpm = Math.round(s.rpm * TR.rpm[i]);
+    if (s.chain) s.chain += i * 2;
+    if (s.frac) s.frac = s.type === 'melee' ? Math.min(0.9, s.frac + TR.frac[i]) : s.frac * (1 + 0.25 * i);
+    if (s.burn) s.burn *= 1 + 0.25 * i;
+    s.name += TR.suffix[i];
+    s.tier = tier;
+    return s;
+  };
+
   /** Apply the Overclocker upgrade: merged stats, new name, full ammo. */
   Wp.upgrade = function (w) {
-    const TR = C.TIER;
     w.tier = Math.min(3, (w.tier || 0) + 1);
-    const i = w.tier - 1;
-    const s = Object.assign({}, w.def, w.def.up);
-    delete s.up;
-    // tiers II and III multiply the overclocked stats again
-    s.dmg = Math.round(s.dmg * TR.dmg[i]);
-    if (s.splash) s.splash = Math.round(s.splash * TR.dmg[i]);
-    s.mag = Math.round(s.mag * TR.mag[i]);
-    s.reserve = Math.round(s.reserve * TR.mag[i]);
-    if (s.chain) s.chain += i * 4;
-    if (s.frac) s.frac = Math.min(1, s.frac * (1 + 0.5 * i));
-    s.name += TR.suffix[i];
-    s.tier = w.tier;
+    const s = Wp.tierStats(w.def, w.tier);
     s.mod = w.mod;
     w.up = true;
     w.s = s;
@@ -45,6 +56,8 @@
     if (!w || w.reloadT > 0 || w.clip >= w.s.mag || w.reserve <= 0) return false;
     w.reloadDur = w.s.reload * (player.perks.quick ? 0.5 : 1);
     w.reloadT = w.reloadDur;
+    // Quick Hands: green sparks at the hands, so the faster reload reads as the perk
+    if (player.perks.quick && player.x !== undefined) FX.burst(player.x + Math.cos(player.angle) * 12, player.y + Math.sin(player.angle) * 12, 6, '#3dff8b', 150);
     A.play('reloadStart');
     return true;
   };
@@ -105,8 +118,11 @@
     }
 
     const flashCol = w.up || s.cls === 'energy' ? s.color : '#ffd68a';
-    FX.light(mx, my, s.pellets > 1 ? 210 : 150, flashCol, 0.07);
-    FX.sparks(mx, my, a, s.pellets > 1 ? 7 : 3, flashCol, 320, 0.35);
+    const tier = w.tier || 0;
+    FX.light(mx, my, (s.pellets > 1 ? 210 : 150) * (1 + 0.28 * tier), flashCol, 0.07 + 0.015 * tier);
+    FX.sparks(mx, my, a, (s.pellets > 1 ? 7 : 3) + tier * 2, flashCol, 320 + 50 * tier, 0.35 + 0.05 * tier);
+    if (tier) FX.muzzle(mx, my, a, flashCol, tier, s.mod ? GW.MODS[s.mod].color : null);
+    if (p.perks.twin && Math.random() < 0.5) FX.sparks(mx, my, a, 1, '#ff7a1a', 380, 0.25); // Twin Trigger
     if (s.cls !== 'energy') FX.casing(p.x + ca * 8, p.y + sa * 8, a);
     FX.shake(s.kick * 0.55);
     p.recoil = 1;
@@ -180,11 +196,11 @@
     let kill = false;
     for (const z of hits) {
       const dir = Math.atan2(z.y - p.y, z.x - p.x);
-      const killed = GW.Zombies.damage(z, Wp.bladeDamage(z, s.dmg, s.frac), { melee: true, dir });
+      const dmg = Wp.bladeDamage(z, s.dmg, s.frac);
+      const killed = GW.Zombies.damage(z, dmg, { melee: true, dir });
       if (killed) kill = true;
-      else GW.Game.addPoints(C.POINTS.hit, z.x, z.y - z.r, { small: true });
-      if (s.mod) Wp.applyMod(z, s, dir);
-      FX.sparks(z.x, z.y, dir, 5, s.color, 260);
+      if (s.mod) Wp.applyMod(z, s, dir); // the flat blade damage: the %-of-health part stays on this zombie
+      FX.sparks(z.x, z.y, dir, 5 + (s.tier || 0) * 2, s.color, 260);
     }
     p.stats.hits++;
     FX.hit(kill, false);
@@ -223,7 +239,8 @@
       const killed = GW.Zombies.damage(z, dmg, { burn: true, dir: a });
       any = true;
       if (killed) kill = true;
-      else if (Math.random() < 0.25) GW.Game.addPoints(C.POINTS.hit, z.x, z.y - z.r, { small: true });
+      // a flame tick touches many zombies ten times a second: its mod procs far less often per tick
+      if (s.mod && Math.random() < 0.25) Wp.applyMod(z, s, a);
     }
     FX.flame(mx, my, a, reach, s.spread, w.up ? s.color : null);
     FX.light(mx + ca * reach * 0.5, my + sa * reach * 0.5, reach * 1.2, w.up ? s.color : '#ff8a2a', 0.08);
@@ -242,32 +259,67 @@
   Wp.setMod = function (w, mod) {
     w.mod = mod;
     if (w.s !== w.def) w.s.mod = mod;
+    if (GW.Player && GW.Player.alive) Wp.celebrate(GW.Player, w);
+  };
+
+  /** The moment a freshly overclocked weapon comes out of the machine: rings, light, its name, its mod. */
+  Wp.celebrate = function (p, w) {
+    const s = w.s, tier = w.tier || 1;
+    const modCol = w.mod ? GW.MODS[w.mod].color : '#ffffff';
+    FX.ring(p.x, p.y, 70 + 40 * tier, s.color, 0.55, 5 + tier);
+    FX.ring(p.x, p.y, 40 + 25 * tier, modCol, 0.45, 3);
+    FX.light(p.x, p.y, 320 + 80 * tier, s.color, 0.6);
+    FX.burst(p.x, p.y, 18 + tier * 8, s.color, 380);
+    FX.burst(p.x, p.y, 12, modCol, 260);
+    for (let i = 0; i < 6 + tier * 2; i++) {
+      const a = (i / (6 + tier * 2)) * U.TAU;
+      FX.tracer(p.x + Math.cos(a) * 18, p.y + Math.sin(a) * 18, p.x + Math.cos(a) * (70 + 30 * tier), p.y + Math.sin(a) * (70 + 30 * tier), i % 2 ? modCol : s.color, 2 + tier, 0.35, true);
+    }
+    FX.flash = Math.max(FX.flash || 0, 0.25 + 0.08 * tier);
+    FX.shake(5 + tier * 2);
+    FX.popup(p.x, p.y - 46, s.name, s.color, 18 + tier * 2, 1.8);
+    if (w.mod) FX.popup(p.x, p.y - 24, GW.MODS[w.mod].name.toUpperCase(), modCol, 14, 1.8);
   };
 
   /** Chance for one projectile to trigger its ammo mod: slow guns proc often, bullet hoses rarely. */
   function modChance(s) {
-    return Math.min(0.5, 110 / s.rpm) / Math.sqrt(s.pellets || 1);
+    const MC = C.MOD;
+    return U.clamp(MC.procBase / s.rpm, MC.procMin, MC.procMax) / Math.sqrt(s.pellets || 1);
+  }
+  Wp.modChance = modChance;
+
+  /** A share of a normal zombie's health this round: keeps mod damage useful on low-damage guns. */
+  function roundHp(f) {
+    return GW.Rounds.health(Math.max(1, GW.Director.round || 1)) * f;
   }
 
-  /** Roll and apply an ammo mod on a zombie that was just hit (and survived, or not). */
-  Wp.applyMod = function (z, s, ang) {
-    if (!s.mod || Math.random() > modChance(s)) return;
+  /**
+   * Roll and apply an ammo mod on a zombie that was just hit (and survived, or not).
+   * dmg: the damage of the hit that carried it (defaults to the weapon's damage).
+   * Status fields it sets on zombies: burnT / burnDps / burnTick (Inferno), shockT + dazeT (Arc),
+   * frost (stacks) / slowT / freezeT (Frost), blastT (Blast).
+   */
+  Wp.applyMod = function (z, s, ang, dmg) {
+    if (!s.mod || Math.random() > modChance(s)) return false;
     const MC = C.MOD, Zs = GW.Zombies;
     const big = z.type === 'brute' || z.type === 'boss';
+    const hit = dmg || s.dmg;
     if (s.mod === 'fire') {
-      if (z.dead) return;
+      if (z.dead) return false;
       z.burnT = MC.burnTime;
-      z.burnDps = z.maxHp * (big ? MC.burnFracBig : MC.burnFrac);
+      z.burnDps = Math.max(z.burnDps && z.burnT > 0 ? z.burnDps : 0, z.maxHp * (big ? MC.burnFracBig : MC.burnFrac));
       z.burnTick = 0.25;
-      FX.burst(z.x, z.y, 6, '#ff7a1a', 180);
+      FX.flame(z.x, z.y + 6, -Math.PI / 2, 46, 0.7, null);
+      FX.burst(z.x, z.y, 10, '#ff7a1a', 220);
+      FX.light(z.x, z.y, 110, '#ff7a1a', 0.25);
       A.play('modFire', { x: z.x, y: z.y });
     } else if (s.mod === 'shock') {
-      const hit = [z];
+      const chain = [z];
       let px = z.x, py = z.y;
       for (let j = 0; j < MC.shockJumps; j++) {
         let nxt = null, bd = MC.shockRange;
         for (const o of Zs.list) {
-          if (o.dead || hit.indexOf(o) >= 0) continue;
+          if (o.dead || chain.indexOf(o) >= 0) continue;
           const d = U.dist(px, py, o.x, o.y);
           if (d < bd && M.los(px, py, o.x, o.y, M.blocksBullet)) {
             bd = d;
@@ -275,42 +327,67 @@
           }
         }
         if (!nxt) break;
-        FX.bolt(px, py, nxt.x, nxt.y, '#8fd8ff', 0.2, 2.5);
-        hit.push(nxt);
+        FX.bolt(px, py, nxt.x, nxt.y, '#8fd8ff', 0.28, 4);
+        FX.bolt(px, py, nxt.x, nxt.y, '#ffffff', 0.16, 1.6);
+        FX.burst(nxt.x, nxt.y, 6, '#bfe9ff', 220);
+        chain.push(nxt);
         px = nxt.x;
         py = nxt.y;
       }
-      for (let j = 1; j < hit.length; j++) {
-        const o = hit[j];
-        if (o.type !== 'boss') o.dazeT = Math.max(o.dazeT || 0, 0.6);
-        if (!Zs.damage(o, s.dmg * MC.shockMult, { shock: true, dir: Math.atan2(o.y - z.y, o.x - z.x) })) GW.Game.addPoints(C.POINTS.hit, o.x, o.y - o.r, { small: true });
+      FX.burst(z.x, z.y, 8, '#8fd8ff', 260);
+      FX.light(z.x, z.y, 140, '#8fd8ff', 0.22);
+      if (!z.dead) z.shockT = 0.6;
+      const zap = Math.max(hit * MC.shockMult, roundHp(MC.shockFloor));
+      for (let j = 1; j < chain.length; j++) {
+        const o = chain[j];
+        o.shockT = 0.6;
+        if (o.type !== 'boss') o.dazeT = Math.max(o.dazeT || 0, MC.shockDaze);
+        Zs.damage(o, zap, { shock: true, dir: Math.atan2(o.y - z.y, o.x - z.x) });
       }
-      if (hit.length > 1) A.play('modShock', { x: z.x, y: z.y });
+      A.play('modShock', { x: z.x, y: z.y });
     } else if (s.mod === 'frost') {
-      if (z.dead || big) return;
+      if (z.dead || big) return false;
       z.frost = (z.frost || 0) + 1;
       z.slowT = Math.max(z.slowT || 0, MC.frostSlow);
+      FX.sparks(z.x, z.y, (ang || 0) + Math.PI, 7, '#bff4ff', 200, 1.4);
+      FX.ring(z.x, z.y, 22, '#8fe9ff', 0.2, 2);
       if (z.frost >= MC.frostStacks) {
         z.frost = 0;
         z.freezeT = Math.max(z.freezeT || 0, MC.frostFreeze);
-        FX.ring(z.x, z.y, 40, '#8fe9ff', 0.3, 3);
-        FX.burst(z.x, z.y, 10, '#bff4ff', 200);
+        if (z.state === 'attack') z.state = 'chase';
+        FX.ring(z.x, z.y, 52, '#8fe9ff', 0.4, 4);
+        FX.ring(z.x, z.y, 30, '#ffffff', 0.25, 2);
+        FX.burst(z.x, z.y, 18, '#bff4ff', 280);
+        FX.light(z.x, z.y, 150, '#8fe9ff', 0.35);
         A.play('modFrost', { x: z.x, y: z.y });
       }
     } else if (s.mod === 'blast') {
-      FX.ring(z.x, z.y, MC.blastR, '#ffd426', 0.25, 4);
-      FX.burst(z.x, z.y, 10, '#ffd426', 260);
-      FX.light(z.x, z.y, MC.blastR * 2.4, '#ffd426', 0.15);
-      A.play('modBlast', { x: z.x, y: z.y });
+      const bx = z.x, by = z.y;
+      FX.ring(bx, by, MC.blastR, '#ffd426', 0.3, 5);
+      FX.ring(bx, by, MC.blastR * 0.55, '#ffffff', 0.18, 3);
+      FX.burst(bx, by, 16, '#ffd426', 320);
+      FX.smoke(bx, by, 3);
+      FX.light(bx, by, MC.blastR * 2.6, '#ffd426', 0.2);
+      FX.shake(2.5);
+      A.play('modBlast', { x: bx, y: by });
+      const boom = Math.max(hit * MC.blastMult, roundHp(MC.blastFloor));
       for (const o of Zs.list.slice()) {
         if (o.dead) continue;
-        const d = U.dist(z.x, z.y, o.x, o.y) - o.r;
+        const d = U.dist(bx, by, o.x, o.y) - o.r;
         if (d > MC.blastR) continue;
-        if (!Zs.damage(o, s.dmg * MC.blastMult * (1 - 0.5 * Math.max(0, d) / MC.blastR), { explosive: true, dir: Math.atan2(o.y - z.y, o.x - z.x) }) && o !== z) {
-          GW.Game.addPoints(C.POINTS.hit, o.x, o.y - o.r, { small: true });
-        }
+        o.blastT = 0.3;
+        Zs.damage(o, boom * (1 - (0.5 * Math.max(0, d)) / MC.blastR), { explosive: true, dir: Math.atan2(o.y - by, o.x - bx) });
       }
     }
+    return true;
+  };
+
+  /** Floating damage number: crits always, big hits sometimes (throttled per zombie). */
+  Wp.damageText = function (z, dmg, crit) {
+    if (!(dmg >= 1) || z.dmgTxtT > (crit ? 0.08 : 0)) return;
+    if (!crit && dmg < z.maxHp * 0.3) return;
+    z.dmgTxtT = 0.2;
+    FX.popup(z.x + U.rand(-10, 10), z.y - z.r - 10, String(Math.round(dmg)), crit ? '#ff7a8a' : '#ffffff', crit ? 13 : 11, 0.6);
   };
 
   /**
@@ -349,15 +426,16 @@
         const f = h.t / s.range;
         if (f > 0.55) d *= U.lerp(1, 0.35, (f - 0.55) / 0.45);
       }
+      const hp0 = z.hp;
       const killed = GW.Zombies.damage(z, d, { crit: crit && !ally, critMult: s.crit, dir: ang, ally, weapon: s, hitT: h.t });
       shot.hitAny = true;
       if (crit) shot.crit = true;
-      if (!ally && s.mod) Wp.applyMod(z, s, ang);
-      if (killed) shot.killAny = true;
-      else if (!ally && !shot.hits.has(z.id)) {
-        shot.hits.add(z.id);
-        GW.Game.addPoints(C.POINTS.hit, z.x, z.y - z.r, { small: true });
+      if (!ally) {
+        if (s.mod && !shot.hits.has(z.id)) Wp.applyMod(z, s, ang, d);
+        if (crit || s.pellets === 1) Wp.damageText(z, Math.min(d, hp0 > 0 ? hp0 : d), crit);
       }
+      shot.hits.add(z.id);
+      if (killed) shot.killAny = true;
       count++;
       dmg *= 0.8;
       if (count >= s.pierce) endD = h.t;
@@ -365,13 +443,16 @@
 
     const ex = ox + dx * endD, ey = oy + dy * endD;
     if (upgraded) {
-      const tk = 1 + 0.4 * ((s.tier || 1) - 1);
-      FX.tracer(mx, my, ex, ey, s.color, (s.pellets > 1 ? 2.2 : 3.2) * tk, 0.13, true);
-      // tier III fires a visible twin beam; modded rounds carry a coloured core
-      if (s.tier >= 3 || s.mod) {
-        const ox2 = -dy * 2.5, oy2 = dx * 2.5;
-        FX.tracer(mx + ox2, my + oy2, ex + ox2, ey + oy2, s.mod ? GW.MODS[s.mod].color : s.color, 1.4 * tk, 0.16, true);
+      // thicker, longer-lived beams per tier; tier II+ adds a mod-coloured side beam, tier III a second one
+      const tier = s.tier || 1, tk = 1 + 0.45 * (tier - 1), pel = s.pellets > 1;
+      FX.tracer(mx, my, ex, ey, s.color, (pel ? 2.2 : 3.2) * tk, 0.11 + 0.03 * tier, true);
+      if (!pel || Math.random() < 0.35) {
+        const ox2 = -dy * (2 + tier), oy2 = dx * (2 + tier);
+        const side = s.mod ? GW.MODS[s.mod].color : s.color;
+        if (tier >= 2 || s.mod) FX.tracer(mx + ox2, my + oy2, ex + ox2, ey + oy2, side, 1.2 * tk, 0.15, true);
+        if (tier >= 3) FX.tracer(mx - ox2, my - oy2, ex - ox2, ey - oy2, side, 1.2 * tk, 0.15, true);
       }
+      if (count) FX.sparks(ex, ey, ang + Math.PI, 1 + tier, s.color, 240, 0.8);
     } else if (look && look[0] === '#') FX.tracer(mx, my, ex, ey, look, 1.8, 0.09, true);
     else FX.tracer(mx, my, ex, ey, '#ffe7a3', s.pellets > 1 ? 1 : 1.5, 0.07, false);
     if (endD === wallD && wallD < s.range - 0.5) FX.sparks(ex, ey, ang + Math.PI, ally ? 2 : 4, upgraded ? s.color : look && look[0] === '#' ? look : '#ffd68a', 200);
@@ -426,7 +507,7 @@
       const killed = GW.Zombies.damage(z, dmg, { dir: Math.atan2(z.y - p.y, z.x - p.x), shock: true });
       shot.hitAny = true;
       if (killed) shot.killAny = true;
-      else GW.Game.addPoints(C.POINTS.hit, z.x, z.y - z.r, { small: true });
+      else if (s.mod) Wp.applyMod(z, s, Math.atan2(z.y - p.y, z.x - p.x), dmg);
     }
   }
 
@@ -449,10 +530,9 @@
       const ang = Math.atan2(z.y - y, z.x - x);
       z.kx += Math.cos(ang) * 280 * f;
       z.ky += Math.sin(ang) * 280 * f;
-      const killed = Zs.damage(z, U.lerp(dmgMin, dmgMax, f), { explosive: true, dir: ang });
+      const killed = Zs.damage(z, U.lerp(dmgMin, dmgMax, f), { explosive: true, dir: ang, ally: opts.ally });
       any = true;
       if (killed) kill = true;
-      else GW.Game.addPoints(C.POINTS.hit, z.x, z.y - z.r, { small: true });
     }
     if (opts.hurtPlayer) {
       const P = GW.Player;
@@ -529,9 +609,10 @@
         Wp.projectiles.splice(i, 1);
         const s = pr.s;
         if (direct) {
+          const hp0 = direct.hp;
           const killed = Zs.damage(direct, s.dmg, { dir: Math.atan2(uy, ux) });
           if (s.mod) Wp.applyMod(direct, s, Math.atan2(uy, ux));
-          if (!killed) GW.Game.addPoints(C.POINTS.hit, direct.x, direct.y - direct.r, { small: true });
+          Wp.damageText(direct, Math.min(s.dmg, hp0), false);
           FX.hit(killed, false);
         }
         Wp.explode(pr.x, pr.y, s.splashR, s.splash, s.splash * 0.4, { color: pr.color, skip: direct, sound: 'plasmaHit' });

@@ -1,6 +1,6 @@
 # GRAVEWAVE — Last Night at Lumina Pier
 
-An original round-based zombie survival game for the browser. Top-down HTML5 Canvas, zero dependencies, zero build step, all audio synthesised at runtime with the Web Audio API.
+An original round-based zombie survival game for the browser. Top-down HTML5 Canvas, zero dependencies, zero build step. Sound effects are recorded CC0 samples (`assets/sfx`, see `docs/CREDITS.md`) played through a voice-limited Web Audio mixer, each with a synthesised fallback; the soundtrack is synthesised at runtime.
 
 ## Play
 
@@ -18,7 +18,13 @@ then visit `http://localhost:8000`.
 
 ## Controls
 
-On touch screens the left thumb moves (the stick stays inside its ring; push your thumb past the dashed outer ring to sprint) and the right thumb aims and fires, with a gentle aim assist. A fire-mode button (title screen and pause menu) switches between **drag to shoot** and **tap to shoot**, where touching the right side fires straight away at the nearest zombie. DASH slides. Tap the minimap for the big map. USE lights up when there is something to buy; hold it to rebuild a barricade. RELOAD, SWAP, NADE, TAC, KNIFE, SENTRY and pause are on-screen buttons.
+On touch screens the left thumb moves (the stick stays inside its ring; push your thumb past the dashed outer ring to sprint) and the right thumb aims and fires, with a gentle aim assist. A fire-mode button (title screen and pause menu) switches between **drag to shoot** and **tap to shoot**, where touching the right side fires straight away at the nearest zombie. Tap the minimap (the corner arrows) for the big map.
+
+The on-screen buttons are pictures: a hand for USE / buy (it lights up when there is something to buy; hold it to rebuild a barricade), a circular arrow to reload, two arrows to swap weapons, a grenade and the tactical you carry (snowflake = cryo, beacon = lure, dome = bubble) with how many are left on a badge, a knife, `>>` to slide, a drone to put the sentry down, and pause. Drag on a grenade button to aim the throw, or tap to throw at the busiest spot nearby.
+
+**Sprint lock:** the see-through running-man button (left, above the stick). Tap it once and you keep sprinting while you move, no need to hold the stick past the ring. It turns itself off when you tap it again, when you run out of breath, or when you stop: let go of the move stick for about a second (a quick re-grip doesn't count, and you can tap it first and start moving within that second). While it is on it turns yellow with a padlock. Shooting pauses the sprint, as with Shift on a keyboard; it picks up again when you stop shooting. Pausing also turns it off. Pushing the stick past the ring still sprints for as long as you hold it there.
+
+The BUTTONS button (title screen and pause menu, phones) lets you drag every button, sprint included, where your thumbs want it and change its size and see-through; the layout is saved on the phone.
 
 
 | Input | Action |
@@ -40,12 +46,12 @@ On touch screens the left thumb moves (the stick stays inside its ring; push you
 
 ## How it works
 
-- **Rounds** — horde size, zombie health and speed follow the classic survival curves: health +100 per round then ×1.1 compounding from round 10, a 24-base horde scaled by a round multiplier, spawn delay decaying 5% per round, and a rising speed roll that turns walkers into runners into sprinters. At most 24 are alive at once.
-- **Points** — 10 per hit, 60 per kill, 100 for a critical kill (put the shot through the centre of the target), 130 for a knife kill. Points buy everything.
+- **Rounds** — horde size, zombie health and speed follow the classic survival curves: health +100 per round then ×1.1 compounding from round 10, a 24-base horde scaled by a round multiplier, spawn delay decaying 5% per round, and a speed mix that is all walkers for two rounds, brings runners in from round 3 and sprinters from round 9 (never more than 35 % of the horde). Zombies knocked to low health may lose their legs and crawl. At most 24 are alive at once.
+- **Points** — every zombie pays the same whatever the gun: a 20-point pool paid 10 at a time as your damage takes its health, plus 50 for the kill, 80 for a critical kill (put the shot through the centre of the target), 120 for a knife kill. Fast guns can't farm points. Points buy everything. Balance notes: `docs/BALANCE.md`.
 - **Map** — a central plaza plus seven locked zones (arcade, aquarium, speedway, substation, Starwheel Plaza with its Ferris wheel, the maze-like Nightmare Manor, and Pier Nine over open water) and the Overclock Stage, linked by eleven buyable doors that form loops. Zombies tear through barricaded windows you can rebuild, and climb ladders out of the water at the pier.
 - **Weapons** — 19 weapons: a starting pistol, nine wall-buys, and rare crate-only weapons: the Thumper grenade launcher, the Ripper minigun, two blades (Neon Katana and Fire Axe, which cut several zombies per swing and deal a share of their max health), and four wonder weapons (Quasar Blaster, Arc Caster, Photon Ray and the Dragon's Breath flamethrower). The Prize Crate rolls a random weapon and will eventually relocate.
-- **Power** — every zone has its own generator, and each needs a fuse. Nine fuses are hidden at random spots each game (the first Bloater you kill drops a spare). A powered zone gets its lights, neon, soundtrack, perk machine, traps and teleporters; the Substation generator also opens the Overclock Stage.
-- **Overclocker** — three tiers per weapon (5000, 10000, 15000): tier I applies the overclocked stats and laser tracers, tiers II and III multiply damage by 2 and 3.5. Each upgrade also loads an ammo mod. The four mods cycle above the machine and you take the one showing: Inferno (burns a share of max health), Arc (chains to neighbours), Frost (slows, then freezes) or Blast (small explosions).
+- **Power** — every zone has its own generator, and each needs a fuse. Nine fuses are hidden at random spots each game (the first Bloater you kill drops a spare). A powered zone gets its lights, neon, soundtrack, perk machine and trap; the Substation generator also opens the Overclock Stage.
+- **Overclocker** — three tiers per weapon (5000, 10000, 15000): tier I applies the overclocked stats and laser tracers, tiers II and III multiply damage again on a per-weapon curve (weak guns climb steeper), with bigger beams and muzzle flash each tier. Each upgrade also loads an ammo mod. The four mods cycle above the machine and you take the one showing: Inferno (burns a share of max health), Arc (chains to neighbours), Frost (slows, then freezes) or Blast (small explosions). **Lockdown:** the first upgrade bought each round seals the machine's room for 30 s (shutters solid to you and the horde, zombies inside are cleared, a countdown on the shutters and at the top of the screen, a warning 5 s before they blow open and throw the waiting horde back). Later upgrades that round don't seal it ("lockdown used — next round"). See `docs/LOCKDOWN.md`.
 - **Perks** — Thick Skin (health), Quick Hands (reload), Afterburner (movement), Twin Trigger (fire rate), Second Wind (cheat death once, burns all perks).
 - **Power-ups** — Full Reload, Overkill, Double Score, Purge, Board Up.
 - **Enemy types** — Helmets (round 6+) shrug off critical hits until the helmet breaks; Spitters (8+) keep their distance and lob acid that pools on the floor; Bloaters (10+) swell and burst beside you, and burst when killed; Leapers (12+) crouch, then pounce in a straight line. Brutes join from round 8.
@@ -56,7 +62,7 @@ On touch screens the left thumb moves (the stick stays inside its ring; push you
 
 | Feature | Where | Cost | What it does |
 | --- | --- | --- | --- |
-| Zapper Floor, Burnout Jets, Laser Grid | Arcade tunnel, Speedway tunnel, Aquarium corridor | 1000 (power) | 25 s trap that kills anything walking through (brutes take heavy damage), then 60 s recharge. Hurts you too. Trap kills pay 50 |
+| The trap (one per map) | Lumina Pier: Zapper Floor in the arcade tunnel, switched from inside the panic room. Dustline Outpost: Burnout Jets in the Motor Pool tunnel | 1000 (power) | 25 s trap that kills anything on it (brutes take heavy damage), then 60 s recharge. Hurts you too. Trap kills pay 50. The Zapper electrifies the whole tunnel outside the panic-room shutter (seal yourself in, let them pile up, fry them); the Burnout Jets send a two-tile wall of fire sweeping up and down the tunnel. A run ends with an overload burst and a kill tally |
 | Panic Room | Off the arcade tunnel | 1500 | Seals a steel shutter for 20 s while the horde piles up outside. When it opens a shockwave throws them back and dazes them for 3 s, and a maintenance hatch inside leads to the plaza. 120 s recharge |
 | Cryo Grenade | Aquarium vending machine | 750 for 3 | Freezes everything nearby, then slows it to 40% |
 | Neon Lure | Speedway vending machine | 2000 for 1 | Pulls zombies within a short radius to it for 7 s, then detonates |
@@ -64,7 +70,6 @@ On touch screens the left thumb moves (the stick stays inside its ring; push you
 | Pixel Pal | Arcade terminal (power), or a rare drop | 2000 | Robot buddy that follows you and shoots for 45 s (25 s from the drop). Its kills pay 50 |
 | Hover Sentry | Substation terminal (power) | 1500 | Carry it, press `X` to deploy a 40 s auto-turret |
 | Plate Armor | Plaza west wall | 1250 | 150 armor that absorbs 70% of incoming damage |
-| Teleporters | Plaza ↔ Substation, Arcade ↔ Speedway, Aquarium ↔ Stage, Starwheel ↔ Pier | 500 (power at both ends) | Instant trip with a shockwave on arrival, 25 s recharge per pair |
 
 Tactical grenades refill by one each round, and Full Reload restocks them.
 
@@ -75,7 +80,7 @@ Tactical grenades refill by one each round, and Full Reload restocks them.
 | `js/config.js` | Tuning constants, round math, weapon / perk / power-up data |
 | `js/utils.js` | Math helpers |
 | `js/art.js` | Glow sprites, weapon silhouettes, icons |
-| `js/audio.js` | Procedural SFX and the synthwave sequencer |
+| `js/audio.js` | Sample SFX engine (loading, pitch/volume variation, voice limiter, master limiter), synthesised fallbacks, horde ambience and the synthwave sequencer |
 | `js/input.js` | Keyboard and mouse state |
 | `js/map.js` | Tile map, zones, doors, collision, raycasts, flow-field pathfinding |
 | `js/mapart.js` | Pre-rendered floor, wall and neon layers |
@@ -86,7 +91,7 @@ Tactical grenades refill by one each round, and Full Reload restocks them.
 | `js/director.js` | Round pacing, spawn selection, drops |
 | `js/gadgets.js` | Tactical grenades: Cryo, Neon Lure, Safety Bubble |
 | `js/allies.js` | Pixel Pal companion and Hover Sentry |
-| `js/facilities.js` | Traps, panic room, teleporters, vending machines |
+| `js/facilities.js` | The trap, panic room, Overclocker lockdown, vending machines |
 | `js/player.js` | Movement, combat input, health, perks, loadout |
 | `js/interact.js` | Doors, wall-buys, crate, perks, power, Overclocker, barricades, power-ups |
 | `js/render.js` | Camera, entities, dynamic lighting, emissive pass |
@@ -95,7 +100,7 @@ Tactical grenades refill by one each round, and Full Reload restocks them.
 
 `GW.debug` in the console exposes test helpers (`give(n)`, `power()`, `openAll()`, `weapon(id)`, `pal()`, `sentry()`, `tactical(type)`, `armor()`, `fuse(n)`, `round(n)`, `spawn(type, n)`, `god`).
 
-`python3 tools/bundle.py out.html` inlines everything into a single page for hosting.
+`python3 tools/bundle.py out.html` inlines everything into a single page for hosting; add `--sfx` to inline the sound effects too (about 1.5 MB more), otherwise the single page plays the synthesised fallback sounds. `GW.Audio.stats()` in the console shows live voices, stolen/dropped sounds and how many samples loaded.
 
 ## Server (Hostinger VPS)
 
@@ -126,7 +131,7 @@ Keep the window open while you play. If phones can't connect, allow Node.js thro
 
 ## Performance
 
-The simulation runs in fixed 1/60 s steps and rendering interpolates between them. Press **F3** (or tick *Show FPS* in the pause menu) for a frame-rate meter; resolution adapts automatically to hold 60 fps.
+The simulation runs in fixed 1/60 s steps and rendering interpolates between them. Press **F3** (or tick *Show FPS* in the pause menu) for a small frame-rate readout at the bottom centre during play, e.g. `● 58 FPS · RES 85%`: the dot is green on target, yellow when a little short and red only when it is really struggling; `MAX 30` shows the battery-saver frame cap and `RES` the current render resolution. Resolution adapts automatically to hold 60 fps (or the cap).
 
 ## Art
 

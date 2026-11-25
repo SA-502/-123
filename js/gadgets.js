@@ -93,8 +93,7 @@
         z.attackCd = Math.max(z.attackCd, 0.5);
       }
       hit = true;
-      if (GW.Zombies.damage(z, C.CRYO.damage, { dir: Math.atan2(z.y - y, z.x - x), cold: true })) kill = true;
-      else GW.Game.addPoints(C.POINTS.hit, z.x, z.y - z.r, { small: true });
+      if (GW.Zombies.damage(z, C.CRYO.damage, { dir: Math.atan2(z.y - y, z.x - x), cold: true })) kill = true; // hit points: Zombies.payShare
     }
     if (hit) FX.hit(kill, false);
   }

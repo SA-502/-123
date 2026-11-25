@@ -28,6 +28,7 @@ const TYPES = {
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
+  '.mp3': 'audio/mpeg',
   '.txt': 'text/plain; charset=utf-8',
 };
 // only the game itself is public; never the server code, docs, tools or git metadata
@@ -64,11 +65,11 @@ const server = http.createServer((req, res) => {
   fs.stat(file, (err, st) => {
     if (err || !st.isFile()) return send(res, 404, 'Not found');
     const ext = path.extname(file).toLowerCase();
-    const isMedia = ['.png', '.webp', '.jpg', '.jpeg', '.svg', '.ico', '.woff2'].includes(ext);
+    const isMedia = ['.png', '.webp', '.jpg', '.jpeg', '.svg', '.ico', '.woff2', '.mp3'].includes(ext);
     res.writeHead(200, {
       'Content-Type': TYPES[ext],
       'Content-Length': st.size,
-      // code updates must show up at once; images can be cached for an hour
+      // code updates must show up at once; images and sounds can be cached for an hour
       'Cache-Control': isMedia ? 'public, max-age=3600' : 'no-cache',
       'X-Content-Type-Options': 'nosniff',
     });
@@ -193,7 +194,7 @@ function fromGame(room, text) {
 }
 
 /** Maps a room can be played on (js/map.js is 'lumina', js/map_gemini.js is 'gemini'). */
-const MAPS = ['lumina', 'gemini'];
+const MAPS = ['lumina', 'gemini', 'frostfall'];
 
 /** An arena match: the leader picked the mode, everyone's characters come with it. */
 function startArena(room, m) {

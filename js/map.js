@@ -85,7 +85,15 @@
 
   /** (Re)build the entire map. Called for every new game. */
   M.build = function () {
-    if (GW.Maps && GW.Maps[M.activeMap] && GW.Maps[M.activeMap].build) { GW.Maps[M.activeMap].build(); return; }
+    // optional per-map features start empty: a map that doesn't define them simply has none
+    M.traps = [];
+    M.papRoom = null; // Overclocker lockdown room (docs/LOCKDOWN.md)
+    if (GW.Maps && GW.Maps[M.activeMap] && GW.Maps[M.activeMap].build) {
+      GW.Maps[M.activeMap].build();
+      M.pads = []; // teleporters were removed from the game; render/HUD still iterate this list
+      return;
+    }
+    M.pads = [];
     M.theme = null;
     M.tiles = new Uint8Array(W * H); // all WALL
     M.zone = new Int8Array(W * H).fill(-1);
@@ -296,11 +304,11 @@
       [73, 20], [75, 40], [89, 47], [71, 63], [84, 57], [14, 56], [21, 65], [49, 65], [32, 68],
     ].map(([tx, ty]) => ({ tx, ty, x: (tx + 0.5) * T, y: (ty + 0.5) * T, zone: M.zone[idx(tx, ty)] }));
 
-    // ---- traps: a floor rectangle (tiles) plus a wall switch ----
+    // ---- the one trap: the Zapper Floor electrifies the arcade tunnel right outside the panic room
+    // shutter. Its switch is INSIDE the panic room (north wall): seal yourself in, let the horde pile
+    // up against the shutter, then fry it. ----
     M.traps = [
-      { kind: 'zap', x: 8, y: 39, w: 3, h: 3, sw: { tx: 11, ty: 38, fx: -1, fy: 0 } },
-      { kind: 'fire', x: 53, y: 39, w: 3, h: 3, sw: { tx: 52, ty: 38, fx: 1, fy: 0 } },
-      { kind: 'laser', x: 30, y: 14, w: 4, h: 2, sw: { tx: 34, ty: 15, fx: 0, fy: 1 } },
+      { kind: 'zap', x: 8, y: 35, w: 3, h: 7, sw: { tx: 12, ty: 35, fx: 0, fy: 1 }, hint: 'Fry the horde outside the shutter' },
     ].map((t, i) => Object.assign(t, { id: i, rx: t.x * T, ry: t.y * T, rw: t.w * T, rh: t.h * T, state: 'idle', t: 0, playerT: 0, sfxT: 0 }));
 
     // ---- panic room: steel shutter on (11,36..37), console inside on the east wall ----
@@ -310,25 +318,13 @@
       outside: { x: 10.5 * T, y: 37 * T },
       console: { tx: 16, ty: 37, fx: -1, fy: 0 },
       hatch: { tx: 12, ty: 38 },
+      exit: { tx: 24, ty: 23 }, // where the maintenance hatch comes out (the plaza)
       state: 'open', t: 0, cd: 0, warned: false, bangT: 0, hatchT: 0,
     };
 
-    // ---- teleporter pairs (pads are plain floor tiles) ----
-    M.pads = [
-      { color: '#19f0ff', a: { tx: 24, ty: 23 }, b: { tx: 37, ty: 46 } },
-      { color: '#ffe14d', a: { tx: 11, ty: 14 }, b: { tx: 59, ty: 32 } },
-      { color: '#ff4fd8', a: { tx: 23, ty: 10 }, b: { tx: 27, ty: 37 } },
-      { color: '#3d8bff', a: { tx: 88, ty: 32 }, b: { tx: 34, ty: 64 } },
-    ];
-    for (const pr of M.pads) {
-      pr.cd = 0;
-      for (const k of ['a', 'b']) {
-        const e = pr[k];
-        e.x = (e.tx + 0.5) * T;
-        e.y = (e.ty + 0.5) * T;
-        e.zone = M.zone[idx(e.tx, e.ty)];
-      }
-    }
+    // ---- Overclocker lockdown: the Overclock Stage (x26..37, y34..38) has a single 4-wide way in,
+    // the short corridor below the power gate; those tiles seal for 30 s on the round's first upgrade ----
+    M.papRoom = { x0: 26, y0: 34, x1: 37, y1: 38, gates: [{ tx: 30, ty: 33 }, { tx: 31, ty: 33 }, { tx: 32, ty: 33 }, { tx: 33, ty: 33 }] };
 
     // ---- wall-mounted vendors ----
     M.vendors = [

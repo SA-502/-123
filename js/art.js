@@ -196,6 +196,346 @@
     return true;
   };
 
+  /* ---------------- animated zombie rig ---------------- */
+  /*
+   * The painted zombies are single top-down pictures facing +x. To animate them without frame
+   * sheets each picture is cut once (on first use) into three overlapping layers with feathered
+   * masks: the arm reaching forward on each side and the body (torso + head). render.js swings,
+   * lunges and splays the arm layers around the shoulders while the body bobs, sways and squashes.
+   * A fourth layer is the body with the hips and legs cut away, for legless crawlers.
+   * Recoloured copies of the layers (hit flash, fire, frost, char, ice) are cached per colour.
+   */
+  const RIG = (Art.RIG = 128); // layer resolution (px); a zombie is drawn ~50-120 px on screen
+  const rigCache = {};
+  const rigVarCache = {};
+  const PARTS = ['armT', 'armB', 'body', 'crawl'];
+
+  function mkCanvas(w, h) {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h || w;
+    return c;
+  }
+
+  /** Feathered alpha masks (RIG x RIG): one arm (top = y < 0.5), or the rear (hips + legs). */
+  let rigMasks = null;
+  function masks() {
+    if (rigMasks) return rigMasks;
+    const N = RIG;
+    const arm = (top) => {
+      const c = mkCanvas(N), g = c.getContext('2d');
+      const v = g.createLinearGradient(0, top ? 0 : N, 0, top ? N : 0);
+      v.addColorStop(0, 'rgba(0,0,0,1)');
+      v.addColorStop(0.27, 'rgba(0,0,0,1)');
+      v.addColorStop(0.41, 'rgba(0,0,0,0)');
+      v.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = v;
+      g.fillRect(0, 0, N, N);
+      g.globalCompositeOperation = 'destination-in';
+      const h = g.createLinearGradient(0, 0, N, 0);
+      h.addColorStop(0, 'rgba(0,0,0,0)');
+      h.addColorStop(0.3, 'rgba(0,0,0,0)');
+      h.addColorStop(0.46, 'rgba(0,0,0,1)');
+      h.addColorStop(1, 'rgba(0,0,0,1)');
+      g.fillStyle = h;
+      g.fillRect(0, 0, N, N);
+      return c;
+    };
+    const rear = mkCanvas(N), rg = rear.getContext('2d');
+    const h = rg.createLinearGradient(0, 0, N, 0);
+    h.addColorStop(0, 'rgba(0,0,0,1)');
+    h.addColorStop(0.3, 'rgba(0,0,0,1)');
+    h.addColorStop(0.4, 'rgba(0,0,0,0)');
+    h.addColorStop(1, 'rgba(0,0,0,0)');
+    rg.fillStyle = h;
+    rg.fillRect(0, 0, N, N);
+    rigMasks = { armT: arm(true), armB: arm(false), rear };
+    return rigMasks;
+  }
+
+  /** The cut-up layers of a zombie picture: { armT, armB, body, crawl } (RIG-px canvases), or null. */
+  Art.zombieRig = function (key) {
+    if (rigCache[key]) return rigCache[key];
+    const im = Art.sprite(key);
+    if (!im) return null;
+    const N = RIG, mk = masks();
+    const layer = (fn) => {
+      const c = mkCanvas(N), g = c.getContext('2d');
+      g.drawImage(im, 0, 0, N, N);
+      fn(g);
+      return c;
+    };
+    const cut = (g, m, op) => {
+      g.globalCompositeOperation = op;
+      g.drawImage(m, 0, 0);
+    };
+    const rig = {
+      armT: layer((g) => cut(g, mk.armT, 'destination-in')),
+      armB: layer((g) => cut(g, mk.armB, 'destination-in')),
+      body: layer((g) => {
+        cut(g, mk.armT, 'destination-out');
+        cut(g, mk.armB, 'destination-out');
+      }),
+      crawl: layer((g) => {
+        cut(g, mk.armT, 'destination-out');
+        cut(g, mk.armB, 'destination-out');
+        cut(g, mk.rear, 'destination-out');
+      }),
+    };
+    for (const p of PARTS) rig[p] = trim(rig[p]);
+    rigCache[key] = rig;
+    return rig;
+  };
+
+  /**
+   * Crop a layer to its painted pixels (an arm is under a third of the square), remembering where
+   * it sat in the square (ox, oy): fewer pixels pushed for every draw. Art.drawPart places it.
+   */
+  function trim(c) {
+    const N = c.width;
+    let d;
+    try {
+      d = c.getContext('2d').getImageData(0, 0, N, N).data;
+    } catch (e) {
+      c.ox = c.oy = 0;
+      return c;
+    }
+    let x0 = N, y0 = N, x1 = -1, y1 = -1;
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++)
+        if (d[(y * N + x) * 4 + 3] > 3) {
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+        }
+    if (x1 < 0) {
+      x0 = y0 = 0;
+      x1 = y1 = 0;
+    }
+    const t = mkCanvas(x1 - x0 + 1, y1 - y0 + 1);
+    t.getContext('2d').drawImage(c, -x0, -y0);
+    t.ox = x0;
+    t.oy = y0;
+    return t;
+  }
+
+  /** Draw a rig layer as if it were the whole square picture drawn at (x, y), D wide. */
+  Art.drawPart = function (ctx, part, x, y, D) {
+    const k = D / RIG;
+    ctx.drawImage(part, x + part.ox * k, y + part.oy * k, part.width * k, part.height * k);
+  };
+
+  /** Tiny seeded generator so baked overlays look the same every load. */
+  function seeded(seed) {
+    let s = seed >>> 0 || 1;
+    return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
+  }
+
+  /** Paints frost crystals over whatever is already on g (source-atop: only on painted pixels). */
+  function paintIce(g, N) {
+    g.globalCompositeOperation = 'source-atop';
+    g.globalAlpha = 0.62;
+    g.fillStyle = '#c9f6ff';
+    g.fillRect(0, 0, N, N);
+    const rnd = seeded(7);
+    for (let i = 0; i < 26; i++) {
+      // angular facets, light on one edge and dark on the other
+      const cx = rnd() * N, cy = rnd() * N, r = N * (0.05 + rnd() * 0.09), a0 = rnd() * 6.28;
+      g.beginPath();
+      for (let k = 0; k < 5; k++) {
+        const a = a0 + (k / 5) * 6.28 + rnd() * 0.5, rr = r * (0.55 + rnd() * 0.6);
+        if (k === 0) g.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+        else g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+      }
+      g.closePath();
+      const gr = g.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
+      gr.addColorStop(0, 'rgba(255,255,255,0.85)');
+      gr.addColorStop(0.5, 'rgba(160,230,255,0.25)');
+      gr.addColorStop(1, 'rgba(40,120,190,0.45)');
+      g.globalAlpha = 0.75;
+      g.fillStyle = gr;
+      g.fill();
+      g.globalAlpha = 0.9;
+      g.strokeStyle = 'rgba(255,255,255,0.8)';
+      g.lineWidth = N / 200;
+      g.stroke();
+    }
+    // a few bright glints
+    g.globalAlpha = 1;
+    g.fillStyle = '#ffffff';
+    for (let i = 0; i < 10; i++) {
+      const x = rnd() * N, y = rnd() * N, r = N * 0.012;
+      g.fillRect(x - r * 3, y - r * 0.4, r * 6, r * 0.8);
+      g.fillRect(x - r * 0.4, y - r * 3, r * 0.8, r * 6);
+    }
+  }
+
+  /**
+   * A recoloured set of rig layers. `color` is a CSS colour (a flat silhouette, faded in by the
+   * caller's alpha) or 'ice' (frozen solid: pale blue with crystal facets).
+   */
+  Art.rigVariant = function (key, color) {
+    const ck = key + '|' + color;
+    if (rigVarCache[ck]) return rigVarCache[ck];
+    const rig = Art.zombieRig(key);
+    if (!rig) return null;
+    const out = {};
+    for (const p of PARTS) {
+      const src = rig[p], c = mkCanvas(src.width, src.height), g = c.getContext('2d');
+      g.drawImage(src, 0, 0);
+      if (color === 'ice') {
+        g.translate(-src.ox, -src.oy); // facets line up across the layers
+        paintIce(g, RIG);
+      } else {
+        g.globalCompositeOperation = 'source-atop';
+        g.fillStyle = color;
+        g.fillRect(0, 0, c.width, c.height);
+      }
+      c.ox = src.ox;
+      c.oy = src.oy;
+      out[p] = c;
+    }
+    rigVarCache[ck] = out;
+    return out;
+  };
+
+  /* ---------------- animated zombie sheets ---------------- */
+  /*
+   * Side-view frame sheets (assets/zombies/sheets/<type>.webp, 4 x 4 cells): row 0 walk, 1 attack,
+   * 2 death, 3 crawl, all facing right. tools/prep_zombie_sheets.py cleaned and aligned them (feet
+   * on the line y = base, torso on x = cell / 2) and wrote this table: per type the standing height
+   * of the figure in cell pixels (h) and, per frame, the top of the head (for the glowing eyes).
+   */
+  Art.SHEET_META = {"cell":192,"base":182,"types":{"walker":{"h":165,"head":[[110,28],[111,31],[110,31],[109,30],[123,29],[98,21],[89,31],[119,34],[109,24],[129,37],[134,71],[91,127],[116,80],[115,84],[118,96],[118,108]]},"helmet":{"h":177,"head":[[107,19],[109,18],[107,24],[107,18],[116,24],[114,26],[116,29],[118,27],[121,37],[129,65],[109,102],[94,119],[128,67],[129,67],[129,67],[129,73]]},"spitter":{"h":159,"head":[[111,36],[112,37],[113,39],[114,37],[118,27],[119,34],[107,35],[113,40],[109,35],[111,60],[109,113],[108,111],[106,101],[110,74],[104,75],[116,90]]},"bloater":{"h":157,"head":[[96,33],[98,38],[97,41],[96,33],[101,21],[98,20],[93,42],[93,51],[99,39],[105,56],[90,79],[80,101],[97,60],[97,66],[101,82],[100,89]]},"leaper":{"h":150,"head":[[152,46],[131,36],[154,58],[140,40],[127,55],[134,23],[97,19],[124,70],[71,30],[58,63],[76,91],[102,129],[117,69],[125,76],[119,79],[130,109]]},"brute":{"h":157,"head":[[101,39],[109,39],[106,39],[106,51],[100,34],[99,18],[98,22],[102,69],[98,37],[94,66],[103,82],[120,111],[108,73],[113,81],[107,86],[112,73]]}}};
+  const sheetCache = {};
+  /** The sheet image for a zombie type, or null (not loaded / no sheet). */
+  Art.sheet = (type) => Art.sprite('zs_' + type);
+  /**
+   * One frame of a sheet recoloured (`color` a CSS colour laid over the painted pixels, or 'ice'),
+   * cached per type + frame + colour: only the frames actually shown in that state get made.
+   */
+  Art.sheetFrame = function (type, f, color) {
+    const ck = type + '|' + f + '|' + color;
+    if (sheetCache[ck]) return sheetCache[ck];
+    const im = Art.sheet(type);
+    if (!im) return null;
+    const S = Art.SHEET_META.cell, c = mkCanvas(S), g = c.getContext('2d');
+    g.drawImage(im, (f % 4) * S, Math.floor(f / 4) * S, S, S, 0, 0, S, S);
+    if (color === 'ice') paintIce(g, S);
+    else {
+      g.globalCompositeOperation = 'source-atop';
+      g.fillStyle = color;
+      g.fillRect(0, 0, S, S);
+    }
+    sheetCache[ck] = c;
+    return c;
+  };
+
+  /* ---------------- power-up pickup tokens ---------------- */
+  const tokenCache = {};
+  /**
+   * The face of a dropped power-up (a glossy enamel coin with a chrome rim and a bold white
+   * glyph), baked once per type at `px` pixels. render.js spins it, bobs it and lights it.
+   */
+  Art.powerupToken = function (id, px) {
+    const ck = id + '|' + px;
+    if (tokenCache[ck]) return tokenCache[ck];
+    const def = GW.POWERUPS[id] || { color: '#ffffff' };
+    const col = def.color;
+    const c = mkCanvas(px), g = c.getContext('2d');
+    const m = px / 2, R0 = px * 0.47;
+    // chrome rim
+    let gr = g.createLinearGradient(0, 0, px, px);
+    gr.addColorStop(0, '#ffffff');
+    gr.addColorStop(0.35, '#a9b4c8');
+    gr.addColorStop(0.55, '#4b5468');
+    gr.addColorStop(0.8, '#d9e2f0');
+    gr.addColorStop(1, '#6d7790');
+    g.fillStyle = gr;
+    g.beginPath();
+    g.arc(m, m, R0, 0, U.TAU);
+    g.fill();
+    // coloured enamel
+    const R1 = R0 * 0.84;
+    gr = g.createRadialGradient(m - R1 * 0.35, m - R1 * 0.4, R1 * 0.1, m, m, R1);
+    gr.addColorStop(0, U.rgba('#ffffff', 1));
+    gr.addColorStop(0.18, col);
+    gr.addColorStop(0.75, col);
+    gr.addColorStop(1, U.rgba('#000000', 1));
+    g.fillStyle = gr;
+    g.beginPath();
+    g.arc(m, m, R1, 0, U.TAU);
+    g.fill();
+    g.globalAlpha = 0.45;
+    g.fillStyle = col;
+    g.beginPath();
+    g.arc(m, m, R1, 0, U.TAU);
+    g.fill();
+    g.globalAlpha = 1;
+    // inner dark ring for contrast behind the glyph
+    g.fillStyle = 'rgba(8,4,18,0.32)';
+    g.beginPath();
+    g.arc(m, m, R1 * 0.78, 0, U.TAU);
+    g.fill();
+    g.strokeStyle = U.rgba('#ffffff', 0.35);
+    g.lineWidth = px * 0.012;
+    g.beginPath();
+    g.arc(m, m, R1 * 0.78, 0, U.TAU);
+    g.stroke();
+    // glyph: dark outline then white, so it reads on any floor
+    const gs = px * 0.6;
+    g.save();
+    g.shadowColor = 'rgba(0,0,0,0.9)';
+    g.shadowBlur = px * 0.04;
+    g.shadowOffsetY = px * 0.015;
+    Art.powerupIcon(g, id, m, m, gs, '#ffffff');
+    g.restore();
+    g.globalAlpha = 0.35;
+    Art.powerupIcon(g, id, m, m, gs, col);
+    g.globalAlpha = 1;
+    // gloss: a bright crescent across the top-left
+    g.save();
+    g.beginPath();
+    g.arc(m, m, R1, 0, U.TAU);
+    g.clip();
+    gr = g.createLinearGradient(0, 0, 0, px);
+    gr.addColorStop(0, 'rgba(255,255,255,0.5)');
+    gr.addColorStop(0.45, 'rgba(255,255,255,0.08)');
+    gr.addColorStop(0.46, 'rgba(255,255,255,0)');
+    g.fillStyle = gr;
+    g.beginPath();
+    g.ellipse(m - R1 * 0.15, m - R1 * 0.55, R1 * 0.95, R1 * 0.6, -0.3, 0, U.TAU);
+    g.fill();
+    g.restore();
+    tokenCache[ck] = c;
+    return c;
+  };
+
+  const beamCache = {};
+  /** A soft vertical shaft of light (64 x 256), bright at the bottom: a loot beam rising off a drop. */
+  Art.beam = function (color) {
+    if (beamCache[color]) return beamCache[color];
+    const c = mkCanvas(64, 256), g = c.getContext('2d');
+    const v = g.createLinearGradient(0, 256, 0, 0);
+    v.addColorStop(0, U.rgba(color, 1));
+    v.addColorStop(0.25, U.rgba(color, 0.55));
+    v.addColorStop(1, U.rgba(color, 0));
+    g.fillStyle = v;
+    g.fillRect(0, 0, 64, 256);
+    g.globalCompositeOperation = 'destination-in';
+    const h = g.createLinearGradient(0, 0, 64, 0);
+    h.addColorStop(0, 'rgba(0,0,0,0)');
+    h.addColorStop(0.3, 'rgba(0,0,0,0.6)');
+    h.addColorStop(0.5, 'rgba(0,0,0,1)');
+    h.addColorStop(0.7, 'rgba(0,0,0,0.6)');
+    h.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = h;
+    g.fillRect(0, 0, 64, 256);
+    beamCache[color] = c;
+    return c;
+  };
+
   /* ---------------- perk icons ---------------- */
   function roundRect(ctx, x, y, w, h, r) {
     ctx.beginPath();
@@ -306,9 +646,9 @@
 
   /* ---------------- power-up icons ---------------- */
   /** Draw a power-up glyph centred at (x,y), size s. */
-  Art.powerupIcon = function (ctx, id, x, y, s) {
+  Art.powerupIcon = function (ctx, id, x, y, s, color) {
     const def = GW.POWERUPS[id];
-    const col = def ? def.color : '#fff';
+    const col = color || (def ? def.color : '#fff');
     const u = s / 10;
     ctx.save();
     ctx.translate(x, y);

@@ -124,6 +124,17 @@
     } else if (id === 'wind') {
       P.windBought++;
     }
+    // a moment you can see: the perk's colour washes over you and its name floats up
+    const pk = GW.PERKS[id];
+    if (pk && P.alive) {
+      FX.ring(P.x, P.y, 110, pk.color, 0.55, 6);
+      FX.ring(P.x, P.y, 60, '#ffffff', 0.35, 3);
+      FX.light(P.x, P.y, 380, pk.color, 0.6);
+      FX.burst(P.x, P.y, 26, pk.color, 340);
+      FX.popup(P.x, P.y - 40, pk.name, pk.color, 18, 1.8);
+      FX.flash = Math.max(FX.flash || 0, 0.2);
+      FX.shake(4);
+    }
     GW.HUD.perksChanged();
   };
 
@@ -153,8 +164,7 @@
     const best = Wp.meleeTargets(P, PC.meleeAssist, PC.meleeArc, 1)[0];
     if (best) {
       A.play('stab');
-      const killed = GW.Zombies.damage(best, PC.meleeDamage, { melee: true, dir: P.angle });
-      if (!killed) GW.Game.addPoints(C.POINTS.hit, best.x, best.y - best.r, { small: true });
+      const killed = GW.Zombies.damage(best, PC.meleeDamage, { melee: true, knife: true, dir: P.angle });
       FX.hit(killed, false);
       FX.shake(3);
     } else {
@@ -359,7 +369,9 @@
     if (P.dashCd > 0) P.dashCd -= dt;
     if (In.hit('Space') || In.hit('KeyC') || In.hit('ControlLeft')) P.dash(ix, iy);
 
-    const speed = (P.sprinting ? PC.sprintSpeed : PC.walkSpeed) * (P.perks.burner ? 1.1 : 1) * (w ? w.s.move : 1);
+    const speed = (P.sprinting ? PC.sprintSpeed : PC.walkSpeed) * (P.perks.burner ? 1.15 : 1) * (w ? w.s.move : 1);
+    // Afterburner: a jet trail while sprinting, so the perk shows
+    if (P.perks.burner && P.sprinting && P.moving && Math.random() < 0.6) FX.sparks(P.x, P.y, P.angle + Math.PI, 1, '#ffd426', 160, 0.5);
     if (P.dashT > 0) {
       // the slide carries you, fading out; the stick can still bend it a little
       const D = PC.dash;

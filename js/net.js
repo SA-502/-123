@@ -43,7 +43,7 @@
   const TYPES = ['walker', 'brute', 'helmet', 'spitter', 'bloater', 'leaper', 'shrieker', 'boss'];
   const STATES = ['rise', 'breach', 'chase', 'attack', 'spit', 'crouch', 'leap', 'swell'];
   const SPEEDS = ['walk', 'run', 'sprint'];
-  const F_CRIT = 1, F_MELEE = 2, F_EXPL = 4, F_SHOCK = 8, F_BURN = 16, F_COLD = 32, F_ALLY = 64, F_NUKE = 128;
+  const F_CRIT = 1, F_MELEE = 2, F_EXPL = 4, F_SHOCK = 8, F_BURN = 16, F_COLD = 32, F_ALLY = 64, F_NUKE = 128, F_KNIFE = 256;
 
   const r1 = (v) => Math.round(v * 10) / 10;
   const r2 = (v) => Math.round(v * 100) / 100;
@@ -451,6 +451,12 @@
         break;
       case 'seal':
         applying(() => GW.Facilities.sealRemote());
+        break;
+      case 'lock': // Overclocker lockdown (facilities.js)
+        applying(() => GW.Facilities.lockRemote(m));
+        break;
+      case 'quest': // map side quests (quest_frostfall.js)
+        if (GW.Quest) applying(() => GW.Quest.remote(m));
         break;
       case 'gad':
         applying(() => GW.Gadgets.land({ kind: m.k, x: m.x, y: m.y, remote: true }));
@@ -909,6 +915,7 @@
     let f = 0;
     if (info.crit) f |= F_CRIT;
     if (info.melee) f |= F_MELEE;
+    if (info.knife) f |= F_KNIFE;
     if (info.explosive) f |= F_EXPL;
     if (info.shock) f |= F_SHOCK;
     if (info.burn) f |= F_BURN;
@@ -921,11 +928,17 @@
     let a = amount;
     if (z.type === 'boss' || (z.helmet > 0 && info.crit && !info.explosive && !info.melee)) a = 0;
     else if (GW.Game.timers.instakill > 0) a = Math.max(a, z.hp);
+    // hit points by damage share, paid on this phone (the host pays the kill bonus)
+    const hp0 = z.hp;
+    const share = z.type === 'boss' ? amount * 0.4 : a > 0 ? Math.min(a, Math.max(0, hp0)) : Math.min(amount / (info.critMult || 1), z.helmet || 0);
     z.hp -= a;
     if (a > 0 && z.hp <= 0) {
+      const rest = GW.Zombies.payShare(z, share, info, true);
+      if (rest > 0) GW.Game.addPoints(rest, z.x, z.y - z.r, { small: true });
       guestRemove(z, info, true);
       return true;
     }
+    GW.Zombies.payShare(z, share, info, false);
     return false;
   };
 
@@ -989,7 +1002,7 @@
       if (!z || !(h[1] >= 0) || h[1] > 1e6) continue;
       const f = h[2] | 0;
       Zs.damage(z, h[1], {
-        crit: !!(f & F_CRIT), critMult: h[4] || 1, melee: !!(f & F_MELEE), explosive: !!(f & F_EXPL),
+        crit: !!(f & F_CRIT), critMult: h[4] || 1, melee: !!(f & F_MELEE), knife: !!(f & F_KNIFE), explosive: !!(f & F_EXPL),
         shock: !!(f & F_SHOCK), burn: !!(f & F_BURN), cold: !!(f & F_COLD), ally: !!(f & F_ALLY), nuke: !!(f & F_NUKE),
         dir: h[3], by: from,
       });
@@ -1017,6 +1030,7 @@
       z.id, TYPES.indexOf(z.type), Math.round(z.x), Math.round(z.y), r2(z.angle), Math.round(z.hp), Math.round(z.maxHp),
       STATES.indexOf(z.state), z.r, Math.round(z.helmet || 0), r1(z.freezeT || 0), r1(z.slowT || 0), r1(z.burnT || 0),
       r2(z.attackT || 0), r2(z.riseT || 0), z.skin, z.shirt, z.eye, r1(z.animRate || 6), SPEEDS.indexOf(z.speedClass), z.flash > 0 ? 1 : 0,
+      z.crawl ? 1 : 0,
     ];
   }
 
@@ -1164,6 +1178,7 @@
     z.animRate = row[18];
     z.speedClass = SPEEDS[row[19]] || 'walk';
     if (row[20]) z.flash = Math.max(z.flash, 0.06);
+    z.crawl = !!row[21]; // legless crawler (Zombies.makeCrawler)
   }
 
   /** Guest world step: move the zombie copies toward the host's positions, local hazards, groans. */
