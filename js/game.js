@@ -415,7 +415,15 @@
       const known = M.activeMap === 'lumina' || (GW.Maps && GW.Maps[M.activeMap]) ? M.activeMap : 'lumina';
       for (const id of ['lumina', 'gemini', 'frostfall']) if ($('map-' + id)) $('map-' + id).classList.toggle('on', known === id);
       const sub = document.querySelector('#menu .subtitle');
-      if (sub) sub.textContent = known === 'gemini' ? 'DUSTLINE OUTPOST · DESERT COMPOUND' : known === 'frostfall' ? 'FROSTFALL JUNCTION · SNOWBOUND RAIL' : 'LAST NIGHT AT LUMINA PIER';
+      if (sub) sub.textContent = known === 'gemini' ? 'DUSTLINE OUTPOST · DESERT FORTRESS' : known === 'frostfall' ? 'FROSTFALL JUNCTION · SNOWBOUND RAIL' : 'LAST NIGHT AT LUMINA PIER';
+    }
+    /** Title backdrop follows the picked map (Dustline has Gemini's desert art). */
+    function syncTitleBg() {
+      const bg = (M.activeMap === 'gemini' && GW.Assets.get('gemini_title_bg')) || GW.Assets.get('title_bg');
+      if (!bg) return;
+      $('menu').style.backgroundImage = 'linear-gradient(180deg, rgba(4,2,12,0.55), rgba(20,4,36,0.25) 45%, rgba(4,2,12,0.85)), url(' + bg.src + ')';
+      $('menu').style.backgroundSize = 'cover';
+      $('menu').style.backgroundPosition = 'center';
     }
     function pickMap(id) {
       M.activeMap = id;
@@ -424,6 +432,7 @@
       GW.MapArt.build();
       GW.Interact.reset();
       syncMapBtns();
+      syncTitleBg();
     }
     if ($('map-lumina')) $('map-lumina').addEventListener('click', () => pickMap('lumina'));
     if ($('map-gemini')) $('map-gemini').addEventListener('click', () => pickMap('gemini'));
@@ -507,12 +516,8 @@
     // optional art from the art agent: apply it as soon as it arrives (the game never waits for it)
     GW.Assets.load().then((n) => {
       if (!n) return;
-      const bg = GW.Assets.get('title_bg'), logo = GW.Assets.get('logo');
-      if (bg) {
-        $('menu').style.backgroundImage = 'linear-gradient(180deg, rgba(4,2,12,0.55), rgba(20,4,36,0.25) 45%, rgba(4,2,12,0.85)), url(' + bg.src + ')';
-        $('menu').style.backgroundSize = 'cover';
-        $('menu').style.backgroundPosition = 'center';
-      }
+      const logo = GW.Assets.get('logo');
+      syncTitleBg();
       if (logo) {
         const img = document.createElement('img');
         img.src = logo.src;
