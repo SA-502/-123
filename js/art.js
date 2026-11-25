@@ -282,8 +282,48 @@
         cut(g, mk.rear, 'destination-out');
       }),
     };
+    for (const p of PARTS) rig[p] = trim(rig[p]);
     rigCache[key] = rig;
     return rig;
+  };
+
+  /**
+   * Crop a layer to its painted pixels (an arm is under a third of the square), remembering where
+   * it sat in the square (ox, oy): fewer pixels pushed for every draw. Art.drawPart places it.
+   */
+  function trim(c) {
+    const N = c.width;
+    let d;
+    try {
+      d = c.getContext('2d').getImageData(0, 0, N, N).data;
+    } catch (e) {
+      c.ox = c.oy = 0;
+      return c;
+    }
+    let x0 = N, y0 = N, x1 = -1, y1 = -1;
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++)
+        if (d[(y * N + x) * 4 + 3] > 3) {
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+        }
+    if (x1 < 0) {
+      x0 = y0 = 0;
+      x1 = y1 = 0;
+    }
+    const t = mkCanvas(x1 - x0 + 1, y1 - y0 + 1);
+    t.getContext('2d').drawImage(c, -x0, -y0);
+    t.ox = x0;
+    t.oy = y0;
+    return t;
+  }
+
+  /** Draw a rig layer as if it were the whole square picture drawn at (x, y), D wide. */
+  Art.drawPart = function (ctx, part, x, y, D) {
+    const k = D / RIG;
+    ctx.drawImage(part, x + part.ox * k, y + part.oy * k, part.width * k, part.height * k);
   };
 
   /** Tiny seeded generator so baked overlays look the same every load. */
@@ -342,14 +382,18 @@
     if (!rig) return null;
     const out = {};
     for (const p of PARTS) {
-      const c = mkCanvas(RIG), g = c.getContext('2d');
-      g.drawImage(rig[p], 0, 0);
-      if (color === 'ice') paintIce(g, RIG);
-      else {
+      const src = rig[p], c = mkCanvas(src.width, src.height), g = c.getContext('2d');
+      g.drawImage(src, 0, 0);
+      if (color === 'ice') {
+        g.translate(-src.ox, -src.oy); // facets line up across the layers
+        paintIce(g, RIG);
+      } else {
         g.globalCompositeOperation = 'source-atop';
         g.fillStyle = color;
-        g.fillRect(0, 0, RIG, RIG);
+        g.fillRect(0, 0, c.width, c.height);
       }
+      c.ox = src.ox;
+      c.oy = src.oy;
       out[p] = c;
     }
     rigVarCache[ck] = out;

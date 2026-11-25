@@ -443,9 +443,9 @@
     if (leaper && z.state === 'leap' && rig) {
       // motion smear behind a pouncing leaper
       ctx.globalAlpha = alpha * 0.22;
-      ctx.drawImage(rig.body, -38, -20, 40, 40);
+      Art.drawPart(ctx, rig.body, -38, -20, 40);
       ctx.globalAlpha = alpha * 0.12;
-      ctx.drawImage(rig.body, -50, -20, 40, 40);
+      Art.drawPart(ctx, rig.body, -50, -20, 40);
       ctx.globalAlpha = alpha;
     }
     if (!rig) {
@@ -501,30 +501,29 @@
     const parts = (set, al) => {
       if (al <= 0.01) return;
       ctx.globalAlpha = alpha * Math.min(1, al);
-      ctx.save();
+      // (transforms undone by hand: cheaper than save/restore, which copies the whole state)
       ctx.scale(sxB, syB);
-      ctx.drawImage(crawl ? set.crawl : set.body, -H, -H, D, D);
-      ctx.restore();
-      ctx.save();
+      Art.drawPart(ctx, crawl ? set.crawl : set.body, -H, -H, D);
+      ctx.scale(1 / sxB, 1 / syB);
       ctx.translate(SX + fT, -SH);
       ctx.rotate(aT);
-      ctx.drawImage(set.armT, -H - SX, -H + SH, D, D);
-      ctx.restore();
-      ctx.save();
-      ctx.translate(SX + fB, SH);
+      Art.drawPart(ctx, set.armT, -H - SX, -H + SH, D);
+      ctx.rotate(-aT);
+      ctx.translate(fB - fT, 2 * SH);
       ctx.rotate(aB);
-      ctx.drawImage(set.armB, -H - SX, -H - SH, D, D);
-      ctx.restore();
+      Art.drawPart(ctx, set.armB, -H - SX, -H - SH, D);
+      ctx.rotate(-aB);
+      ctx.translate(-SX - fB, -SH);
     };
     if (frozen) parts(Art.rigVariant(key, 'ice') || rig, 1);
     else {
       parts(rig, 1);
       // status looks laid on the body itself
-      if (z.slowT > 0) parts(Art.rigVariant(key, '#5fc8ff'), 0.28 + Math.min(0.2, (z.frost || 0) * 0.08));
-      if (a.char > 0.02) parts(Art.rigVariant(key, '#160a06'), a.char * 0.55);
-      if (z.burnT > 0) parts(Art.rigVariant(key, '#ff6a12'), 0.3 + 0.18 * Math.sin(R.time * 17 + a.seed));
-      if (a.soot > 0.02) parts(Art.rigVariant(key, '#2a1c12'), a.soot * 0.4);
+      // one tint layer at a time keeps a crowd cheap: shock flicker > fire > frost > char/soot
       if (z.shockT > 0 && Math.sin(R.time * 55 + a.seed) > 0) parts(Art.rigVariant(key, '#d8f4ff'), 0.6);
+      else if (z.burnT > 0) parts(Art.rigVariant(key, '#ff6a12'), 0.3 + 0.18 * Math.sin(R.time * 17 + a.seed));
+      else if (z.slowT > 0) parts(Art.rigVariant(key, '#5fc8ff'), 0.28 + Math.min(0.2, (z.frost || 0) * 0.08));
+      else if (a.char > 0.02 || a.soot > 0.02) parts(Art.rigVariant(key, '#1c0f08'), Math.max(a.char * 0.55, a.soot * 0.4));
     }
     if (dark > 0.01) parts(Art.rigVariant(key, '#0a0606'), dark);
     if (z.flash > 0) parts(Art.rigVariant(key, '#ffffff'), z.flash * 9);
@@ -568,7 +567,8 @@
     const prev = ctx.globalCompositeOperation;
     ctx.globalCompositeOperation = 'lighter';
     const t = R.time;
-    for (let i = 0; i < 6; i++) {
+    const nf = R.saver ? 3 : 5;
+    for (let i = 0; i < nf; i++) {
       const h = U.hash(i, 1, 5);
       const px = (h - 0.5) * H * 1.3, py = (U.hash(i, 2, 5) - 0.5) * H * 1.4;
       const fl = 0.5 + 0.5 * Math.sin(t * (9 + i * 2.3) + a.seed + i);
@@ -581,11 +581,6 @@
       ctx.quadraticCurveTo(px - len * 0.6, py - 3 + Math.sin(t * 13 + i) * 1.5, px - len, py + Math.sin(t * 11 + i) * 2);
       ctx.quadraticCurveTo(px - len * 0.5, py + 3, px + 2.4, py + 2.2);
       ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = '#fff2b0';
-      ctx.globalAlpha *= 0.6;
-      ctx.beginPath();
-      ctx.arc(px + 0.6, py, 1.3, 0, U.TAU);
       ctx.fill();
     }
     ctx.globalCompositeOperation = prev;
@@ -1309,17 +1304,17 @@
       ctx.globalAlpha = fade * al;
       ctx.save();
       ctx.scale(sx, sy);
-      ctx.drawImage(c.crawl ? set.crawl : set.body, -H, -H, D, D);
+      Art.drawPart(ctx, c.crawl ? set.crawl : set.body, -H, -H, D);
       ctx.restore();
       ctx.save();
       ctx.translate(SX + 2 * fall, -SH);
       ctx.rotate(-spl * c.dir - 0.15 * fall);
-      ctx.drawImage(set.armT, -H - SX, -H + SH, D, D);
+      Art.drawPart(ctx, set.armT, -H - SX, -H + SH, D);
       ctx.restore();
       ctx.save();
       ctx.translate(SX + 2 * fall, SH);
       ctx.rotate(spl * c.dir * 0.6 + 0.15 * fall);
-      ctx.drawImage(set.armB, -H - SX, -H - SH, D, D);
+      Art.drawPart(ctx, set.armB, -H - SX, -H - SH, D);
       ctx.restore();
     };
     parts(rig, 1);
@@ -2726,10 +2721,9 @@
       const s = an ? an.sc : (z.r / 13) * 1.15, ca = Math.cos(ang), sa = Math.sin(ang);
       const a = (z.state === 'rise' ? U.clamp(1 - z.riseT / 0.9, 0, 1) : 1) * (z.freezeT > 0 ? 0.35 : 1);
       const hx = an ? an.hx : 7.2 * s, hy = an ? an.hy : 0;
-      if (z.burnT > 0) Art.drawGlow(ctx, '#ff7a1a', z.x, z.y, z.r * 2.6, 0.32 + 0.12 * Math.sin(R.time * 19 + z.x));
-      if (z.freezeT > 0) Art.drawGlow(ctx, '#8fe9ff', z.x, z.y, z.r * 2.2, 0.22);
-      else if (z.slowT > 0) Art.drawGlow(ctx, '#5fc8ff', z.x, z.y, z.r * 1.8, 0.12);
-      if (z.shockT > 0 && Math.sin(R.time * 47 + z.y) > 0.2) Art.drawGlow(ctx, '#bfe9ff', z.x, z.y, z.r * 2.4, 0.4);
+      if (z.burnT > 0) Art.drawGlow(ctx, '#ff7a1a', z.x, z.y, z.r * 2.1, 0.32 + 0.12 * Math.sin(R.time * 19 + z.x));
+      if (z.freezeT > 0) Art.drawGlow(ctx, '#8fe9ff', z.x, z.y, z.r * 1.9, 0.22);
+      if (z.shockT > 0 && Math.sin(R.time * 47 + z.y) > 0.2) Art.drawGlow(ctx, '#bfe9ff', z.x, z.y, z.r * 2, 0.4);
       if ((z.dazeT > 0 || z.stun > 0.35) && z.freezeT <= 0) {
         // dizzy stars circling the head
         for (let i = 0; i < 3; i++) {
