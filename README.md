@@ -1,6 +1,6 @@
 # GRAVEWAVE — Last Night at Lumina Pier
 
-An original round-based zombie survival game for the browser. Top-down HTML5 Canvas, zero dependencies, zero build step, all audio synthesised at runtime with the Web Audio API.
+An original round-based zombie survival game for the browser. Top-down HTML5 Canvas, zero dependencies, zero build step. Sound effects are recorded CC0 samples (`assets/sfx`, see `docs/CREDITS.md`) played through a voice-limited Web Audio mixer, each with a synthesised fallback; the soundtrack is synthesised at runtime.
 
 ## Play
 
@@ -80,7 +80,7 @@ Tactical grenades refill by one each round, and Full Reload restocks them.
 | `js/config.js` | Tuning constants, round math, weapon / perk / power-up data |
 | `js/utils.js` | Math helpers |
 | `js/art.js` | Glow sprites, weapon silhouettes, icons |
-| `js/audio.js` | Procedural SFX and the synthwave sequencer |
+| `js/audio.js` | Sample SFX engine (loading, pitch/volume variation, voice limiter, master limiter), synthesised fallbacks, horde ambience and the synthwave sequencer |
 | `js/input.js` | Keyboard and mouse state |
 | `js/map.js` | Tile map, zones, doors, collision, raycasts, flow-field pathfinding |
 | `js/mapart.js` | Pre-rendered floor, wall and neon layers |
@@ -100,7 +100,7 @@ Tactical grenades refill by one each round, and Full Reload restocks them.
 
 `GW.debug` in the console exposes test helpers (`give(n)`, `power()`, `openAll()`, `weapon(id)`, `pal()`, `sentry()`, `tactical(type)`, `armor()`, `fuse(n)`, `round(n)`, `spawn(type, n)`, `god`).
 
-`python3 tools/bundle.py out.html` inlines everything into a single page for hosting.
+`python3 tools/bundle.py out.html` inlines everything into a single page for hosting; add `--sfx` to inline the sound effects too (about 1.5 MB more), otherwise the single page plays the synthesised fallback sounds. `GW.Audio.stats()` in the console shows live voices, stolen/dropped sounds and how many samples loaded.
 
 ## Server (Hostinger VPS)
 

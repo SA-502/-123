@@ -10,6 +10,8 @@
   let ctx, master, sfxBus, musicBus, musicFilter, verb, noiseBuf, delayIn;
   const last = {};
   const BPM = 104;
+  // phones (and iPads, which report as Macs) get a smaller voice budget and a shorter reverb
+  const MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '') || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform || ''));
 
   const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -72,9 +74,18 @@
     lim.ratio.value = 20;
     lim.attack.value = 0.001;
     lim.release.value = 0.12;
+    // last-resort soft clip: transparent below 0.8, rounds anything the limiter lets through
+    const clip = ctx.createWaveShaper();
+    const cv = new Float32Array(2048);
+    for (let i = 0; i < cv.length; i++) {
+      const x = (i / (cv.length - 1)) * 2 - 1, ax = Math.abs(x);
+      cv[i] = ax <= 0.8 ? x : Math.sign(x) * (0.8 + 0.2 * Math.tanh((ax - 0.8) / 0.2));
+    }
+    clip.curve = cv;
     master.connect(comp);
     comp.connect(lim);
-    lim.connect(ctx.destination);
+    lim.connect(clip);
+    clip.connect(ctx.destination);
 
     sfxBus = ctx.createGain();
     sfxBus.gain.value = A.sfxVol;
@@ -95,7 +106,7 @@
     for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
 
     // synthetic reverb impulse for gunshot tails and big hits
-    const len = Math.floor(ctx.sampleRate * 1.5);
+    const len = Math.floor(ctx.sampleRate * (MOBILE ? 1.1 : 1.5)); // shorter tail = cheaper convolver on phones
     const ir = ctx.createBuffer(2, len, ctx.sampleRate);
     for (let ch = 0; ch < 2; ch++) {
       const d = ir.getChannelData(ch);
@@ -1468,15 +1479,15 @@
   }
 
   const GUN = {
-    pistol: ['pistol', 0.8, 0.12], smg: ['smg', 0.62, 0.08], rifle: ['rifle', 0.75, 0.12], lmg: ['lmg', 0.82, 0.12],
-    shotgun: ['shotgun', 0.95, 0.22], sniper: ['sniper', 1, 0.3], minigun: ['minigun', 0.55, 0.06],
+    pistol: ['pistol', 0.8, 0.12], smg: ['smg', 0.6, 0.08], rifle: ['rifle', 0.75, 0.12], lmg: ['lmg', 0.68, 0.12],
+    shotgun: ['shotgun', 0.9, 0.22], sniper: ['sniper', 0.9, 0.3], minigun: ['minigun', 0.5, 0.06],
     launcher: ['launcher', 0.85, 0.2], energy: ['laser', 0.5, 0.15],
   };
   /** creature vocal kind -> [group, volume, rate lo, rate hi, extra] */
   const VOX = {
-    walker: ['zgroan', 0.5, 0.84, 1.0], runner: ['zgroan', 0.45, 1.0, 1.15], sprinter: ['zscream', 0.32, 1.05, 1.3],
-    helmet: ['zgroan', 0.5, 0.8, 0.95, { lp: 1000 }], brute: ['zbig', 0.6, 0.74, 0.88], bloater: ['zbig', 0.55, 0.62, 0.72],
-    spitter: ['zgroan', 0.45, 0.74, 0.86], leaper: ['zscream', 0.34, 0.85, 1.0], shrieker: ['zscream', 0.36, 1.35, 1.6],
+    walker: ['zgroan', 0.4, 0.84, 1.0], runner: ['zgroan', 0.38, 1.0, 1.15], sprinter: ['zscream', 0.32, 1.05, 1.3],
+    helmet: ['zgroan', 0.45, 0.8, 0.95, { lp: 1000 }], brute: ['zbig', 0.55, 0.74, 0.88], bloater: ['zbig', 0.5, 0.62, 0.72],
+    spitter: ['zgroan', 0.38, 0.74, 0.86], leaper: ['zscream', 0.34, 0.85, 1.0], shrieker: ['zscream', 0.36, 1.35, 1.6],
     boss: ['broar', 0.9, 0.95, 1.05],
   };
   const PERK_RATE = { thick: 1, quick: 1.12, burner: 0.94, twin: 1.06, wind: 0.89 };
@@ -1494,17 +1505,17 @@
       return true;
     },
     arc: (t, s) => smp('arc', t, s, { vol: 0.6, verb: 0.2 }),
-    empty: (t, s) => smp('dryfire', t, s, { vol: 0.5 }),
-    reloadStart: (t, s) => smp('magout', t, s, { vol: 0.5 }),
-    reloadEnd: (t, s) => smp('magin', t, s, { vol: 0.55 }),
-    swap: (t, s) => smp('swap', t, s, { vol: 0.45 }),
+    empty: (t, s) => smp('dryfire', t, s, { vol: 0.6 }),
+    reloadStart: (t, s) => smp('magout', t, s, { vol: 0.65 }),
+    reloadEnd: (t, s) => smp('magin', t, s, { vol: 0.7 }),
+    swap: (t, s) => smp('swap', t, s, { vol: 0.55 }),
     slash: (t, s, p) => smp('swing', t, s, p.heavy ? { vol: 0.6, rate: 0.72 } : { vol: 0.55, rate: 1.12 }),
     flame: (t, s) => smp('flame', t, s, { vol: 0.42, rv: 0.08 }),
     slide: (t, s) => smp('swing', t, s, { vol: 0.4, rate: 0.55 }),
     swing: (t, s) => smp('swing', t, s, { vol: 0.5 }),
     stab: (t, s) => smp('stab', t, s, { vol: 0.7 }),
     hit: (t, s) => smp('hit', t, s, { vol: 0.3, rv: 0.12, vv: 0.25 }),
-    zdeath: (t, s) => smp('zdeath', t, s, { vol: 0.5, rate: R2(0.85, 1.05), rv: 0 }),
+    zdeath: (t, s) => smp('zdeath', t, s, { vol: 0.42, rate: R2(0.85, 1.05), rv: 0 }),
     voice(t, s, p) {
       const v = VOX[p.kind] || VOX.walker;
       const pitch = p.kind && p.pitch > 0 ? U.clamp(p.pitch, 0.5, 2) : 1;
@@ -1518,10 +1529,10 @@
       return SAMPLED.voice(t, s, { kind: p.kind || (pitch < 0.8 ? 'brute' : pitch > 1.2 ? 'sprinter' : 'walker') });
     },
     shriek: (t, s) => SAMPLED.voice(t, s, { kind: 'shrieker' }),
-    zattack: (t, s) => smp('zattack', t, s, { vol: 0.45, rate: R2(0.85, 1.05), rv: 0 }),
+    zattack: (t, s) => smp('zattack', t, s, { vol: 0.4, rate: R2(0.85, 1.05), rv: 0 }),
     bite: (t, s) => smp('bite', t, s, { vol: 0.75 }),
-    hurt: (t, s) => smp('hurt', t, s, { vol: 0.8 }),
-    purchase: (t, s) => smp('cash', t, s, { vol: 0.75, rv: 0.02 }),
+    hurt: (t, s) => smp('hurt', t, s, { vol: 0.7 }),
+    purchase: (t, s) => smp('cash', t, s, { vol: 1, rv: 0.02 }),
     deny: (t, s) => smp('deny', t, s, { vol: 0.5, rv: 0 }),
     door: (t, s) => smp('door', t, s, { vol: 0.8, verb: 0.3 }),
     power: (t, s) => smp('power', t, s, { vol: 0.9, rv: 0, vv: 0 }),
@@ -1542,7 +1553,7 @@
     papWork: (t, s) => smp('papwork', t, s, { vol: 0.65, rv: 0 }),
     papDone: (t, s) => smp('upgrade', t, s, { vol: 0.8, rv: 0 }),
     tierUp: (t, s, p) => smp('upgrade', t, s, { vol: 0.85, rate: [1, 1.06, 1.12][U.clamp(Math.round(p.tier || 1), 1, 3) - 1], rv: 0 }),
-    ui: (t, s) => smp('ui', t, s, { vol: 0.4 }),
+    ui: (t, s) => smp('ui', t, s, { vol: 0.6 }),
     modCycle: (t, s) => smp('ui', t, s, { vol: 0.3, rate: 1.3 }),
     rise: (t, s) => smp('rise', t, s, { vol: 0.5 }),
     lightning: (t, s) => smp('thunder', t, s, { vol: 0.8 }),
@@ -1603,7 +1614,6 @@
   // Crowds used to stack 50+ live sources (every groan ~20 nodes, every shot several) until the
   // audio thread under-ran and crackled. Now each play is one voice; a global cap and per-sound caps
   // steal the least important / oldest voice (20 ms fade), and finished voices are disconnected.
-  const MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '') || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform || ''));
   const MAX_VOICES = MOBILE ? 20 : 30, MAX_SRCS = MOBILE ? 32 : 52;
   /** importance 0..10 (stingers / UI never get stolen); own gun shots (no x) get +3 in play() */
   const PRI = {
