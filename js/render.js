@@ -1001,6 +1001,199 @@
     }
   }
 
+  /* ------------------------------------------------------------------ */
+  /* power-up drops                                                     */
+  /* ------------------------------------------------------------------ */
+  /*
+   * A drop is a glossy enamel coin (Art.powerupToken) hovering over a pad of light, rocking on
+   * its vertical axis so the chrome rim catches the light, inside a coloured loot beam with
+   * sparkles. In its last seconds it blinks (faster near the end) and a ring runs down around
+   * it. Taking it pops it with a flash, rays and a ring; letting it expire shrinks it away.
+   */
+  const TOKEN_D = 38; // world units across (the player is ~30)
+  const puSeen = new Map(); // id -> last copy, to notice the frame a power-up disappears
+  const puFx = [];
+
+  /** 1 normally; flickers in the last seconds before the drop vanishes. */
+  function puBlink(pu) {
+    if (pu.life >= 6) return 1;
+    return Math.sin(pu.t * (pu.life < 2.5 ? 26 : 13)) > 0 ? 1 : 0.28;
+  }
+
+  function trackPowerups(list) {
+    for (const pu of list) {
+      let e = puSeen.get(pu.id);
+      if (!e) puSeen.set(pu.id, (e = {}));
+      e.x = pu.x;
+      e.y = pu.y;
+      e.type = pu.type;
+      e.life = pu.life;
+      e.seen = R.time;
+    }
+    for (const [id, e] of puSeen) {
+      if (e.seen === R.time) continue;
+      puSeen.delete(id);
+      if (inView(e.x, e.y, 120)) puFx.push({ x: e.x, y: e.y, type: e.type, t: 0, take: e.life > 0.35 });
+    }
+  }
+
+  function drawPowerupPad(pu) {
+    const def = GW.POWERUPS[pu.type], col = def.color, bl = puBlink(pu);
+    const hover = Math.sin(pu.t * 3.2);
+    ctx.save();
+    ctx.translate(pu.x, pu.y);
+    // shadow of the hovering coin, smaller when it bobs higher
+    ctx.globalAlpha = 0.45 * bl;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(0, 6, 11 - hover * 2, 5 - hover, 0, 0, U.TAU);
+    ctx.fill();
+    // pad: two counter-rotating rings of light
+    ctx.globalAlpha = 0.7 * bl;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2;
+    const r0 = 21 + Math.sin(pu.t * 4) * 1.5;
+    ctx.beginPath();
+    ctx.ellipse(0, 6, r0, r0 * 0.55, 0, 0, U.TAU);
+    ctx.stroke();
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([7, 6]);
+    ctx.lineDashOffset = -pu.t * 30;
+    ctx.globalAlpha = 0.45 * bl;
+    ctx.beginPath();
+    ctx.ellipse(0, 6, r0 + 6, (r0 + 6) * 0.55, 0, 0, U.TAU);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // time running out: a ring around the pad drains away over the last 8 s
+    if (pu.life < 8) {
+      ctx.globalAlpha = 0.9;
+      ctx.strokeStyle = pu.life < 3 ? '#ff3b4e' : '#ffffff';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.ellipse(0, 6, r0 + 11, (r0 + 11) * 0.55, 0, -Math.PI / 2, -Math.PI / 2 + U.TAU * U.clamp(pu.life / 8, 0, 1));
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function sparkle(x, y, r, a) {
+    if (a <= 0.02) return;
+    ctx.globalAlpha = a;
+    ctx.beginPath();
+    ctx.moveTo(x, y - r);
+    ctx.lineTo(x + r * 0.22, y - r * 0.22);
+    ctx.lineTo(x + r, y);
+    ctx.lineTo(x + r * 0.22, y + r * 0.22);
+    ctx.lineTo(x, y + r);
+    ctx.lineTo(x - r * 0.22, y + r * 0.22);
+    ctx.lineTo(x - r, y);
+    ctx.lineTo(x - r * 0.22, y - r * 0.22);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  /** The coin itself: rim edge + face, squeezed horizontally as it rocks (drawn source-over). */
+  function drawToken(type, x, y, size, spin, alpha) {
+    const face = Art.powerupToken(type, 96);
+    const sx = Math.max(0.12, Math.abs(Math.cos(spin)));
+    const edge = Math.sin(spin) * size * 0.09; // the rim shows on the side turned away
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#59627a';
+    ctx.beginPath();
+    ctx.ellipse(x + edge, y, (size / 2) * sx * 0.96, size * 0.48, 0, 0, U.TAU);
+    ctx.fill();
+    ctx.fillStyle = '#9aa5bd';
+    ctx.fillRect(x + Math.min(0, edge), y - size * 0.47, Math.abs(edge), size * 0.94);
+    ctx.drawImage(face, x - (size / 2) * sx, y - size / 2, size * sx, size);
+  }
+
+  function drawPowerup(pu) {
+    const def = GW.POWERUPS[pu.type], col = def.color, bl = puBlink(pu);
+    const by = pu.y - 14 + Math.sin(pu.t * 3.2) * 4;
+    const spin = Math.sin(pu.t * 1.7) * 0.95;
+    // additive: floor glow, loot beam, a slow fan of rays
+    Art.drawGlow(ctx, col, pu.x, pu.y + 4, 52, 0.55 * bl);
+    const bw = 30 + Math.sin(pu.t * 5) * 3;
+    ctx.globalAlpha = 0.5 * bl;
+    ctx.drawImage(Art.beam(col), pu.x - bw / 2, pu.y + 8 - 150, bw, 150);
+    ctx.globalAlpha = 0.6 * bl;
+    ctx.drawImage(Art.beam('#ffffff'), pu.x - bw / 6, pu.y + 8 - 110, bw / 3, 110);
+    ctx.save();
+    ctx.translate(pu.x, by);
+    ctx.rotate(pu.t * 0.8);
+    ctx.fillStyle = col;
+    ctx.globalAlpha = 0.16 * bl;
+    for (let i = 0; i < 8; i++) {
+      ctx.rotate(U.TAU / 8);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(34, -5);
+      ctx.lineTo(34, 5);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+    Art.drawGlow(ctx, col, pu.x, by, 30, 0.7 * bl);
+    // the coin
+    ctx.globalCompositeOperation = 'source-over';
+    drawToken(pu.type, pu.x, by, TOKEN_D, spin, bl);
+    ctx.globalCompositeOperation = 'lighter';
+    // a glint as the face swings toward the light, and sparkles drifting up the beam
+    ctx.fillStyle = '#ffffff';
+    const glint = Math.max(0, Math.cos(spin * 2.2 - 0.6)) ** 8;
+    sparkle(pu.x - 7 * Math.abs(Math.cos(spin)), by - 8, 7 * glint + 1, glint * bl);
+    for (let i = 0; i < 5; i++) {
+      const k = (pu.t * 0.55 + i / 5) % 1;
+      const sx2 = pu.x + Math.sin(i * 2.4 + pu.t * 1.3) * 15;
+      sparkle(sx2, pu.y + 4 - k * 70, 2.2 + (i % 2) * 1.2, Math.sin(k * Math.PI) * 0.9 * bl);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawPowerupFx() {
+    for (let i = puFx.length - 1; i >= 0; i--) {
+      const f = puFx[i];
+      f.t += frameDt;
+      const D = f.take ? 0.55 : 0.35;
+      if (f.t >= D) {
+        puFx.splice(i, 1);
+        continue;
+      }
+      const k = f.t / D, col = (GW.POWERUPS[f.type] || {}).color || '#ffffff';
+      const y = f.y - 14;
+      if (f.take) {
+        Art.drawGlow(ctx, '#ffffff', f.x, y, 30 + 60 * k, (1 - k) * 0.9);
+        Art.drawGlow(ctx, col, f.x, y, 50 + 90 * k, (1 - k) * 0.8);
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 4 * (1 - k) + 1;
+        ctx.globalAlpha = 1 - k;
+        ctx.beginPath();
+        ctx.arc(f.x, y, 14 + 70 * ease(k), 0, U.TAU);
+        ctx.stroke();
+        // rays
+        ctx.lineWidth = 3 * (1 - k) + 0.5;
+        ctx.strokeStyle = '#ffffff';
+        ctx.beginPath();
+        for (let j = 0; j < 10; j++) {
+          const a = j * (U.TAU / 10) + 0.3, r1 = 12 + 40 * ease(k), r2 = r1 + 16 * (1 - k);
+          ctx.moveTo(f.x + Math.cos(a) * r1, y + Math.sin(a) * r1);
+          ctx.lineTo(f.x + Math.cos(a) * r2, y + Math.sin(a) * r2);
+        }
+        ctx.stroke();
+        // the coin flies up, swelling and fading
+        ctx.globalCompositeOperation = 'source-over';
+        drawToken(f.type, f.x, y - 26 * ease(k), TOKEN_D * (1 + 0.9 * k), f.t * 14, (1 - k) * (1 - k));
+        ctx.globalCompositeOperation = 'lighter';
+      } else {
+        Art.drawGlow(ctx, col, f.x, y, 36 * (1 - k), 0.6 * (1 - k));
+        ctx.globalCompositeOperation = 'source-over';
+        drawToken(f.type, f.x, y, TOKEN_D * (1 - k), f.t * 20, 1 - k);
+        ctx.globalCompositeOperation = 'lighter';
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
   /*
    * Deaths. FX.corpse (fx.js) records where a zombie fell; the wrapper below adds what the death
    * animation needs (which picture, crawler, burnt, frozen) without touching the game logic.
@@ -1679,17 +1872,9 @@
     for (const c of FX.corpses) if (inView(c.x, c.y, 40)) drawCorpse(c);
     drawSmears();
 
-    // power-up ground halo
-    for (const pu of I.powerups) {
-      if (!inView(pu.x, pu.y, 60)) continue;
-      ctx.globalAlpha = 0.5;
-      ctx.strokeStyle = GW.POWERUPS[pu.type].color;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(pu.x, pu.y, 18 + Math.sin(pu.t * 4) * 3, 0, U.TAU);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
+    // power-ups: their pad of light on the floor (the token itself glows in the emissive pass)
+    for (const pu of I.powerups) if (inView(pu.x, pu.y, 60)) drawPowerupPad(pu);
+    trackPowerups(I.powerups);
 
     // grenades
     for (const g of GW.Weapons.grenades) {
@@ -2526,17 +2711,9 @@
       }
     }
 
-    // power-ups
-    for (const pu of I.powerups) {
-      if (!inView(pu.x, pu.y, 80)) continue;
-      const def = GW.POWERUPS[pu.type];
-      const blink = pu.life < 6 ? (Math.sin(pu.t * (pu.life < 3 ? 22 : 11)) > 0 ? 1 : 0.2) : 1;
-      const by = pu.y - 6 + Math.sin(pu.t * 3.5) * 4;
-      Art.drawGlow(ctx, def.color, pu.x, by, 46, 0.6 * blink);
-      ctx.globalAlpha = blink;
-      Art.powerupIcon(ctx, pu.type, pu.x, by, 26);
-      ctx.globalAlpha = 1;
-    }
+    // power-ups: beam, token, sparkles; and the burst when one is taken
+    for (const pu of I.powerups) if (inView(pu.x, pu.y, 120)) drawPowerup(pu);
+    drawPowerupFx();
 
     drawFacilityGlow(power);
     drawThreats();

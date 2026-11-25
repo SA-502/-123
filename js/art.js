@@ -398,7 +398,7 @@
     g.fill();
     g.globalAlpha = 1;
     // inner dark ring for contrast behind the glyph
-    g.fillStyle = 'rgba(8,4,18,0.55)';
+    g.fillStyle = 'rgba(8,4,18,0.32)';
     g.beginPath();
     g.arc(m, m, R1 * 0.78, 0, U.TAU);
     g.fill();
@@ -408,7 +408,7 @@
     g.arc(m, m, R1 * 0.78, 0, U.TAU);
     g.stroke();
     // glyph: dark outline then white, so it reads on any floor
-    const gs = px * 0.5;
+    const gs = px * 0.6;
     g.save();
     g.shadowColor = 'rgba(0,0,0,0.9)';
     g.shadowBlur = px * 0.04;
@@ -433,6 +433,30 @@
     g.fill();
     g.restore();
     tokenCache[ck] = c;
+    return c;
+  };
+
+  const beamCache = {};
+  /** A soft vertical shaft of light (64 x 256), bright at the bottom: a loot beam rising off a drop. */
+  Art.beam = function (color) {
+    if (beamCache[color]) return beamCache[color];
+    const c = mkCanvas(64, 256), g = c.getContext('2d');
+    const v = g.createLinearGradient(0, 256, 0, 0);
+    v.addColorStop(0, U.rgba(color, 1));
+    v.addColorStop(0.25, U.rgba(color, 0.55));
+    v.addColorStop(1, U.rgba(color, 0));
+    g.fillStyle = v;
+    g.fillRect(0, 0, 64, 256);
+    g.globalCompositeOperation = 'destination-in';
+    const h = g.createLinearGradient(0, 0, 64, 0);
+    h.addColorStop(0, 'rgba(0,0,0,0)');
+    h.addColorStop(0.3, 'rgba(0,0,0,0.6)');
+    h.addColorStop(0.5, 'rgba(0,0,0,1)');
+    h.addColorStop(0.7, 'rgba(0,0,0,0.6)');
+    h.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = h;
+    g.fillRect(0, 0, 64, 256);
+    beamCache[color] = c;
     return c;
   };
 
