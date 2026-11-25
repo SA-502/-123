@@ -1237,16 +1237,21 @@
 
   /** Co-op: a downed player lying in a pool of blood, arms reaching forward (they can crawl). */
   function drawDowned(p) {
-    const cr = p.moving ? Math.sin(p.walkT) : 0;
+    const pa = pAnim(p);
+    // dragging itself along: the arms haul in turn; lying still it reaches out, breathing hard
+    const cr = pa.spd > 8 ? Math.sin(pa.ph * 1.6) : Math.sin(R.time * 1.3) * 0.5;
+    const pant = 1 + 0.035 * Math.sin(R.time * 7);
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.globalAlpha = 0.55;
     ctx.fillStyle = '#5a0a14';
+    const pool = 1 + 0.06 * Math.sin(R.time * 2.2);
     ctx.beginPath();
-    ctx.ellipse(-Math.cos(p.angle) * 5, -Math.sin(p.angle) * 5 + 2, 22, 15, p.angle, 0, U.TAU);
+    ctx.ellipse(-Math.cos(p.angle) * 5, -Math.sin(p.angle) * 5 + 2, 22 * pool, 15 * pool, p.angle, 0, U.TAU);
     ctx.fill();
     ctx.globalAlpha = 1;
     ctx.rotate(p.angle);
+    ctx.scale(pant, 1 / pant);
     ctx.lineCap = 'round';
     // legs trailing behind
     ctx.strokeStyle = '#231b33';
@@ -1345,8 +1350,39 @@
     }
   }
 
+  /** Per-player animation state (render-only): stride phase from distance covered, hips that follow the movement. */
+  function pAnim(P) {
+    let a = P._pa;
+    if (!a) a = P._pa = { ph: 0, lx: P.x, ly: P.y, spd: 0, hip: P.angle || 0, lean: 0, kick: 0, rec: 0 };
+    const dt = frameDt;
+    let d = Math.hypot(P.x - a.lx, P.y - a.ly);
+    if (d > 80) d = 0;
+    const mx = P.x - a.lx, my = P.y - a.ly;
+    a.lx = P.x;
+    a.ly = P.y;
+    if (dt > 0) a.spd += (Math.min(d / dt, 700) - a.spd) * Math.min(1, dt * 10);
+    a.ph += d * (U.TAU / 52);
+    if (d > 0.3) a.hip += U.angDiff(a.hip, Math.atan2(my, mx)) * Math.min(1, dt * 12);
+    // legs can't twist more than ~100 degrees from the chest: past that, walk backwards
+    let rel = U.angDiff(P.angle, a.hip);
+    if (Math.abs(rel) > 1.75) rel = U.angDiff(P.angle, a.hip + Math.PI);
+    a.rel = rel;
+    const sprint = P.sprinting || (P !== GW.Player && a.spd > 235);
+    a.lean += ((sprint && P.dashT <= 0 ? 1 : 0) - a.lean) * Math.min(1, dt * 8);
+    // recoil: a kick that springs back a little slower than the gun does
+    const r = Math.min(1, P.recoil || 0);
+    if (r > a.rec + 0.05) a.kick = 1;
+    a.rec = r;
+    a.kick = Math.max(0, a.kick - dt * 7);
+    return a;
+  }
+
   function drawPlayer(P) {
     const w = P.weapon();
+    const pa = pAnim(P);
+    const mv = U.clamp(pa.spd / 190, 0, 1.6); // 1 = walking, 1.5 = sprinting
+    const sn = Math.sin(pa.ph), cs = Math.cos(pa.ph);
+    const breath = Math.sin(R.time * 2.1) * (1 - Math.min(1, mv * 2));
     ctx.save();
     ctx.translate(P.x, P.y);
     ctx.globalAlpha = 0.4;
@@ -1357,18 +1393,83 @@
     ctx.globalAlpha = P.invuln > 0 && Math.sin(R.time * 30) > 0 ? 0.45 : 1;
     ctx.rotate(P.angle);
     ctx.scale(1.15, 1.15);
+    const sliding = P.dashT > 0;
+    // legs: they stride along the direction of travel, under the body
+    if (!sliding && mv > 0.04) {
+      ctx.save();
+      ctx.rotate(pa.rel);
+      const st = 10.5 * Math.min(1.25, mv);
+      ctx.fillStyle = '#231b33';
+      ctx.strokeStyle = '#231b33';
+      ctx.lineWidth = 4.4;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, -4);
+      ctx.lineTo(sn * st, -4.5);
+      ctx.moveTo(0, 4);
+      ctx.lineTo(-sn * st, 4.5);
+      ctx.stroke();
+      ctx.fillStyle = '#0f0d14';
+      ctx.beginPath();
+      ctx.ellipse(sn * st + 1.5, -4.5, 3.2, 2.3, 0, 0, U.TAU);
+      ctx.ellipse(-sn * st + 1.5, 4.5, 3.2, 2.3, 0, 0, U.TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+    // whole upper body: bob, a sway of the shoulders, a lean into a sprint, the kick of each shot
+    const lean = pa.lean;
+    const kick = pa.kick * (w && w.s.cls === 'pistol' ? 1.2 : w && (w.s.cls === 'shotgun' || w.s.cls === 'sniper' || w.s.cls === 'launcher') ? 2.6 : 1.6);
+    ctx.translate(lean * 2.5 - kick, sn * 0.8 * Math.min(1, mv));
+    ctx.rotate(sn * 0.07 * Math.min(1, mv) - pa.kick * 0.05);
+    const bobS = 1 + 0.03 * Math.min(1.3, mv) * Math.cos(pa.ph * 2) + 0.02 * breath;
+    ctx.scale(bobS * (1 + lean * 0.05), bobS);
     const rec = P.recoil * 3;
-    const bob = P.moving ? Math.sin(P.walkT) * 1.2 : 0;
+    const bob = Math.min(1, mv) * sn * 1.2;
     ctx.lineCap = 'round';
-    if (P.dashT > 0) {
-      // sliding: low and stretched along the slide, with a speed streak behind
-      ctx.rotate(U.angDiff(P.angle, P.dashA || P.angle));
+    if (sliding) {
+      // sliding: low and stretched along the slide, with a speed streak behind and a leg out front
+      const da = U.angDiff(P.angle, P.dashA || P.angle);
+      ctx.rotate(da);
       ctx.globalAlpha *= 0.5;
       ctx.fillStyle = P.jacket || '#23aebf';
       ctx.fillRect(-34, -6, 26, 12);
-      ctx.globalAlpha /= 0.5;
-      ctx.rotate(-U.angDiff(P.angle, P.dashA || P.angle));
+      ctx.globalAlpha *= 0.5;
+      ctx.fillRect(-48, -3, 16, 6);
+      ctx.globalAlpha /= 0.25;
+      ctx.strokeStyle = '#231b33';
+      ctx.lineWidth = 4.4;
+      ctx.beginPath();
+      ctx.moveTo(2, 3);
+      ctx.lineTo(16, 5);
+      ctx.moveTo(-2, -3);
+      ctx.lineTo(7, -9);
+      ctx.stroke();
+      ctx.fillStyle = '#0f0d14';
+      ctx.beginPath();
+      ctx.ellipse(17, 5, 3.4, 2.4, 0.1, 0, U.TAU);
+      ctx.fill();
+      ctx.rotate(-da);
       ctx.scale(1.12, 0.86);
+    }
+    // the gun's carry: lowered across the chest when sprinting, tipped over to reload
+    let carry = lean * 0.75;
+    let hand2 = null, magIn = false;
+    const reloading = w && w.reloadT > 0 && w.reloadDur > 0 && w.s.type !== 'melee';
+    if (reloading) {
+      const p = U.clamp(1 - w.reloadT / w.reloadDur, 0, 1);
+      carry = Math.max(carry, 0.55 * Math.sin(Math.min(1, p * 1.25) * Math.PI * 0.5 + (p > 0.8 ? (p - 0.8) * 7.5 : 0)) + (p > 0.86 && p < 0.95 ? -0.12 : 0));
+      // support hand: drop the old mag, fetch a new one from the belt, slap it in
+      if (p < 0.2) hand2 = { t: p / 0.2, from: 'gun', to: 'well' };
+      else if (p < 0.45) hand2 = { t: (p - 0.2) / 0.25, from: 'well', to: 'belt' };
+      else if (p < 0.75) hand2 = { t: (p - 0.45) / 0.3, from: 'belt', to: 'well', mag: true };
+      else hand2 = { t: Math.min(1, (p - 0.75) / 0.15), from: 'well', to: 'gun' };
+      magIn = p >= 0.75;
+    }
+    ctx.save();
+    if (carry > 0.01) {
+      ctx.translate(2, 2);
+      ctx.rotate(carry);
+      ctx.translate(-2, -2);
     }
     if (w && P.meleeT <= 0 && w.s.type === 'melee') {
       // katana / axe: held ready, swept across on a swing
@@ -1439,12 +1540,21 @@
       const s = w.s, len = s.len;
       const thick = s.cls === 'minigun' || s.cls === 'launcher' ? 7.5 : s.cls === 'lmg' || s.cls === 'shotgun' || s.cls === 'energy' || s.cls === 'flame' ? 6.5 : s.cls === 'pistol' ? 4.5 : 5.2;
       const gx = (s.cls === 'pistol' ? 12 : 7) - rec;
+      // support hand: on the barrel, or off fetching a magazine while reloading
+      const g2x = gx + (s.cls === 'pistol' ? 1 : len * 0.55), g2y = -1.5;
+      let h2x = g2x, h2y = g2y;
+      if (hand2) {
+        const at = (k) => (k === 'well' ? [gx + 5, 3.5] : k === 'belt' ? [-4, -12] : [g2x, g2y]);
+        const A = at(hand2.from), B = at(hand2.to), t = ease(hand2.t);
+        h2x = A[0] + (B[0] - A[0]) * t;
+        h2y = A[1] + (B[1] - A[1]) * t;
+      }
       // arms reaching to the weapon
       ctx.strokeStyle = '#1d8f9e';
       ctx.lineWidth = 5;
       ctx.beginPath();
       ctx.moveTo(1, -9);
-      ctx.lineTo(gx + (s.cls === 'pistol' ? 1 : len * 0.55), -1.5);
+      ctx.lineTo(h2x, h2y);
       ctx.moveTo(1, 9);
       ctx.lineTo(gx + 2, 2);
       ctx.stroke();
@@ -1479,8 +1589,17 @@
       ctx.fillStyle = '#e0b890';
       ctx.beginPath();
       ctx.arc(gx + 2, 2, 2.6, 0, U.TAU);
-      ctx.arc(gx + (s.cls === 'pistol' ? 1 : len * 0.55), -1.5, 2.6, 0, U.TAU);
+      ctx.arc(h2x, h2y, 2.6, 0, U.TAU);
       ctx.fill();
+      if (reloading) {
+        // the magazine: gone from the gun until the new one is slapped in, carried in the hand meanwhile
+        ctx.fillStyle = '#3a3646';
+        if (hand2 && hand2.mag) ctx.fillRect(h2x - 2, h2y - 1, 4, 6);
+        if (magIn) ctx.fillRect(gx + 4, thick / 2 - 0.5, 3.5, 4.5);
+      } else if (s.cls !== 'energy' && s.cls !== 'flame' && s.cls !== 'minigun') {
+        ctx.fillStyle = '#2b2836';
+        ctx.fillRect(gx + 4, thick / 2 - 0.5, 3.5, 4.5);
+      }
     } else {
       // knife swing / empty hands
       const k = P.meleeT > 0 ? 1 - P.meleeT / 0.2 : 0.5;
@@ -1507,6 +1626,7 @@
         ctx.stroke();
       }
     }
+    ctx.restore();
     // torso (jacket): each co-op player wears their own colour
     ctx.fillStyle = P.jacket || '#23aebf';
     ctx.beginPath();
