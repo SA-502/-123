@@ -1,19 +1,23 @@
-# Gemini Map #2 — Dustline Outpost (`js/map_gemini.js`)
+# Dustline Outpost — Gemini Update Package (for `claude/game-balance-new-map-st8r3f`)
 
-> **Ownership Note for Claude Code:**
-> The following files belong to **Gemini's Map #2 (Dustline Outpost — Non-Neon Desert Compound)** and are kept cleanly separated from Claude's original `Lumina Pier` map (`js/map.js` & `js/mapart.js`):
->
-> - `js/map_gemini.js` — Complete Map #2 layout (96×72 tiles, 9 desert compound zones, 12 doors, 39 windows, 11 risers, 9 generators, 27 fuse spots, 9 wall-buys, 5 perks, 6 mystery crates, 3 traps, safe room, 4 tunnel pads, 6 vendors) + its own non-neon desert Canvas renderer (`buildArt()`).
-> - `assets/gemini_map/` — 5 custom non-neon 384×384 `.webp` seamless textures (`sandstone.webp`, `concrete.webp`, `asphalt.webp`, `wall_top.webp`, `oasis.webp`).
+This package contains **only** Gemini's map files, assets, and registration snippets (no core game files overwritten).
 
-## Minimal Hooks Added to Core Files
-To keep Lumina Pier 100% untouched while enabling the Map Selector on the Title Screen:
-1. `index.html` — Added `<script src="js/map_gemini.js"></script>` right after `js/mapart.js`, plus a 2-button Map Selector (`LUMINA PIER` / `DUSTLINE OUTPOST`) above `START SHIFT`.
-2. `js/map.js` — Added `M.activeMap` (`'lumina'` or `'gemini'`, persisted in `localStorage`) and a 2-line dispatch at the top of `M.build()` to call `GW.Maps[M.activeMap].build()` when a custom map is active; resets `M.theme = null` for Lumina Pier.
-3. `js/mapart.js` — Added a 2-line dispatch at the top of `MA.build()` to call `GW.Maps[M.activeMap].buildArt()` when active.
-4. `js/render.js` — Added a 3-line check for `M.theme` in `drawLighting()` so Dustline Outpost renders with warm golden-dusk ambient visibility (`rgba(28,17,9,...)`) instead of dark purple neon.
-5. `js/game.js` — Wired the Map Selector buttons (`#map-lumina`, `#map-gemini`) and dynamic start announcement (`DUSTLINE OUTPOST` vs `LUMINA PIER`).
-6. `js/i18n.js` — Added Arabic translations for Dustline Outpost and all 9 desert zones.
-7. `css/style.css` — Added Arabic web-safe font fallbacks (`Cairo`, `Tajawal`, `Tahoma`, `Arial`) so Arabic text no longer renders as `□□□□`, plus styles for the Map Selector buttons.
-8. `assets/manifest.json` — Registered the 5 `gemini_*` textures under `assets/gemini_map/`.
-9. `server/sim.js` — Added `'map_gemini'` to `LOGIC` so Co-Op server simulation stays in sync.
+## What's Included
+- `js/map_gemini.js` — Rebuilt asymmetric 96×72 Desert Fortress compliant with `docs/GEMINI_UPDATE_GUIDE.md`:
+  - **No teleporters** (`M.pads = []`).
+  - **One sweeping fire trap** (`M.traps` length 1, `x: 14, y: 34, w: 4, h: 6`, `sweep: { band: 2, speed: 1.7 }`, switch at `(19, 41)` facing north, with `hint`).
+  - **Overclocker Room Lockdown (`M.papRoom`)**: `x0: 37, y0: 38, x1: 51, y1: 47`, single 4-wide floor doorway `gates` at `y=37, x=42..45`, `M.pap` inside at `(43, 45)`, `M.gate` power door outside at `y=35`, and **zero** windows or risers inside/on the edge.
+  - **Safe Room Hatch Exit**: `M.safeRoom.exit = { tx: 18, ty: 56 }` (walkable Crash Site Gate floor).
+  - **Balance-ordered Wall-Buys** per `docs/BALANCE.md`: `ranger` & `bulldog` (750) in Crash Site Gate -> `buzzsaw` (1250) in Checkpoint -> `hornet` (1500) in Oasis -> `kestrel` & `sixgun` (1750) in Airfield/Bazaar -> `riptide` & `boomstick` (2000) in Bunker/Ruins -> `anvil` (3000) in Refinery.
+  - **Wide 3–4+ tile corridors** throughout.
+- `assets/gemini_map/` — 15 non-neon desert textures & transparent top-down props (`sandstone`, `concrete`, `asphalt`, `wall_top`, `oasis`, `title_bg_desert`, `prop_humvee`, `prop_heli`, `prop_sandbags`, `prop_tent`, `prop_crates`, `prop_barrels`, `prop_oil_tank`, `prop_palm`, `prop_ruin_pillar`).
+- `manifest_entries.json` — Exact keys to merge into `assets/manifest.json`.
+- `i18n_entries.js` — Exact Arabic entries to merge into `js/i18n.js`.
+
+## Optional Tiny Hook for Claude (if desired)
+- To show `assets/gemini_map/title_bg_desert.webp` on the title screen when `M.activeMap === 'gemini'`, toggle a `theme-desert` class on `document.body` in `js/game.js` when picking Dustline Outpost.
+
+## Verification Run
+- Passed `node --check js/map_gemini.js`.
+- Passed `node -e "const {Sim}=require('./server/sim.js'); const s=new Sim(1,[{id:'a',name:'A'}],()=>{},'gemini'); for(let i=0;i<1800;i++) s.tick();"` with 0 errors.
+- Passed full geometry, `M.papRoom` lockdown, `M.safeRoom.exit`, single-trap, zero-teleporter, and Dijkstra reachability validation with 0 errors.
