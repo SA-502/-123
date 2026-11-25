@@ -209,37 +209,392 @@
   /* ------------------------------------------------------------------ */
   /* entities                                                           */
   /* ------------------------------------------------------------------ */
+  /* ------------------------------------------------------------------ */
+  /* zombie animation                                                   */
+  /* ------------------------------------------------------------------ */
+  /*
+   * Every painted zombie is one still picture, so the motion is procedural: Art.zombieRig cuts
+   * each picture into an arm layer per side and a body layer, and a small per-zombie record
+   * (z._an, render-only, never synced) tracks the walk phase from the distance actually covered,
+   * a smoothed heading, hit kicks and status build-up. All of it is a handful of drawImage calls
+   * per zombie with cached layers: no per-frame canvases, gradients or shadows.
+   */
+  let frameDt = 1 / 60;
+  const ease = (k) => 1 - (1 - k) * (1 - k);
+  const SPRITE_D = { leaper: 40, bloater: 38 }; // picture size in the zombie's own units (radius ~13)
+
+  /** Per-zombie animation state, advanced once per drawn frame. */
+  function zAnim(z) {
+    let a = z._an;
+    if (!a) {
+      a = z._an = {
+        ph: Math.random() * U.TAU, seed: Math.random() * 100, lx: z.x, ly: z.y, ang: z.angle || 0, spd: 0,
+        hit: 0, fl: 0, char: 0, soot: 0, hel: z.helmet || 0, hm: z.helmetMax || z.helmet || 0, trail: null, td: 0, rise: z.state === 'rise' ? 1 : 0, riseFade: 0,
+        sc: (z.r / 13) * 1.15, hx: (z.r / 13) * 1.15 * 7.2, hy: 0,
+      };
+    }
+    const dt = frameDt;
+    let d = Math.hypot(z.x - a.lx, z.y - a.ly);
+    if (d > 60) d = 0; // teleported (respawn, co-op correction)
+    const tx = z.x - a.lx, ty = z.y - a.ly;
+    a.lx = z.x;
+    a.ly = z.y;
+    if (dt > 0) a.spd += (Math.min(d / dt, 400) - a.spd) * Math.min(1, dt * 8);
+    const frozen = z.freezeT > 0;
+    if (!frozen) {
+      const stride = z.crawl ? 26 : 28 + a.spd * 0.09;
+      a.ph += d * (U.TAU / stride) * (z.slowT > 0 ? 0.8 : 1);
+      a.ang += U.angDiff(a.ang, z.angle || 0) * Math.min(1, dt * 14);
+    }
+    // a hit: the flash timer jumps up
+    if ((z.flash || 0) > a.fl + 0.01) a.hit = 1;
+    a.fl = z.flash || 0;
+    a.hit = Math.max(0, a.hit - dt * 6);
+    a.char = z.burnT > 0 ? Math.min(1, a.char + dt * 0.45) : Math.max(0, a.char - dt * 0.12);
+    a.soot = z.blastT > 0 ? 1 : Math.max(0, a.soot - dt * 0.5);
+    const hel = z.helmet || 0;
+    if (hel > a.hm) a.hm = hel;
+    if (a.hel > 0 && hel <= 0) FX.burst(z.x, z.y, 7, '#a9b1bf', 200); // the helmet shatters
+    a.hel = hel;
+    if (z.state === 'rise') a.rise = 1;
+    else if (a.rise) {
+      a.rise = 0;
+      a.riseFade = 1.4;
+    }
+    if (a.riseFade > 0) a.riseFade -= dt;
+    // crawlers smear blood behind them
+    if (z.crawl && d > 0) {
+      a.td += d;
+      if (!a.trail) a.trail = [];
+      if (a.td > 7 || !a.trail.length) {
+        a.td = 0;
+        a.trail.push(z.x, z.y);
+        if (a.trail.length > 22) a.trail.splice(0, 2);
+        if (Math.random() < 0.35) GW.MapArt.decal(z.x - Math.cos(a.ang) * 8, z.y - Math.sin(a.ang) * 8, 7, '#4a0812', 0.22);
+      }
+    }
+    return a;
+  }
+
+  /** Crawlers' fresh smear: a tapering dark-red streak along their recent path (drawn on the floor). */
+  function drawSmears() {
+    for (const z of GW.Zombies.list) {
+      const a = z._an;
+      if (!z.crawl || !a || !a.trail || a.trail.length < 4 || !inView(z.x, z.y, 90)) continue;
+      const t = a.trail, n = t.length / 2;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#3d0610';
+      for (let i = 1; i < n; i++) {
+        const k = i / n;
+        ctx.globalAlpha = 0.55 * k;
+        ctx.lineWidth = 3 + 7 * k;
+        ctx.beginPath();
+        ctx.moveTo(t[i * 2 - 2], t[i * 2 - 1]);
+        ctx.lineTo(t[i * 2], t[i * 2 + 1]);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 0.55;
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.moveTo(t[t.length - 2], t[t.length - 1]);
+      ctx.lineTo(z.x, z.y);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /** Disturbed earth where a zombie claws its way up (k: 0 just started .. 1 out; fade: afterwards). */
+  function drawRiseDirt(z, k, fade) {
+    const r = z.r;
+    ctx.save();
+    ctx.translate(z.x, z.y);
+    ctx.globalAlpha = 0.85 * fade;
+    ctx.fillStyle = '#2a1f17';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, r * (0.9 + 0.6 * k), r * (0.75 + 0.5 * k), 0, 0, U.TAU);
+    ctx.fill();
+    ctx.fillStyle = '#120b08';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, r * (0.55 + 0.35 * k), r * (0.42 + 0.3 * k), 0, 0, U.TAU);
+    ctx.fill();
+    // clods thrown out of the hole
+    const seed = z._an ? z._an.seed : 0;
+    for (let i = 0; i < 9; i++) {
+      const h = U.hash(i, 3, Math.floor(seed * 10));
+      const ang = i * 0.7 + h * 2.4 + seed;
+      const dd = r * (0.6 + (0.5 + h) * ease(Math.min(1, k * 1.4)));
+      ctx.fillStyle = i % 3 ? '#4a3726' : '#634a33';
+      const sz = 2 + h * 3;
+      ctx.fillRect(Math.cos(ang) * dd - sz / 2, Math.sin(ang) * dd * 0.85 - sz / 2, sz, sz);
+    }
+    ctx.restore();
+  }
+
   function drawZombie(z) {
     if (z.type === 'boss') return drawBoss(z);
+    const a = zAnim(z);
+    const key = zombieKey(z);
+    const rig = Art.zombieRig(key);
     const s = (z.r / 13) * 1.15;
-    let scale = 1, alpha = 1;
+    const frozen = z.freezeT > 0, crawl = !!z.crawl;
+    let scale = 1, alpha = 1, dark = 0;
     if (z.state === 'rise') {
       const k = U.clamp(1 - z.riseT / 0.9, 0, 1);
-      scale = 0.4 + 0.6 * k;
-      alpha = 0.3 + 0.7 * k;
-    }
-    const brute = z.type === 'brute';
-    const bloater = z.type === 'bloater', leaper = z.type === 'leaper';
+      drawRiseDirt(z, k, 1);
+      scale = 0.5 + 0.5 * ease(k);
+      alpha = 0.35 + 0.65 * Math.min(1, k * 1.6);
+      dark = 0.75 * (1 - k);
+    } else if (a.riseFade > 0) drawRiseDirt(z, 1, U.clamp(a.riseFade / 1.4, 0, 1));
+    const brute = z.type === 'brute', bloater = z.type === 'bloater', leaper = z.type === 'leaper';
     if (z.state === 'swell') scale *= 1 + 0.4 * U.clamp(1 - z.attackT / C.ZOMBIE.bloat.swell, 0, 1) + Math.sin(R.time * 40) * 0.03;
-    if (z.state === 'crouch') scale *= 0.86;
+    if (crawl) scale *= 0.94;
+
+    // ---- pose (zombie units, facing +x) ----
+    const m = frozen ? 0 : U.clamp(a.spd / 58, 0, 1.35); // how hard it is walking
+    const ph = a.ph, sn = Math.sin(ph), cs = Math.cos(ph);
+    const breath = frozen ? 0 : Math.sin(R.time * 2.3 + a.seed) * (1 - Math.min(1, m * 2));
+    let bx = 0, by = sn * 1.3 * m, rot = sn * 0.07 * m; // body offset + roll
+    let sxB = 1 + 0.035 * m * Math.cos(ph * 2) + 0.02 * breath, syB = 1 + 0.02 * breath; // bob reads as "closer to the camera"
+    let aT = sn * 0.17 * m + breath * 0.03, aB = -sn * 0.17 * m - breath * 0.03; // arm swing (radians)
+    let fT = sn * 2.2 * m, fB = -sn * 2.2 * m; // arm reach (units)
+    if (m > 1) bx += (m - 1) * 3; // sprinters lean into it
+    if (z.state === 'attack') {
+      const k = U.clamp(1 - z.attackT / (crawl ? C.ZOMBIE.crawl.windup : C.ZOMBIE.attackWindup), 0, 1);
+      if (k < 0.55) {
+        const w = ease(k / 0.55); // rear back, arms flung wide
+        bx -= 2.5 * w;
+        aT -= 0.32 * w;
+        aB += 0.32 * w;
+        fT -= 2 * w;
+        fB -= 2 * w;
+      } else {
+        const st = Math.sin(((k - 0.55) / 0.45) * Math.PI); // lunge and snap the arms shut
+        bx += 5 * st;
+        aT += 0.3 * st;
+        aB -= 0.3 * st;
+        fT += 8 * st;
+        fB += 8 * st;
+        sxB *= 1 + 0.08 * st;
+      }
+    } else if (z.state === 'breach') {
+      const t = Math.sin(z.t * 6);
+      bx += 1.5;
+      fT += t * 4;
+      fB -= t * 4;
+      aT += t * 0.15;
+      aB += t * 0.15;
+    } else if (z.state === 'crouch') {
+      sxB *= 0.88;
+      syB *= 0.9;
+      aT -= 0.25;
+      aB += 0.25;
+      fT -= 3;
+      fB -= 3;
+      bx -= 2;
+    } else if (z.state === 'leap') {
+      sxB *= 1.22;
+      syB *= 0.86;
+      fT += 6;
+      fB += 6;
+      aT += 0.12;
+      aB -= 0.12;
+    } else if (z.state === 'spit') {
+      sxB *= 1.06;
+      syB *= 1.06;
+      bx -= 1.5;
+    }
+    if (crawl) {
+      // arms haul the body: one reaches far ahead while the other drags it forward
+      const pullT = Math.max(0, sn), pullB = Math.max(0, -sn);
+      fT = 6 * cs * m + 2;
+      fB = -6 * cs * m + 2;
+      aT = -0.3 * pullT * m + 0.1;
+      aB = 0.3 * pullB * m - 0.1;
+      by = sn * 0.6 * m;
+      bx = 2 * Math.abs(cs) * m;
+      rot = sn * 0.05 * m;
+      sxB = 1 + 0.02 * Math.abs(sn) * m;
+      syB = 1;
+    }
+    // hit: knocked back and squashed for a moment
+    const hk = a.hit;
+    bx -= 3 * hk;
+    sxB *= 1 - 0.14 * hk;
+    syB *= 1 + 0.08 * hk;
+    // stunned / dazed / shocked: a stagger and a jitter
+    if (!frozen && (z.dazeT > 0 || z.stun > 0.2)) rot += Math.sin(R.time * 9 + a.seed) * 0.12;
+    let jx = 0, jy = 0;
+    if (z.shockT > 0 && !frozen) {
+      jx = U.rand(-1.2, 1.2);
+      jy = U.rand(-1.2, 1.2);
+    }
+
+    // ---- shadow (world space) ----
     ctx.save();
     ctx.translate(z.x, z.y);
     ctx.globalAlpha = alpha * 0.38;
     ctx.fillStyle = '#000';
     ctx.beginPath();
-    ctx.ellipse(2, 4, z.r * 1.05 * scale, z.r * 0.9 * scale, 0, 0, U.TAU);
+    ctx.ellipse(2, 4, z.r * 1.05 * scale * (crawl ? 0.85 : 1), z.r * 0.9 * scale * (crawl ? 0.8 : 1), 0, 0, U.TAU);
     ctx.fill();
     ctx.globalAlpha = alpha;
-    ctx.rotate(z.angle);
+    ctx.rotate(a.ang);
     ctx.scale(s * scale, s * scale);
-    const sw = Math.sin(z.t * z.animRate);
-    let reach = 0;
-    if (z.state === 'attack') reach = Math.sin(U.clamp(1 - z.attackT / C.ZOMBIE.attackWindup, 0, 1) * Math.PI) * 7;
-    else if (z.state === 'breach') reach = Math.abs(Math.sin(z.t * 6)) * 5;
-    if (drawZombieSprite(z, sw, reach, alpha)) {
+    if (leaper && z.state === 'leap' && rig) {
+      // motion smear behind a pouncing leaper
+      ctx.globalAlpha = alpha * 0.22;
+      ctx.drawImage(rig.body, -38, -20, 40, 40);
+      ctx.globalAlpha = alpha * 0.12;
+      ctx.drawImage(rig.body, -50, -20, 40, 40);
+      ctx.globalAlpha = alpha;
+    }
+    if (!rig) {
+      drawZombieProc(z, sn * m, Math.max(fT, fB) * 0.8, alpha);
       ctx.restore();
       return;
     }
+    const D = SPRITE_D[z.type] || 36, H = D / 2;
+    // where the head ended up (the emissive pass puts the glowing eyes there)
+    a.sc = s * scale;
+    a.hx = (bx + jx + (crawl ? 4 : 0) + 7.2 * sxB) * a.sc;
+    a.hy = (by + jy) * a.sc;
+    ctx.translate(bx + jx + (crawl ? 4 : 0), by + jy);
+    ctx.rotate(rot);
+
+    // legs under the body: the feet peek out behind as it steps (not on crawlers)
+    if (!crawl && m > 0.05) {
+      ctx.fillStyle = brute ? '#1a1418' : '#221a24';
+      const lx = -H * 0.55;
+      const f1 = sn * 7 * m, f2 = -sn * 7 * m;
+      ctx.beginPath();
+      ctx.ellipse(lx + f1, -4.5, 5, 2.8, 0, 0, U.TAU);
+      ctx.ellipse(lx + f2, 4.5, 5, 2.8, 0, 0, U.TAU);
+      ctx.fill();
+    }
+    if (crawl) {
+      // the torn-off stump: ragged, dark, a glint of bone
+      const sx0 = -H * 0.3;
+      ctx.fillStyle = '#3a0610';
+      ctx.beginPath();
+      ctx.moveTo(sx0 + 2, -7.5);
+      ctx.lineTo(sx0 - 3, -6);
+      ctx.lineTo(sx0 - 1.5, -3.5);
+      ctx.lineTo(sx0 - 4.5, -1);
+      ctx.lineTo(sx0 - 2, 1.5);
+      ctx.lineTo(sx0 - 4, 4.5);
+      ctx.lineTo(sx0 - 1, 6);
+      ctx.lineTo(sx0 + 2, 7.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#7a1020';
+      ctx.beginPath();
+      ctx.ellipse(sx0 - 0.5, 0, 2, 5.5, 0, 0, U.TAU);
+      ctx.fill();
+      ctx.fillStyle = '#cdbba3';
+      ctx.beginPath();
+      ctx.arc(sx0 - 1.5, -2.6, 0.9, 0, U.TAU);
+      ctx.arc(sx0 - 1.2, 2.8, 0.9, 0, U.TAU);
+      ctx.fill();
+    }
+    // body squash pivots on its centre; arms swing about the shoulders
+    const SH = H * 0.36, SX = -H * 0.1;
+    const parts = (set, al) => {
+      if (al <= 0.01) return;
+      ctx.globalAlpha = alpha * Math.min(1, al);
+      ctx.save();
+      ctx.scale(sxB, syB);
+      ctx.drawImage(crawl ? set.crawl : set.body, -H, -H, D, D);
+      ctx.restore();
+      ctx.save();
+      ctx.translate(SX + fT, -SH);
+      ctx.rotate(aT);
+      ctx.drawImage(set.armT, -H - SX, -H + SH, D, D);
+      ctx.restore();
+      ctx.save();
+      ctx.translate(SX + fB, SH);
+      ctx.rotate(aB);
+      ctx.drawImage(set.armB, -H - SX, -H - SH, D, D);
+      ctx.restore();
+    };
+    if (frozen) parts(Art.rigVariant(key, 'ice') || rig, 1);
+    else {
+      parts(rig, 1);
+      // status looks laid on the body itself
+      if (z.slowT > 0) parts(Art.rigVariant(key, '#5fc8ff'), 0.28 + Math.min(0.2, (z.frost || 0) * 0.08));
+      if (a.char > 0.02) parts(Art.rigVariant(key, '#160a06'), a.char * 0.55);
+      if (z.burnT > 0) parts(Art.rigVariant(key, '#ff6a12'), 0.3 + 0.18 * Math.sin(R.time * 17 + a.seed));
+      if (a.soot > 0.02) parts(Art.rigVariant(key, '#2a1c12'), a.soot * 0.4);
+      if (z.shockT > 0 && Math.sin(R.time * 55 + a.seed) > 0) parts(Art.rigVariant(key, '#d8f4ff'), 0.6);
+    }
+    if (dark > 0.01) parts(Art.rigVariant(key, '#0a0606'), dark);
+    if (z.flash > 0) parts(Art.rigVariant(key, '#ffffff'), z.flash * 9);
+    ctx.globalAlpha = alpha;
+    if (z.helmet > 0 && a.hm > 0) drawHelmetCracks(1 - z.helmet / a.hm, H, a.seed);
+    if (z.burnT > 0 && !frozen) drawFlameLicks(z, a, H, alpha);
+    ctx.restore();
+  }
+
+  /** Cracks spread over the riot helmet's dome as it soaks headshots (dmg: 0 new .. 1 about to break). */
+  function drawHelmetCracks(dmg, H, seed) {
+    if (dmg < 0.12) return;
+    const cx = H * 0.22, cy = 0, r = H * 0.36; // dome centre in the helmet picture
+    const n = Math.min(5, 1 + Math.floor(dmg * 5));
+    ctx.strokeStyle = 'rgba(20,22,28,0.9)';
+    ctx.lineWidth = 0.9;
+    ctx.lineJoin = 'round';
+    for (let i = 0; i < n; i++) {
+      let a = i * 1.9 + seed, x = cx + Math.cos(a) * r * 0.15, y = cy + Math.sin(a) * r * 0.15;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      for (let j = 0; j < 4; j++) {
+        a += (U.hash(i, j, 9) - 0.5) * 1.4;
+        x += Math.cos(a) * r * 0.24;
+        y += Math.sin(a) * r * 0.24;
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    if (dmg > 0.6) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.5, -0.4 + seed, 0.8 + seed);
+      ctx.stroke();
+    }
+  }
+
+  /** Flickering tongues of flame along a burning zombie (drawn additively so they glow). */
+  function drawFlameLicks(z, a, H, alpha) {
+    const prev = ctx.globalCompositeOperation;
+    ctx.globalCompositeOperation = 'lighter';
+    const t = R.time;
+    for (let i = 0; i < 6; i++) {
+      const h = U.hash(i, 1, 5);
+      const px = (h - 0.5) * H * 1.3, py = (U.hash(i, 2, 5) - 0.5) * H * 1.4;
+      const fl = 0.5 + 0.5 * Math.sin(t * (9 + i * 2.3) + a.seed + i);
+      const len = 5 + 6 * fl;
+      // flames trail away from the direction of travel (toward -x)
+      ctx.globalAlpha = alpha * (0.35 + 0.4 * fl);
+      ctx.fillStyle = i % 2 ? '#ff7a1a' : '#ffb02e';
+      ctx.beginPath();
+      ctx.moveTo(px + 2.4, py - 2.2);
+      ctx.quadraticCurveTo(px - len * 0.6, py - 3 + Math.sin(t * 13 + i) * 1.5, px - len, py + Math.sin(t * 11 + i) * 2);
+      ctx.quadraticCurveTo(px - len * 0.5, py + 3, px + 2.4, py + 2.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#fff2b0';
+      ctx.globalAlpha *= 0.6;
+      ctx.beginPath();
+      ctx.arc(px + 0.6, py, 1.3, 0, U.TAU);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = prev;
+    ctx.globalAlpha = alpha;
+  }
+
+  /** The original hand-drawn zombie, used until (or if) the painted pictures load. */
+  function drawZombieProc(z, sw, reach, alpha) {
+    const brute = z.type === 'brute', bloater = z.type === 'bloater', leaper = z.type === 'leaper';
     // arms
     ctx.strokeStyle = z.skin;
     ctx.lineWidth = brute ? 5.5 : 4.2;
@@ -334,43 +689,12 @@
       ctx.ellipse(0, 0, 10, 13, 0, 0, U.TAU);
       ctx.fill();
     }
-    ctx.restore();
   }
 
   /** Which painted sprite a zombie wears (a helmet zombie whose helmet broke looks like a walker). */
   function zombieKey(z) {
     if (z.helmet > 0) return 'z_helmet';
     return z.type === 'helmet' || !z.type ? 'z_walker' : 'z_' + z.type;
-  }
-
-  /**
-   * A zombie drawn from its painted sprite, if it has one (the canvas is already at the zombie,
-   * turned to face its heading and scaled). The picture is still, so the motion comes from here:
-   * a shuffling sway, a lunge on attacks, a squash and stretch, and tinted overlays for fire,
-   * frost and hit flashes. Returns false so the procedural zombie is drawn instead.
-   */
-  function drawZombieSprite(z, sw, reach, alpha) {
-    const key = zombieKey(z);
-    const im = Art.sprite(key);
-    if (!im) return false;
-    const D = z.type === 'leaper' ? 40 : z.type === 'bloater' ? 38 : 36; // in the zombie's own units (its radius is ~13)
-    const lunge = z.type === 'leaper' && z.state === 'leap' ? 6 : 0;
-    ctx.rotate(sw * 0.07);
-    ctx.translate(reach * 0.7 + lunge, sw * 0.6);
-    const pulse = z.type === 'spitter' && z.state === 'spit' ? 0.06 : 0;
-    ctx.scale(1 + sw * 0.025 + pulse, 1 - sw * 0.025 + pulse);
-    ctx.drawImage(im, -D / 2, -D / 2, D, D);
-    const over = (color, a) => {
-      const t = Art.tinted(key, color, 1);
-      if (!t || a <= 0.01) return;
-      ctx.globalAlpha = alpha * Math.min(1, a);
-      ctx.drawImage(t, -D / 2, -D / 2, D, D);
-      ctx.globalAlpha = alpha;
-    };
-    if (z.burnT > 0) over('#ff7a1a', 0.45);
-    if (z.freezeT > 0 || z.slowT > 0) over('#a8efff', z.freezeT > 0 ? 0.7 : 0.32);
-    if (z.flash > 0) over('#ffffff', z.flash * 8);
-    return true;
   }
 
   function drawBoss(z) {
@@ -677,35 +1001,139 @@
     }
   }
 
-  function drawCorpse(c) {
-    const a = U.clamp(c.life / 1.2, 0, 1);
-    const s = c.r / 13;
+  /*
+   * Deaths. FX.corpse (fx.js) records where a zombie fell; the wrapper below adds what the death
+   * animation needs (which picture, crawler, burnt, frozen) without touching the game logic.
+   * Render-only: the headless co-op server never loads this file.
+   */
+  if (FX.corpse && !FX.corpse.wrapped) {
+    const base = FX.corpse;
+    FX.corpse = function (z) {
+      base(z);
+      const c = FX.corpses[FX.corpses.length - 1];
+      if (!c) return;
+      const an = z._an;
+      c.key = zombieKey(z);
+      c.crawl = !!z.crawl;
+      c.ice = z.freezeT > 0;
+      c.burnt = z.burnT > 0 || (an && an.char > 0.3);
+      c.type = z.type;
+      c.angle = an ? an.ang : z.angle;
+      c.spin = (Math.random() - 0.5) * 0.9;
+      c.dir = Math.random() < 0.5 ? -1 : 1;
+      if (c.ice) FX.burst(z.x, z.y, 14, '#d8f8ff', 260);
+    };
+    FX.corpse.wrapped = true;
+  }
+
+  /** Frozen zombies don't fall: they shatter into ice chunks that skid out and melt away. */
+  function drawShatter(c, age) {
+    const fade = U.clamp(c.life / 1.2, 0, 1);
+    const k = ease(Math.min(1, age / 0.45));
     ctx.save();
     ctx.translate(c.x, c.y);
-    ctx.rotate(c.angle);
-    ctx.scale(s, s);
-    ctx.globalAlpha = a * 0.85;
-    ctx.fillStyle = '#4a0912';
+    for (let i = 0; i < 9; i++) {
+      const h = U.hash(i, 7, Math.floor(c.x));
+      const ang = i * 0.7 + h * 2;
+      const d = (6 + h * 22) * k;
+      const sz = 3 + U.hash(i, 8, 3) * 4;
+      ctx.save();
+      ctx.translate(Math.cos(ang) * d, Math.sin(ang) * d);
+      ctx.rotate(ang + k * 3 * (h - 0.5));
+      ctx.globalAlpha = fade * 0.9;
+      ctx.fillStyle = i % 3 ? '#bfefff' : '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(sz, 0);
+      ctx.lineTo(-sz * 0.4, sz * 0.7);
+      ctx.lineTo(-sz * 0.7, -sz * 0.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(70,150,200,0.8)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      ctx.restore();
+    }
+    // a pale melt puddle
+    ctx.globalAlpha = fade * 0.35 * k;
+    ctx.fillStyle = '#8fd8ff';
     ctx.beginPath();
-    ctx.ellipse(-2, 0, 15, 12, 0, 0, U.TAU);
+    ctx.ellipse(0, 0, 14 * k, 11 * k, 0, 0, U.TAU);
     ctx.fill();
-    ctx.strokeStyle = c.skin;
-    ctx.lineWidth = 4;
-    ctx.lineCap = 'round';
+    ctx.restore();
+  }
+
+  function drawCorpse(c) {
+    const age = c.max - c.life;
+    if (c.ice) return drawShatter(c, age);
+    const fade = U.clamp(c.life / 1.2, 0, 1);
+    const s = (c.r / 13) * 1.15;
+    const rig = c.key && Art.zombieRig(c.key);
+    const fall = ease(U.clamp(age / 0.32, 0, 1));
+    const bounce = age < 0.45 ? Math.sin(U.clamp((age - 0.32) / 0.13, 0, 1) * Math.PI) * 0.04 : 0;
+    ctx.save();
+    ctx.translate(c.x, c.y);
+    // blood spreading out from under the body
+    const pool = ease(U.clamp(age / 1.3, 0, 1));
+    ctx.globalAlpha = fade * 0.75;
+    ctx.fillStyle = '#3d0610';
     ctx.beginPath();
-    ctx.moveTo(0, -9);
-    ctx.lineTo(13, -13);
-    ctx.moveTo(0, 9);
-    ctx.lineTo(10, 15);
-    ctx.stroke();
-    ctx.fillStyle = c.shirt;
-    ctx.beginPath();
-    ctx.ellipse(-3, 0, 9, 11, 0, 0, U.TAU);
+    ctx.ellipse(-Math.cos(c.angle) * 4, -Math.sin(c.angle) * 4, c.r * (0.4 + 1.1 * pool), c.r * (0.35 + 0.85 * pool), c.angle, 0, U.TAU);
     ctx.fill();
-    ctx.fillStyle = c.skin;
-    ctx.beginPath();
-    ctx.arc(6, 1, 6, 0, U.TAU);
-    ctx.fill();
+    ctx.rotate(c.angle + (c.spin || 0) * fall);
+    if (!rig) {
+      // procedural fallback
+      ctx.scale(c.r / 13, c.r / 13);
+      ctx.globalAlpha = fade * 0.85;
+      ctx.strokeStyle = c.skin;
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, -9);
+      ctx.lineTo(13, -13);
+      ctx.moveTo(0, 9);
+      ctx.lineTo(10, 15);
+      ctx.stroke();
+      ctx.fillStyle = c.shirt;
+      ctx.beginPath();
+      ctx.ellipse(-3, 0, 9, 11, 0, 0, U.TAU);
+      ctx.fill();
+      ctx.fillStyle = c.skin;
+      ctx.beginPath();
+      ctx.arc(6, 1, 6, 0, U.TAU);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+    // knocked back off its feet: thrown back, flattened (longer, lower), arms flung out
+    const D = SPRITE_D[c.type] || 36, H = D / 2;
+    const sink = 1 - 0.06 * fall - 0.05 * (1 - fade);
+    ctx.scale(s * sink, s * sink);
+    ctx.translate(-6 * fall, 0);
+    const sx = 1 + 0.12 * fall + bounce, sy = 1 + 0.05 * fall;
+    const spl = 0.45 * fall;
+    const SH = H * 0.36, SX = -H * 0.1;
+    const parts = (set, al) => {
+      ctx.globalAlpha = fade * al;
+      ctx.save();
+      ctx.scale(sx, sy);
+      ctx.drawImage(c.crawl ? set.crawl : set.body, -H, -H, D, D);
+      ctx.restore();
+      ctx.save();
+      ctx.translate(SX + 2 * fall, -SH);
+      ctx.rotate(-spl * c.dir - 0.15 * fall);
+      ctx.drawImage(set.armT, -H - SX, -H + SH, D, D);
+      ctx.restore();
+      ctx.save();
+      ctx.translate(SX + 2 * fall, SH);
+      ctx.rotate(spl * c.dir * 0.6 + 0.15 * fall);
+      ctx.drawImage(set.armB, -H - SX, -H - SH, D, D);
+      ctx.restore();
+    };
+    parts(rig, 1);
+    // the life goes out of it: darkens as it lies there (burnt ones are charred black)
+    const dk = c.burnt ? 0.75 : 0.25 + 0.3 * fall + 0.25 * (1 - fade);
+    parts(Art.rigVariant(c.key, '#0c0506'), Math.min(0.85, dk));
+    if (age < 0.12) parts(Art.rigVariant(c.key, '#ffffff'), 1 - age / 0.12);
     ctx.restore();
   }
 
@@ -1128,7 +1556,8 @@
       ctx.restore();
     }
 
-    for (const c of FX.corpses) if (inView(c.x, c.y, 30)) drawCorpse(c);
+    for (const c of FX.corpses) if (inView(c.x, c.y, 40)) drawCorpse(c);
+    drawSmears();
 
     // power-up ground halo
     for (const pu of I.powerups) {
@@ -1992,13 +2421,35 @@
     drawFacilityGlow(power);
     drawThreats();
 
-    // zombie eyes burn through the dark
+    // zombie eyes burn through the dark (following the animated head), and status glows
     for (const z of Zs.list) {
       if (!inView(z.x, z.y, 30)) continue;
-      const s = (z.r / 13) * 1.15, ca = Math.cos(z.angle), sa = Math.sin(z.angle);
-      const a = z.state === 'rise' ? U.clamp(1 - z.riseT / 0.9, 0, 1) : 1;
+      const an = z._an;
+      const ang = an ? an.ang : z.angle;
+      const s = an ? an.sc : (z.r / 13) * 1.15, ca = Math.cos(ang), sa = Math.sin(ang);
+      const a = (z.state === 'rise' ? U.clamp(1 - z.riseT / 0.9, 0, 1) : 1) * (z.freezeT > 0 ? 0.35 : 1);
+      const hx = an ? an.hx : 7.2 * s, hy = an ? an.hy : 0;
+      if (z.burnT > 0) Art.drawGlow(ctx, '#ff7a1a', z.x, z.y, z.r * 2.6, 0.32 + 0.12 * Math.sin(R.time * 19 + z.x));
+      if (z.freezeT > 0) Art.drawGlow(ctx, '#8fe9ff', z.x, z.y, z.r * 2.2, 0.22);
+      else if (z.slowT > 0) Art.drawGlow(ctx, '#5fc8ff', z.x, z.y, z.r * 1.8, 0.12);
+      if (z.shockT > 0 && Math.sin(R.time * 47 + z.y) > 0.2) Art.drawGlow(ctx, '#bfe9ff', z.x, z.y, z.r * 2.4, 0.4);
+      if ((z.dazeT > 0 || z.stun > 0.35) && z.freezeT <= 0) {
+        // dizzy stars circling the head
+        for (let i = 0; i < 3; i++) {
+          const t = R.time * 4 + (i * U.TAU) / 3;
+          const qx = z.x + ca * hx * 0.6 + Math.cos(t) * z.r * 0.9, qy = z.y + sa * hx * 0.6 + Math.sin(t) * z.r * 0.55 - z.r * 0.3;
+          ctx.globalAlpha = 0.85;
+          ctx.fillStyle = i % 2 ? '#ffe14d' : '#ffffff';
+          ctx.save();
+          ctx.translate(qx, qy);
+          ctx.rotate(t);
+          ctx.fillRect(-2.6, -0.7, 5.2, 1.4);
+          ctx.fillRect(-0.7, -2.6, 1.4, 5.2);
+          ctx.restore();
+        }
+      }
       for (const side of [-1, 1]) {
-        const lx = 7.2 * s, ly = side * 2.9 * s;
+        const lx = hx, ly = hy + side * 2.9 * s;
         const ex = z.x + ca * lx - sa * ly, ey = z.y + sa * lx + ca * ly;
         ctx.fillStyle = z.eye;
         ctx.globalAlpha = 0.3 * a;
@@ -2283,6 +2734,7 @@
 
   function drawFrame(dt) {
     R.time += dt;
+    frameDt = Math.min(0.1, dt);
     const G = GW.Game, P = GW.Player, I = GW.Interact, MA = GW.MapArt, Zs = GW.Zombies, D = GW.Director;
     if (!MA.floor) return;
     const inGame = G.state !== 'menu';
