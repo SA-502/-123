@@ -206,6 +206,7 @@
     'Power the Substation to unlock the Overclock Stage (': 'شغّل محطة الكهرباء عشان ينفتح مسرح التطوير (',
     'Overclock a weapon on the Overclock Stage': 'طوّر سلاح في مسرح التطوير',
     'Restore the park: ': 'شغّل الحديقة: ',
+    'Overclock a weapon in the ': 'طوّر سلاح في ', 'Power the ': 'شغّل ', ' to open the ': ' عشان ينفتح ', 'Restore power: ': 'رجّع الكهرباء: ',
     Survive: 'اصمد',
 
     // ---- HUD ----

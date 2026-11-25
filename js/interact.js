@@ -641,10 +641,13 @@
     if (P.fuses > 0) return 'Insert your fuse into a zone generator (' + n + '/' + total + ' online)';
     if (n === 0 && !z[1].open && !z[2].open && !z[3].open) return 'Earn points, open the park and search for fuses';
     if (n === 0) return 'Search the park for a fuse and power a generator';
-    if (!I.powered(M.Z.SUB)) return 'Power the Substation to unlock the Overclock Stage (' + n + '/' + total + ')';
-    if (!I.everUpgraded && I.powered(M.Z.VAULT)) return 'Overclock a weapon on the Overclock Stage [5000]';
-    if (n < total) return 'Restore the park: ' + n + '/' + total + ' generators online';
-    if (!I.everUpgraded) return 'Overclock a weapon on the Overclock Stage [5000]';
+    const lum = !M.theme; // Lumina Pier keeps its own wording; other maps name their own rooms
+    const sub = lum ? 'Substation' : M.zones[M.Z.SUB].name, room = lum ? 'Overclock Stage' : M.zones[M.Z.VAULT].name;
+    if (!I.powered(M.Z.SUB)) return lum ? 'Power the Substation to unlock the Overclock Stage (' + n + '/' + total + ')' : 'Power the ' + sub + ' to open the ' + room + ' (' + n + '/' + total + ')';
+    const up = lum ? 'Overclock a weapon on the Overclock Stage [5000]' : 'Overclock a weapon in the ' + room + ' [5000]';
+    if (!I.everUpgraded && I.powered(M.Z.VAULT)) return up;
+    if (n < total) return (lum ? 'Restore the park: ' : 'Restore power: ') + n + '/' + total + ' generators online';
+    if (!I.everUpgraded) return up;
     return 'Survive';
   };
 })();
